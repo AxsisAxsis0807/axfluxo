@@ -1,0 +1,1 @@
+export const LIMITS={imageBytes:20*1024*1024,imagePixels:24_000_000,imageSide:8192,pageSide:4096,pagePixels:8_500_000,pages:20,layers:100,archiveBytes:200*1024*1024,entries:500,jsonBytes:5*1024*1024,history:100} as const;
