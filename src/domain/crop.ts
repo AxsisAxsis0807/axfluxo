@@ -1,5 +1,91 @@
-import type {Crop} from './document';
-export const clamp=(v:number,min:number,max:number)=>Math.max(min,Math.min(max,v));
-export function cropGeometry(c:Crop,W:number,H:number,Fw:number,Fh:number){const t=c.rotation*Math.PI/180,co=Math.abs(Math.cos(t)),si=Math.abs(Math.sin(t));const ex=(co*Fw+si*Fh)/2,ey=(si*Fw+co*Fh)/2;const base=c.mode==='cover'?Math.max(2*ex/W,2*ey/H):Math.min(Fw/(co*W+si*H),Fh/(si*W+co*H));const zoom=c.mode==='cover'?Math.max(1,c.zoom):c.zoom;const s=base*zoom;const u=c.mode==='cover'?clamp(c.focus.u,ex/(s*W),1-ex/(s*W)):clamp(c.focus.u,0,1);const v=c.mode==='cover'?clamp(c.focus.v,ey/(s*H),1-ey/(s*H)):clamp(c.focus.v,0,1);return {s,base,crop:{...c,zoom,focus:{u,v}}};}
-export function dragCrop(c:Crop,W:number,H:number,Fw:number,Fh:number,dx:number,dy:number){const {s,crop}=cropGeometry(c,W,H,Fw,Fh),t=c.rotation*Math.PI/180;return cropGeometry({...crop,focus:{u:crop.focus.u-(Math.cos(t)*dx+Math.sin(t)*dy)/(s*W),v:crop.focus.v-(-Math.sin(t)*dx+Math.cos(t)*dy)/(s*H)}},W,H,Fw,Fh).crop;}
-export function pinchCrop(c:Crop,W:number,H:number,Fw:number,Fh:number,ratio:number,q0:{x:number;y:number},q:{x:number;y:number}){const g=cropGeometry(c,W,H,Fw,Fh),t=c.rotation*Math.PI/180;const inverse=(p:{x:number;y:number})=>({x:Math.cos(t)*p.x+Math.sin(t)*p.y,y:-Math.sin(t)*p.x+Math.cos(t)*p.y});const a=inverse(q0),b=inverse(q);const zoom=clamp(c.zoom*ratio,c.mode==='cover'?1:.05,20);const s=g.base*zoom;return cropGeometry({...c,zoom,focus:{u:g.crop.focus.u+(a.x/g.s-b.x/s)/W,v:g.crop.focus.v+(a.y/g.s-b.y/s)/H}},W,H,Fw,Fh).crop;}
+import type { Crop } from "./document";
+export const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
+export function cropGeometry(
+  c: Crop,
+  W: number,
+  H: number,
+  Fw: number,
+  Fh: number,
+) {
+  const t = (c.rotation * Math.PI) / 180,
+    co = Math.abs(Math.cos(t)),
+    si = Math.abs(Math.sin(t));
+  const ex = (co * Fw + si * Fh) / 2,
+    ey = (si * Fw + co * Fh) / 2;
+  const base =
+    c.mode === "cover"
+      ? Math.max((2 * ex) / W, (2 * ey) / H)
+      : Math.min(Fw / (co * W + si * H), Fh / (si * W + co * H));
+  const zoom = c.mode === "cover" ? Math.max(1, c.zoom) : c.zoom;
+  const s = base * zoom;
+  const u =
+    c.mode === "cover"
+      ? clamp(c.focus.u, ex / (s * W), 1 - ex / (s * W))
+      : clamp(c.focus.u, 0, 1);
+  const v =
+    c.mode === "cover"
+      ? clamp(c.focus.v, ey / (s * H), 1 - ey / (s * H))
+      : clamp(c.focus.v, 0, 1);
+  return { s, base, crop: { ...c, zoom, focus: { u, v } } };
+}
+export function dragCrop(
+  c: Crop,
+  W: number,
+  H: number,
+  Fw: number,
+  Fh: number,
+  dx: number,
+  dy: number,
+) {
+  const { s, crop } = cropGeometry(c, W, H, Fw, Fh),
+    t = (c.rotation * Math.PI) / 180;
+  return cropGeometry(
+    {
+      ...crop,
+      focus: {
+        u: crop.focus.u - (Math.cos(t) * dx + Math.sin(t) * dy) / (s * W),
+        v: crop.focus.v - (-Math.sin(t) * dx + Math.cos(t) * dy) / (s * H),
+      },
+    },
+    W,
+    H,
+    Fw,
+    Fh,
+  ).crop;
+}
+export function pinchCrop(
+  c: Crop,
+  W: number,
+  H: number,
+  Fw: number,
+  Fh: number,
+  ratio: number,
+  q0: { x: number; y: number },
+  q: { x: number; y: number },
+) {
+  const g = cropGeometry(c, W, H, Fw, Fh),
+    t = (c.rotation * Math.PI) / 180;
+  const inverse = (p: { x: number; y: number }) => ({
+    x: Math.cos(t) * p.x + Math.sin(t) * p.y,
+    y: -Math.sin(t) * p.x + Math.cos(t) * p.y,
+  });
+  const a = inverse(q0),
+    b = inverse(q);
+  const zoom = clamp(c.zoom * ratio, c.mode === "cover" ? 1 : 0.05, 20);
+  const s = g.base * zoom;
+  return cropGeometry(
+    {
+      ...c,
+      zoom,
+      focus: {
+        u: g.crop.focus.u + (a.x / g.s - b.x / s) / W,
+        v: g.crop.focus.v + (a.y / g.s - b.y / s) / H,
+      },
+    },
+    W,
+    H,
+    Fw,
+    Fh,
+  ).crop;
+}

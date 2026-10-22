@@ -1,8 +1,328 @@
-import {useEffect,useRef,useState} from 'react';
-import {createPortal} from 'react-dom';
-import {defaultCrop,type ImageLayer,type ProjectDocument} from '../../domain/document';
-import {cropGeometry,dragCrop,pinchCrop} from '../../domain/crop';
-import {get,type Asset} from '../../services/storage';
-import {decodeImage} from '../../services/assets';
-import {resolveAsset} from '../../domain/document';
-export default function CropDialog({layer,doc,onApply,onClose}:{layer:ImageLayer;doc:ProjectDocument;onApply:(l:ImageLayer)=>void;onClose:()=>void}){const [draft,setDraft]=useState(structuredClone(layer));const [asset,setAsset]=useState<Asset>();const [image,setImage]=useState<HTMLImageElement>();const [error,setError]=useState('');const canvas=useRef<HTMLCanvasElement>(null),dialog=useRef<HTMLDialogElement>(null);const points=useRef(new Map<number,{x:number;y:number}>());const previous=useRef<{points:{x:number;y:number}[];draft:ImageLayer}|null>(null);useEffect(()=>{const focus=document.activeElement as HTMLElement;dialog.current?.showModal();return ()=>focus?.focus();},[]);useEffect(()=>{get<Asset>('assets',resolveAsset(layer,doc)).then(async a=>{if(!a)throw new Error('画像がありません');setAsset(a);setImage(await decodeImage(a.blob));}).catch(e=>setError(e.message));},[layer,doc]);const size=320;const scale=Math.min(260/draft.width,260/draft.height);useEffect(()=>{const node=canvas.current;if(!node||!asset||!image)return;node.width=node.height=640;const ctx=node.getContext('2d')!;ctx.scale(2,2);ctx.clearRect(0,0,size,size);const {s,crop}=cropGeometry(draft.crop,asset.width,asset.height,draft.width,draft.height);ctx.save();ctx.translate(size/2,size/2);ctx.scale(scale,scale);ctx.rotate(crop.rotation*Math.PI/180);ctx.scale(s,s);ctx.drawImage(image,-crop.focus.u*asset.width,-crop.focus.v*asset.height);ctx.restore();ctx.fillStyle='rgba(0,0,0,.65)';ctx.beginPath();ctx.rect(0,0,size,size);const w=draft.width*scale,h=draft.height*scale;if(crop.shape==='ellipse')ctx.ellipse(size/2,size/2,w/2,h/2,0,0,Math.PI*2,true);else ctx.rect((size-w)/2,(size-h)/2,w,h);ctx.fill('evenodd');ctx.strokeStyle='#b6ed79';ctx.lineWidth=2;ctx.beginPath();if(crop.shape==='ellipse')ctx.ellipse(size/2,size/2,w/2,h/2,0,0,Math.PI*2);else ctx.rect((size-w)/2,(size-h)/2,w,h);ctx.stroke();},[draft,asset,image,scale]);const update=(p:Partial<ImageLayer['crop']>)=>setDraft({...draft,crop:{...draft.crop,...p}});const finish=()=>{points.current.clear();previous.current=null;};return createPortal(<dialog ref={dialog} className="modal crop-dialog" onCancel={onClose} onKeyDown={e=>{if(e.key==='Tab'){const els=dialog.current!.querySelectorAll<HTMLElement>('button,input,select');const first=els[0],last=els[els.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}}}><header><div><small>NON-DESTRUCTIVE CROP</small><h2>フレームは固定。画像を自由に。</h2></div><button onClick={onClose} aria-label="クロップを閉じる">×</button></header><p>1本指で移動・2本指で拡大縮小。原本は保持されます。</p><canvas ref={canvas} style={{width:size,height:size,touchAction:'none'}} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);const rect=e.currentTarget.getBoundingClientRect();points.current.set(e.pointerId,{x:(e.clientX-rect.left)*size/rect.width,y:(e.clientY-rect.top)*size/rect.height});previous.current={points:[...points.current.values()],draft:structuredClone(draft)};}} onPointerMove={e=>{if(!points.current.has(e.pointerId)||!asset)return;const r=e.currentTarget.getBoundingClientRect();points.current.set(e.pointerId,{x:(e.clientX-r.left)*size/r.width,y:(e.clientY-r.top)*size/r.height});const old=previous.current,current=[...points.current.values()];if(!old||current.length!==old.points.length)return;if(current.length===1){setDraft({...old.draft,crop:dragCrop(old.draft.crop,asset.width,asset.height,old.draft.width,old.draft.height,(current[0].x-old.points[0].x)/scale,(current[0].y-old.points[0].y)/scale)});}else if(current.length===2){const dist=(p:{x:number;y:number}[])=>Math.hypot(p[1].x-p[0].x,p[1].y-p[0].y);const mid=(p:{x:number;y:number}[])=>({x:((p[0].x+p[1].x)/2-size/2)/scale,y:((p[0].y+p[1].y)/2-size/2)/scale});if(dist(old.points)>0)setDraft({...old.draft,crop:pinchCrop(old.draft.crop,asset.width,asset.height,old.draft.width,old.draft.height,dist(current)/dist(old.points),mid(old.points),mid(current))});}}} onPointerUp={e=>{points.current.delete(e.pointerId);previous.current={points:[...points.current.values()],draft:structuredClone(draft)};}} onPointerCancel={finish} onLostPointerCapture={e=>{if(points.current.has(e.pointerId))finish();}}/>{error&&<p role="alert">{error}</p>}<div className="fields"><label>形状<select value={draft.crop.shape} onChange={e=>update({shape:e.target.value as 'rect'|'ellipse'})}><option value="rect">矩形</option><option value="ellipse">円 / 楕円</option></select></label><label>表示<select value={draft.crop.mode} onChange={e=>update({mode:e.target.value as 'cover'|'contain',focus:{u:.5,v:.5},zoom:1})}><option value="cover">Cover（余白なし）</option><option value="contain">Contain（全体）</option></select></label><label>フレーム幅<input type="number" min="64" max="4096" value={draft.width} onChange={e=>setDraft({...draft,width:Math.max(64,Math.min(4096,Number(e.target.value)))})}/></label><label>フレーム高さ<input type="number" min="64" max="4096" value={draft.height} onChange={e=>setDraft({...draft,height:Math.max(64,Math.min(4096,Number(e.target.value)))})}/></label><label>拡大 {draft.crop.zoom.toFixed(2)}<input aria-label="クロップ拡大" type="range" min={draft.crop.mode==='cover'?1:.05} max="8" step=".01" value={draft.crop.zoom} onChange={e=>update({zoom:Number(e.target.value)})}/></label><label>回転<input aria-label="クロップ回転" type="number" min="-360" max="360" value={draft.crop.rotation} onChange={e=>update({rotation:Math.max(-360,Math.min(360,Number(e.target.value)))})}/></label></div><div className="button-row"><button onClick={()=>update({rotation:(draft.crop.rotation+90)%360})}>90°回転</button><button onClick={()=>update(defaultCrop())}>中央へリセット</button></div>{draft.crop.mode==='contain'&&<small>拡大すると画像全体が収まらなくなります。</small>}<footer><button onClick={onClose}>キャンセル</button><button className="primary" disabled={!asset} onClick={()=>{if(asset)onApply({...draft,crop:cropGeometry(draft.crop,asset.width,asset.height,draft.width,draft.height).crop});}}>適用</button></footer></dialog>,document.body);}
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  defaultCrop,
+  type ImageLayer,
+  type ProjectDocument,
+} from "../../domain/document";
+import { cropGeometry, dragCrop, pinchCrop } from "../../domain/crop";
+import { get, type Asset } from "../../services/storage";
+import { decodeImage } from "../../services/assets";
+import { resolveAsset } from "../../domain/document";
+export default function CropDialog({
+  layer,
+  doc,
+  onApply,
+  onClose,
+}: {
+  layer: ImageLayer;
+  doc: ProjectDocument;
+  onApply: (l: ImageLayer) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState(structuredClone(layer));
+  const [asset, setAsset] = useState<Asset>();
+  const [image, setImage] = useState<HTMLImageElement>();
+  const [error, setError] = useState("");
+  const canvas = useRef<HTMLCanvasElement>(null),
+    dialog = useRef<HTMLDialogElement>(null);
+  const points = useRef(new Map<number, { x: number; y: number }>());
+  const previous = useRef<{
+    points: { x: number; y: number }[];
+    draft: ImageLayer;
+  } | null>(null);
+  useEffect(() => {
+    const focus = document.activeElement as HTMLElement;
+    dialog.current?.showModal();
+    return () => focus?.focus();
+  }, []);
+  useEffect(() => {
+    get<Asset>("assets", resolveAsset(layer, doc))
+      .then(async (a) => {
+        if (!a) throw new Error("画像がありません");
+        setAsset(a);
+        setImage(await decodeImage(a.blob));
+      })
+      .catch((e) => setError(e.message));
+  }, [layer, doc]);
+  const size = 320;
+  const scale = Math.min(260 / draft.width, 260 / draft.height);
+  useEffect(() => {
+    const node = canvas.current;
+    if (!node || !asset || !image) return;
+    node.width = node.height = 640;
+    const ctx = node.getContext("2d")!;
+    ctx.scale(2, 2);
+    ctx.clearRect(0, 0, size, size);
+    const { s, crop } = cropGeometry(
+      draft.crop,
+      asset.width,
+      asset.height,
+      draft.width,
+      draft.height,
+    );
+    ctx.save();
+    ctx.translate(size / 2, size / 2);
+    ctx.scale(scale, scale);
+    ctx.rotate((crop.rotation * Math.PI) / 180);
+    ctx.scale(s, s);
+    ctx.drawImage(
+      image,
+      -crop.focus.u * asset.width,
+      -crop.focus.v * asset.height,
+    );
+    ctx.restore();
+    ctx.fillStyle = "rgba(0,0,0,.65)";
+    ctx.beginPath();
+    ctx.rect(0, 0, size, size);
+    const w = draft.width * scale,
+      h = draft.height * scale;
+    if (crop.shape === "ellipse")
+      ctx.ellipse(size / 2, size / 2, w / 2, h / 2, 0, 0, Math.PI * 2, true);
+    else ctx.rect((size - w) / 2, (size - h) / 2, w, h);
+    ctx.fill("evenodd");
+    ctx.strokeStyle = "#b6ed79";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    if (crop.shape === "ellipse")
+      ctx.ellipse(size / 2, size / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+    else ctx.rect((size - w) / 2, (size - h) / 2, w, h);
+    ctx.stroke();
+  }, [draft, asset, image, scale]);
+  const update = (p: Partial<ImageLayer["crop"]>) =>
+    setDraft({ ...draft, crop: { ...draft.crop, ...p } });
+  const finish = () => {
+    points.current.clear();
+    previous.current = null;
+  };
+  return createPortal(
+    <dialog
+      ref={dialog}
+      className="modal crop-dialog"
+      onCancel={onClose}
+      onKeyDown={(e) => {
+        if (e.key === "Tab") {
+          const els = dialog.current!.querySelectorAll<HTMLElement>(
+            "button,input,select",
+          );
+          const first = els[0],
+            last = els[els.length - 1];
+          if (e.shiftKey && document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+          if (!e.shiftKey && document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }}
+    >
+      <header>
+        <div>
+          <small>NON-DESTRUCTIVE CROP</small>
+          <h2>フレームは固定。画像を自由に。</h2>
+        </div>
+        <button onClick={onClose} aria-label="クロップを閉じる">
+          ×
+        </button>
+      </header>
+      <p>1本指で移動・2本指で拡大縮小。原本は保持されます。</p>
+      <canvas
+        ref={canvas}
+        style={{ width: size, height: size, touchAction: "none" }}
+        onPointerDown={(e) => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          const rect = e.currentTarget.getBoundingClientRect();
+          points.current.set(e.pointerId, {
+            x: ((e.clientX - rect.left) * size) / rect.width,
+            y: ((e.clientY - rect.top) * size) / rect.height,
+          });
+          previous.current = {
+            points: [...points.current.values()],
+            draft: structuredClone(draft),
+          };
+        }}
+        onPointerMove={(e) => {
+          if (!points.current.has(e.pointerId) || !asset) return;
+          const r = e.currentTarget.getBoundingClientRect();
+          points.current.set(e.pointerId, {
+            x: ((e.clientX - r.left) * size) / r.width,
+            y: ((e.clientY - r.top) * size) / r.height,
+          });
+          const old = previous.current,
+            current = [...points.current.values()];
+          if (!old || current.length !== old.points.length) return;
+          if (current.length === 1) {
+            setDraft({
+              ...old.draft,
+              crop: dragCrop(
+                old.draft.crop,
+                asset.width,
+                asset.height,
+                old.draft.width,
+                old.draft.height,
+                (current[0].x - old.points[0].x) / scale,
+                (current[0].y - old.points[0].y) / scale,
+              ),
+            });
+          } else if (current.length === 2) {
+            const dist = (p: { x: number; y: number }[]) =>
+              Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
+            const mid = (p: { x: number; y: number }[]) => ({
+              x: ((p[0].x + p[1].x) / 2 - size / 2) / scale,
+              y: ((p[0].y + p[1].y) / 2 - size / 2) / scale,
+            });
+            if (dist(old.points) > 0)
+              setDraft({
+                ...old.draft,
+                crop: pinchCrop(
+                  old.draft.crop,
+                  asset.width,
+                  asset.height,
+                  old.draft.width,
+                  old.draft.height,
+                  dist(current) / dist(old.points),
+                  mid(old.points),
+                  mid(current),
+                ),
+              });
+          }
+        }}
+        onPointerUp={(e) => {
+          points.current.delete(e.pointerId);
+          previous.current = {
+            points: [...points.current.values()],
+            draft: structuredClone(draft),
+          };
+        }}
+        onPointerCancel={finish}
+        onLostPointerCapture={(e) => {
+          if (points.current.has(e.pointerId)) finish();
+        }}
+      />
+      {error && <p role="alert">{error}</p>}
+      <div className="fields">
+        <label>
+          形状
+          <select
+            value={draft.crop.shape}
+            onChange={(e) =>
+              update({ shape: e.target.value as "rect" | "ellipse" })
+            }
+          >
+            <option value="rect">矩形</option>
+            <option value="ellipse">円 / 楕円</option>
+          </select>
+        </label>
+        <label>
+          表示
+          <select
+            value={draft.crop.mode}
+            onChange={(e) =>
+              update({
+                mode: e.target.value as "cover" | "contain",
+                focus: { u: 0.5, v: 0.5 },
+                zoom: 1,
+              })
+            }
+          >
+            <option value="cover">Cover（余白なし）</option>
+            <option value="contain">Contain（全体）</option>
+          </select>
+        </label>
+        <label>
+          フレーム幅
+          <input
+            type="number"
+            min="64"
+            max="4096"
+            value={draft.width}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                width: Math.max(64, Math.min(4096, Number(e.target.value))),
+              })
+            }
+          />
+        </label>
+        <label>
+          フレーム高さ
+          <input
+            type="number"
+            min="64"
+            max="4096"
+            value={draft.height}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                height: Math.max(64, Math.min(4096, Number(e.target.value))),
+              })
+            }
+          />
+        </label>
+        <label>
+          拡大 {draft.crop.zoom.toFixed(2)}
+          <input
+            aria-label="クロップ拡大"
+            type="range"
+            min={draft.crop.mode === "cover" ? 1 : 0.05}
+            max="8"
+            step=".01"
+            value={draft.crop.zoom}
+            onChange={(e) => update({ zoom: Number(e.target.value) })}
+          />
+        </label>
+        <label>
+          回転
+          <input
+            aria-label="クロップ回転"
+            type="number"
+            min="-360"
+            max="360"
+            value={draft.crop.rotation}
+            onChange={(e) =>
+              update({
+                rotation: Math.max(-360, Math.min(360, Number(e.target.value))),
+              })
+            }
+          />
+        </label>
+      </div>
+      <div className="button-row">
+        <button
+          onClick={() => update({ rotation: (draft.crop.rotation + 90) % 360 })}
+        >
+          90°回転
+        </button>
+        <button onClick={() => update(defaultCrop())}>中央へリセット</button>
+      </div>
+      {draft.crop.mode === "contain" && (
+        <small>拡大すると画像全体が収まらなくなります。</small>
+      )}
+      <footer>
+        <button onClick={onClose}>キャンセル</button>
+        <button
+          className="primary"
+          disabled={!asset}
+          onClick={() => {
+            if (asset)
+              onApply({
+                ...draft,
+                crop: cropGeometry(
+                  draft.crop,
+                  asset.width,
+                  asset.height,
+                  draft.width,
+                  draft.height,
+                ).crop,
+              });
+          }}
+        >
+          適用
+        </button>
+      </footer>
+    </dialog>,
+    document.body,
+  );
+}

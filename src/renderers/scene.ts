@@ -1,20 +1,439 @@
-import Konva from 'konva';
-import {cropGeometry} from '../domain/crop';
-import {resolveText,resolveAsset,type ProjectDocument,type Page,type Layer,type ImageLayer} from '../domain/document';
-import {families,layoutText} from '../domain/text';
-import {get,type Asset} from '../services/storage';
-import {decodeImage} from '../services/assets';
-import {loadFonts} from '../services/fonts';
-export type RenderOptions={scale?:number;selected?:string;onSelect?:(id:string)=>void;onMove?:(id:string,x:number,y:number)=>void;onTransform?:(id:string,patch:Partial<Layer>)=>void;snap?:boolean;allowOverflow?:boolean;unclip?:boolean;};
-export async function createScene(container:HTMLDivElement,page:Page,doc:ProjectDocument,options:RenderOptions={}){await loadFonts();for(const l of page.layers){if(l.kind==='text'&&l.visible){await document.fonts.load(`${l.fontWeight} ${l.fontSize}px "${families[l.fontId]}"`,resolveText(l,doc));}}
- const scale=options.scale??1;const stage=new Konva.Stage({container,width:page.width*scale,height:page.height*scale,scaleX:scale,scaleY:scale});const content=new Konva.Layer();stage.add(content);content.add(new Konva.Rect({width:page.width,height:page.height,fill:page.background,opacity:page.alpha,listening:false}));const warnings:string[]=[];
- try{for(const l of page.layers){if(!l.visible)continue;const group=new Konva.Group({id:l.id,x:l.x,y:l.y,width:l.width,height:l.height,offsetX:l.width/2,offsetY:l.height/2,rotation:l.rotation,opacity:l.opacity,draggable:!!options.onMove&&!l.locked,listening:!!options.onSelect});content.add(group);group.add(new Konva.Rect({width:l.width,height:l.height,fill:"rgba(0,0,0,0)"}));
- if(l.kind==='image'){const a=await get<Asset>('assets',resolveAsset(l,doc));if(!a)throw new Error('画像素材が見つかりません');const image=await decodeImage(a.blob);const {s,crop}=cropGeometry(l.crop,a.width,a.height,l.width,l.height);const clip=new Konva.Group({x:l.width/2,y:l.height/2,clipFunc:ctx=>{if(options.unclip)return;if(crop.shape==='ellipse'){ctx.beginPath();ctx.ellipse(0,0,l.width/2,l.height/2,0,0,Math.PI*2);ctx.closePath();}else ctx.rect(-l.width/2,-l.height/2,l.width,l.height);}});group.add(clip);const node=new Konva.Image({image,x:0,y:0,offsetX:crop.focus.u*a.width,offsetY:crop.focus.v*a.height,scaleX:s,scaleY:s,rotation:crop.rotation});clip.add(node);applyEffects(node,l,s);if(s>1)warnings.push('元画像以上に拡大される画像があります');
- }else if(l.kind==='shape'){if(l.shape==='ellipse')group.add(new Konva.Ellipse({x:l.width/2,y:l.height/2,radiusX:l.width/2,radiusY:l.height/2,fill:l.fill,opacity:l.fillAlpha,stroke:l.stroke,strokeWidth:l.strokeWidth}));else if(l.shape==='line')group.add(new Konva.Line({points:[0,l.height/2,l.width,l.height/2],stroke:l.stroke,strokeWidth:l.strokeWidth||4}));else group.add(new Konva.Rect({width:l.width,height:l.height,fill:l.fill,opacity:l.fillAlpha,stroke:l.stroke,strokeWidth:l.strokeWidth,cornerRadius:l.radius}));
- }else{const text=resolveText(l,doc);const measure=(text:string,size:number)=>{const node=new Konva.Text({text,fontFamily:families[l.fontId],fontSize:size,fontStyle:l.fontWeight==='700'?'bold':'normal',letterSpacing:l.letterSpacing});const width=node.getTextWidth();node.destroy();return width;};const layout=layoutText(l,text,measure);if(layout.overflow){warnings.push(`文字あふれ: ${l.name}`);if(!options.onSelect&&!options.allowOverflow)throw new Error(`${l.name}: テキストが収まりません。サイズを調整するか、はみ出しを許可してください。`);}const p=l.background.padding;const lineH=layout.size*l.lineHeight;const boxHeight=layout.lines.length*lineH+2*p;const top=(l.height-boxHeight)/2;const bg=l.background;if(bg.mode==='box')group.add(new Konva.Rect({width:l.width,height:l.height,fill:bg.color,opacity:bg.alpha,cornerRadius:bg.radius}));layout.lines.forEach((line,index)=>{const w=layout.widths[index],x=l.align==='left'?p:l.align==='right'?l.width-p-w:(l.width-w)/2,y=top+p+index*lineH;if(bg.mode==='line'&&line)group.add(new Konva.Rect({x:x-p,y:y-p/2,width:w+2*p,height:lineH+p,fill:bg.color,opacity:bg.alpha,cornerRadius:bg.radius}));group.add(new Konva.Text({x,y,text:line,width:w+2,height:lineH*1.5,fontFamily:families[l.fontId],fontSize:layout.size,fontStyle:l.fontWeight==='700'?'bold':'normal',fill:l.color,letterSpacing:l.letterSpacing,stroke:l.stroke.color,strokeWidth:l.stroke.width,fillAfterStrokeEnabled:true,shadowColor:l.shadow.color,shadowBlur:l.shadow.blur,shadowOffsetX:l.shadow.offset,shadowOffsetY:l.shadow.offset,listening:false}));});}
- group.on('click tap',()=>options.onSelect?.(l.id));group.on('dragmove',()=>{if(!options.snap)return;const threshold=6/scale;for(const target of [0,page.width/2,page.width])if(Math.abs(group.x()-target)<threshold)group.x(target);for(const target of [0,page.height/2,page.height])if(Math.abs(group.y()-target)<threshold)group.y(target);});group.on('dragend',()=>options.onMove?.(l.id,group.x(),group.y()));
- }
- if(options.selected){const target=content.findOne('#'+options.selected);if(target){const selected=page.layers.find(l=>l.id===options.selected);const ui=new Konva.Layer();stage.add(ui);if(selected&&!selected.locked&&options.onTransform){const tr=new Konva.Transformer({nodes:[target],rotateEnabled:true,flipEnabled:false,enabledAnchors:['top-left','top-right','bottom-left','bottom-right'],borderStroke:'#b6ed79',anchorFill:'#b6ed79',anchorSize:12/scale,boundBoxFunc:(old,b)=>b.width<12||b.height<12?old:b});ui.add(tr);target.on('transformend',()=>{const sx=target.scaleX(),sy=target.scaleY();options.onTransform?.(selected.id,{x:target.x(),y:target.y(),width:selected.width*sx,height:selected.height*sy,rotation:target.rotation()});});}}}
- content.draw();return {stage,warnings};}catch(error){stage.destroy();throw error;}}
-function applyEffects(node:Konva.Image,l:ImageLayer,scale:number){const e=l.effects;if(e.brightness===1&&e.contrast===1&&e.saturation===1&&!e.blur)return;node.cache({pixelRatio:1,offset:Math.ceil(e.blur/scale)*3});const color=(image:ImageData)=>{const d=image.data;for(let i=0;i<d.length;i+=4){let r=(d[i]*e.brightness-127.5)*e.contrast+127.5,g=(d[i+1]*e.brightness-127.5)*e.contrast+127.5,b=(d[i+2]*e.brightness-127.5)*e.contrast+127.5;const gray=.2126*r+.7152*g+.0722*b;r=gray+(r-gray)*e.saturation;g=gray+(g-gray)*e.saturation;b=gray+(b-gray)*e.saturation;d[i]=r;d[i+1]=g;d[i+2]=b;}};node.filters(e.blur?[color,Konva.Filters.Blur]:[color]);node.blurRadius(e.blur/scale);}
-export async function exportPage(page:Page,doc:ProjectDocument,format:'png'|'jpeg',quality:number,jpegBackground:string,allowOverflow:boolean){const container=document.createElement('div');const exportDoc=structuredClone(doc);const p=structuredClone(page);if(format==='jpeg'){const alpha=p.alpha;const color=p.background;p.background=jpegBackground;p.alpha=1;const bg:Layer={id:crypto.randomUUID(),name:'JPEG background',kind:'shape',x:p.width/2,y:p.height/2,width:p.width,height:p.height,rotation:0,visible:true,locked:false,opacity:alpha,shape:'rect',fill:color,fillAlpha:1,stroke:color,strokeWidth:0,radius:0};p.layers.unshift(bg);}const {stage}=await createScene(container,p,exportDoc,{allowOverflow});try{return await stage.toBlob({mimeType:`image/${format}`,quality,pixelRatio:1}) as Blob;}finally{stage.destroy();container.remove();}}
+import Konva from "konva";
+import { cropGeometry } from "../domain/crop";
+import {
+  resolveText,
+  resolveAsset,
+  type ProjectDocument,
+  type Page,
+  type Layer,
+  type ImageLayer,
+} from "../domain/document";
+import { families, layoutText } from "../domain/text";
+import { get, type Asset } from "../services/storage";
+import { decodeImage } from "../services/assets";
+import { loadFonts } from "../services/fonts";
+export type RenderOptions = {
+  scale?: number;
+  selected?: string;
+  onSelect?: (id: string) => void;
+  onMove?: (id: string, x: number, y: number) => void;
+  onTransform?: (id: string, patch: Partial<Layer>) => void;
+  snap?: boolean;
+  allowOverflow?: boolean;
+  unclip?: boolean;
+};
+export async function createScene(
+  container: HTMLDivElement,
+  page: Page,
+  doc: ProjectDocument,
+  options: RenderOptions = {},
+) {
+  await loadFonts();
+  for (const l of page.layers) {
+    if (l.kind === "text" && l.visible) {
+      await document.fonts.load(
+        `${l.fontWeight} ${l.fontSize}px "${families[l.fontId]}"`,
+        resolveText(l, doc),
+      );
+    }
+  }
+  const scale = options.scale ?? 1;
+  const stage = new Konva.Stage({
+    container,
+    width: page.width * scale,
+    height: page.height * scale,
+    scaleX: scale,
+    scaleY: scale,
+  });
+  const content = new Konva.Layer();
+  stage.add(content);
+  const guides = options.onMove
+    ? new Konva.Layer({ listening: false })
+    : undefined;
+  if (guides) stage.add(guides);
+  content.add(
+    new Konva.Rect({
+      width: page.width,
+      height: page.height,
+      fill: page.background,
+      opacity: page.alpha,
+      listening: false,
+    }),
+  );
+  const warnings: string[] = [];
+  try {
+    for (const l of page.layers) {
+      if (!l.visible) continue;
+      const group = new Konva.Group({
+        id: l.id,
+        x: l.x,
+        y: l.y,
+        width: l.width,
+        height: l.height,
+        offsetX: l.width / 2,
+        offsetY: l.height / 2,
+        rotation: l.rotation,
+        opacity: l.opacity,
+        draggable: !!options.onMove && !l.locked,
+        listening: !!options.onSelect,
+      });
+      content.add(group);
+      group.add(
+        new Konva.Rect({
+          width: l.width,
+          height: l.height,
+          fill: "rgba(0,0,0,0)",
+        }),
+      );
+      if (l.kind === "image") {
+        const a = await get<Asset>("assets", resolveAsset(l, doc));
+        if (!a) throw new Error("画像素材が見つかりません");
+        const image = await decodeImage(a.blob);
+        const { s, crop } = cropGeometry(
+          l.crop,
+          a.width,
+          a.height,
+          l.width,
+          l.height,
+        );
+        const clip = new Konva.Group({
+          x: l.width / 2,
+          y: l.height / 2,
+          clipFunc: (ctx) => {
+            if (options.unclip) return;
+            if (crop.shape === "ellipse") {
+              ctx.beginPath();
+              ctx.ellipse(0, 0, l.width / 2, l.height / 2, 0, 0, Math.PI * 2);
+              ctx.closePath();
+            } else ctx.rect(-l.width / 2, -l.height / 2, l.width, l.height);
+          },
+        });
+        group.add(clip);
+        const node = new Konva.Image({
+          image,
+          x: 0,
+          y: 0,
+          offsetX: crop.focus.u * a.width,
+          offsetY: crop.focus.v * a.height,
+          scaleX: s,
+          scaleY: s,
+          rotation: crop.rotation,
+        });
+        clip.add(node);
+        applyEffects(node, l, s);
+        if (s > 1) warnings.push("元画像以上に拡大される画像があります");
+      } else if (l.kind === "shape") {
+        if (l.shape === "ellipse")
+          group.add(
+            new Konva.Ellipse({
+              x: l.width / 2,
+              y: l.height / 2,
+              radiusX: l.width / 2,
+              radiusY: l.height / 2,
+              fill: l.fill,
+              opacity: l.fillAlpha,
+              stroke: l.stroke,
+              strokeWidth: l.strokeWidth,
+            }),
+          );
+        else if (l.shape === "line")
+          group.add(
+            new Konva.Line({
+              points: [0, l.height / 2, l.width, l.height / 2],
+              stroke: l.stroke,
+              strokeWidth: l.strokeWidth || 4,
+            }),
+          );
+        else
+          group.add(
+            new Konva.Rect({
+              width: l.width,
+              height: l.height,
+              fill: l.fill,
+              opacity: l.fillAlpha,
+              stroke: l.stroke,
+              strokeWidth: l.strokeWidth,
+              cornerRadius: l.radius,
+            }),
+          );
+      } else {
+        const resolved = resolveText(l, doc);
+        const text =
+          options.onSelect && l.textBinding && !resolved
+            ? `[${doc.variables.find((v) => v.key === l.textBinding?.key)?.label ?? l.textBinding.key}]`
+            : resolved;
+        const measure = (text: string, size: number) => {
+          const node = new Konva.Text({
+            text,
+            fontFamily: families[l.fontId],
+            fontSize: size,
+            fontStyle: l.fontWeight === "700" ? "bold" : "normal",
+            letterSpacing: l.letterSpacing,
+          });
+          const width = node.getTextWidth();
+          node.destroy();
+          return width;
+        };
+        const layout = layoutText(l, text, measure);
+        if (layout.overflow) {
+          warnings.push(`文字あふれ: ${l.name}`);
+          if (!options.onSelect && !options.allowOverflow)
+            throw new Error(
+              `${l.name}: テキストが収まりません。サイズを調整するか、はみ出しを許可してください。`,
+            );
+        }
+        const p = l.background.padding;
+        const lineH = layout.size * l.lineHeight;
+        const boxHeight = layout.lines.length * lineH + 2 * p;
+        const top = (l.height - boxHeight) / 2;
+        const bg = l.background;
+        if (bg.mode === "box")
+          group.add(
+            new Konva.Rect({
+              width: l.width,
+              height: l.height,
+              fill: bg.color,
+              opacity: bg.alpha,
+              cornerRadius: bg.radius,
+            }),
+          );
+        layout.lines.forEach((line, index) => {
+          const w = layout.widths[index],
+            x =
+              l.align === "left"
+                ? p
+                : l.align === "right"
+                  ? l.width - p - w
+                  : (l.width - w) / 2,
+            y = top + p + index * lineH;
+          if (bg.mode === "line" && line)
+            group.add(
+              new Konva.Rect({
+                x: x - p,
+                y: y - p / 2,
+                width: w + 2 * p,
+                height: lineH + p,
+                fill: bg.color,
+                opacity: bg.alpha,
+                cornerRadius: bg.radius,
+              }),
+            );
+          group.add(
+            new Konva.Text({
+              x,
+              y,
+              text: line,
+              width: w + 2,
+              height: lineH * 1.5,
+              fontFamily: families[l.fontId],
+              fontSize: layout.size,
+              fontStyle: l.fontWeight === "700" ? "bold" : "normal",
+              fill: l.color,
+              letterSpacing: l.letterSpacing,
+              stroke: l.stroke.color,
+              strokeWidth: l.stroke.width,
+              fillAfterStrokeEnabled: true,
+              shadowColor: l.shadow.color,
+              shadowBlur: l.shadow.blur,
+              shadowOffsetX: l.shadow.offset,
+              shadowOffsetY: l.shadow.offset,
+              listening: false,
+            }),
+          );
+        });
+      }
+      group.on("click tap", () => options.onSelect?.(l.id));
+      group.on("dragmove", () => {
+        if (!options.snap) return;
+        guides?.destroyChildren();
+        const threshold = 6 / scale;
+        const others = page.layers.filter(
+          (other) => other.id !== l.id && other.visible,
+        );
+        const xs = [
+          0,
+          page.width / 2,
+          page.width,
+          ...others.flatMap((o) => [o.x - o.width / 2, o.x, o.x + o.width / 2]),
+        ];
+        const ys = [
+          0,
+          page.height / 2,
+          page.height,
+          ...others.flatMap((o) => [
+            o.y - o.height / 2,
+            o.y,
+            o.y + o.height / 2,
+          ]),
+        ];
+        const nearest = (
+          position: number,
+          extent: number,
+          targets: number[],
+        ) => {
+          let best: { delta: number; target: number } | undefined;
+          for (const own of [
+            position - extent / 2,
+            position,
+            position + extent / 2,
+          ])
+            for (const target of targets) {
+              const delta = target - own;
+              if (
+                Math.abs(delta) < threshold &&
+                (!best || Math.abs(delta) < Math.abs(best.delta))
+              )
+                best = { delta, target };
+            }
+          return best;
+        };
+        const x = nearest(group.x(), l.width, xs),
+          y = nearest(group.y(), l.height, ys);
+        if (x) {
+          group.x(group.x() + x.delta);
+          guides?.add(
+            new Konva.Line({
+              points: [x.target, 0, x.target, page.height],
+              stroke: "#b6ed79",
+              strokeWidth: 1 / scale,
+              dash: [4 / scale, 4 / scale],
+            }),
+          );
+        }
+        if (y) {
+          group.y(group.y() + y.delta);
+          guides?.add(
+            new Konva.Line({
+              points: [0, y.target, page.width, y.target],
+              stroke: "#b6ed79",
+              strokeWidth: 1 / scale,
+              dash: [4 / scale, 4 / scale],
+            }),
+          );
+        }
+        guides?.batchDraw();
+      });
+      group.on("dragend", () => {
+        guides?.destroyChildren();
+        guides?.batchDraw();
+        options.onMove?.(l.id, group.x(), group.y());
+      });
+    }
+    if (options.selected) {
+      const target = content.findOne("#" + options.selected);
+      if (target) {
+        const selected = page.layers.find((l) => l.id === options.selected);
+        const ui = new Konva.Layer();
+        stage.add(ui);
+        if (selected && !selected.locked && options.onTransform) {
+          const tr = new Konva.Transformer({
+            nodes: [target],
+            rotateEnabled: true,
+            flipEnabled: false,
+            enabledAnchors: [
+              "top-left",
+              "top-right",
+              "bottom-left",
+              "bottom-right",
+            ],
+            borderStroke: "#b6ed79",
+            anchorFill: "#b6ed79",
+            anchorSize: 12 / scale,
+            boundBoxFunc: (old, b) => (b.width < 12 || b.height < 12 ? old : b),
+          });
+          ui.add(tr);
+          target.on("transformend", () => {
+            const sx = target.scaleX(),
+              sy = target.scaleY();
+            options.onTransform?.(selected.id, {
+              x: target.x(),
+              y: target.y(),
+              width: selected.width * sx,
+              height: selected.height * sy,
+              rotation: target.rotation(),
+            });
+          });
+        }
+      }
+    }
+    content.draw();
+    return { stage, warnings };
+  } catch (error) {
+    stage.destroy();
+    throw error;
+  }
+}
+function applyEffects(node: Konva.Image, l: ImageLayer, scale: number) {
+  const e = l.effects;
+  if (e.brightness === 1 && e.contrast === 1 && e.saturation === 1 && !e.blur)
+    return;
+  node.cache({ pixelRatio: 1, offset: Math.ceil(e.blur / scale) * 3 });
+  const color = (image: ImageData) => {
+    const d = image.data;
+    for (let i = 0; i < d.length; i += 4) {
+      let r = (d[i] * e.brightness - 127.5) * e.contrast + 127.5,
+        g = (d[i + 1] * e.brightness - 127.5) * e.contrast + 127.5,
+        b = (d[i + 2] * e.brightness - 127.5) * e.contrast + 127.5;
+      const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      r = gray + (r - gray) * e.saturation;
+      g = gray + (g - gray) * e.saturation;
+      b = gray + (b - gray) * e.saturation;
+      d[i] = r;
+      d[i + 1] = g;
+      d[i + 2] = b;
+    }
+  };
+  node.filters(e.blur ? [color, Konva.Filters.Blur] : [color]);
+  node.blurRadius(e.blur / scale);
+}
+export async function exportPage(
+  page: Page,
+  doc: ProjectDocument,
+  format: "png" | "jpeg",
+  quality: number,
+  jpegBackground: string,
+  allowOverflow: boolean,
+) {
+  const container = document.createElement("div");
+  const exportDoc = structuredClone(doc);
+  const p = structuredClone(page);
+  if (format === "jpeg") {
+    const alpha = p.alpha;
+    const color = p.background;
+    p.background = jpegBackground;
+    p.alpha = 1;
+    const bg: Layer = {
+      id: crypto.randomUUID(),
+      name: "JPEG background",
+      kind: "shape",
+      x: p.width / 2,
+      y: p.height / 2,
+      width: p.width,
+      height: p.height,
+      rotation: 0,
+      visible: true,
+      locked: false,
+      opacity: alpha,
+      shape: "rect",
+      fill: color,
+      fillAlpha: 1,
+      stroke: color,
+      strokeWidth: 0,
+      radius: 0,
+    };
+    p.layers.unshift(bg);
+  }
+  const { stage } = await createScene(container, p, exportDoc, {
+    allowOverflow,
+  });
+  try {
+    return (await stage.toBlob({
+      mimeType: `image/${format}`,
+      quality,
+      pixelRatio: 1,
+    })) as Blob;
+  } finally {
+    stage.destroy();
+    container.remove();
+  }
+}
