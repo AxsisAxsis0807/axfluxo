@@ -132,7 +132,7 @@ export async function createSample() {
     x: 540,
     y: 605,
     width: 500,
-    height: 100,
+    height: 120,
     fontId: "inter" as const,
     fontWeight: "400" as const,
     fontSize: 50,

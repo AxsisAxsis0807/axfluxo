@@ -98,6 +98,36 @@ test("image crop draft cancel/apply, PNG dimensions, ZIP backup restore", async 
     .click();
   await expect(page.getByLabel("クロップ回転")).toHaveValue("0");
   await page.getByLabel("クロップ回転").fill("45");
+  const cropBox = await page.locator(".crop-dialog canvas").boundingBox();
+  const cdp = await page.context().newCDPSession(page);
+  const center = {
+    x: cropBox!.x + cropBox!.width / 2,
+    y: cropBox!.y + cropBox!.height / 2,
+  };
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [
+      { x: center.x - 35, y: center.y, id: 1 },
+      { x: center.x + 35, y: center.y, id: 2 },
+    ],
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [
+      { x: center.x - 70, y: center.y, id: 1 },
+      { x: center.x + 70, y: center.y, id: 2 },
+    ],
+  });
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await expect
+    .poll(async () =>
+      Number(await page.getByLabel("クロップ拡大").inputValue()),
+    )
+    .toBeGreaterThan(1.5);
+  await cdp.detach();
   await page.getByRole("button", { name: "適用", exact: true }).click();
   await closeInspector(page);
   await expect(page.getByRole("status")).toContainText("この端末に保存済み");

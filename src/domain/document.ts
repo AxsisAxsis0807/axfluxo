@@ -128,6 +128,18 @@ export const variableSchema = z
     type: z.enum(["string", "number", "image"]),
     required: z.boolean(),
     default: z.union([z.string().max(20000), n]).optional(),
+    validation: z
+      .object({
+        maxLength: n.int().min(1).max(20000).optional(),
+        min: n.optional(),
+        max: n.optional(),
+      })
+      .strict()
+      .refine(
+        (v) => v.min === undefined || v.max === undefined || v.min <= v.max,
+        "数値範囲が逆です",
+      )
+      .optional(),
   })
   .strict();
 export const documentSchema = z
@@ -178,6 +190,24 @@ export const documentSchema = z
       }
     for (const v of d.variables) {
       const value = d.values[v.key] ?? v.default;
+      if (
+        typeof value === "string" &&
+        v.validation?.maxLength !== undefined &&
+        value.length > v.validation.maxLength
+      )
+        ctx.addIssue({
+          code: "custom",
+          message: v.label + "は文字数制限を超えています",
+        });
+      if (
+        typeof value === "number" &&
+        ((v.validation?.min !== undefined && value < v.validation.min) ||
+          (v.validation?.max !== undefined && value > v.validation.max))
+      )
+        ctx.addIssue({
+          code: "custom",
+          message: v.label + "は数値範囲を超えています",
+        });
       if (
         v.type === "image" &&
         value !== undefined &&
@@ -289,7 +319,7 @@ export function cloneProject(
     revision: 0,
     createdAt: date,
     updatedAt: date,
-    templateOrigin: origin,
+    templateOrigin: origin ?? c.templateOrigin,
     pages: c.pages.map((p) => ({
       ...p,
       id: uid(),

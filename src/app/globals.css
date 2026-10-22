@@ -2140,3 +2140,16 @@ h1 {
     min-height: 44px;
   }
 }
+.canvas-warning {
+  position: absolute;
+  bottom: 6px;
+  left: 12px;
+  right: 12px;
+  background: #373123df;
+  color: #d9c89f;
+  font-size: 9px;
+  padding: 8px 12px;
+  border-radius: 5px;
+  pointer-events: none;
+  z-index: 3;
+}

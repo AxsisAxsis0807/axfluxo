@@ -17,4 +17,4 @@
 - Inter: public/fonts/inter-LICENSE.txt
 - Lora: public/fonts/lora-LICENSE.txt
 
-`public/fonts/manifest.json` はfamily、weight、配布ファイル、SHA-256の対応を記録します。フォントは@fontsourceパッケージから取得したものです。アイコン・依存パッケージの配布ライセンス全文は各npmパッケージのLICENSEにも保持されています。第三者のカバーアート、音楽アプリの画面、ユーザー添付画像は標準素材として同梱していません。
+`public/fonts/manifest.json` はfamily、weight、配布ファイル、SHA-256の対応を記録します。フォントは@fontsourceパッケージから取得したものです。アイコン・依存パッケージの配布ライセンス全文は`public/licenses/` と各npmパッケージのLICENSEにも保持されています。第三者のカバーアート、音楽アプリの画面、ユーザー添付画像は標準素材として同梱していません。

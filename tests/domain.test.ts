@@ -137,3 +137,28 @@ it("reducer returns identical outputs for identical command inputs", () => {
   };
   expect(reducer(h, a)).toEqual(reducer(h, a));
 });
+it("enforces optional variable length and numeric bounds", () => {
+  const d = newProject();
+  d.variables = [
+    {
+      key: "title",
+      label: "Title",
+      type: "string",
+      required: false,
+      validation: { maxLength: 3 },
+    },
+    {
+      key: "count",
+      label: "Count",
+      type: "number",
+      required: false,
+      validation: { min: 1, max: 10 },
+    },
+  ];
+  d.values = { title: "long title", count: 1 };
+  expect(documentSchema.safeParse(d).success).toBe(false);
+  d.values = { title: "ok", count: 11 };
+  expect(documentSchema.safeParse(d).success).toBe(false);
+  d.values.count = 5;
+  expect(documentSchema.safeParse(d).success).toBe(true);
+});

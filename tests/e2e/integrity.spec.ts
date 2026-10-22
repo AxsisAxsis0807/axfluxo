@@ -112,3 +112,53 @@ test("JPEG background flattening, hidden layers, Undo/Redo and ordered multipage
   const entries = unzipSync(new Uint8Array(await readFile(path!)));
   expect(Object.keys(entries)).toEqual(["01-ページ.jpg", "02-ページ.jpg"]);
 });
+test("original two-page sample exports and template reuse keeps source and IDs independent", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "2ページのサンプルを試す ↗" }).click();
+  await expect(page.getByLabel("プロジェクト名")).toHaveValue(
+    "サンプル — 2ページの紹介画像",
+  );
+  await openPanel(page);
+  await page.getByRole("button", { name: "変数", exact: true }).click();
+  await page
+    .getByLabel("紹介文の値", { exact: true })
+    .fill("A new creative story");
+  await page.getByLabel("紹介文の値", { exact: true }).blur();
+  await closePanel(page);
+  await expect(page.getByRole("status")).toContainText("この端末に保存済み");
+  const original = (await readProjects(page))[0];
+  await page.getByRole("button", { name: "書き出し", exact: true }).click();
+  await page
+    .getByRole("button", { name: "プレビューを生成", exact: true })
+    .click();
+  await expect(page.getByAltText("書き出しプレビュー")).toBeVisible();
+  await page.getByLabel("書き出しを閉じる", { exact: true }).click();
+  await openPanel(page);
+  await page.getByRole("button", { name: "デザイン", exact: true }).click();
+  await page
+    .getByRole("button", { name: "テンプレート保存", exact: true })
+    .click();
+  await closePanel(page);
+  await page.getByRole("button", { name: "テンプレート", exact: true }).click();
+  await expect(page.locator(".template-card")).toHaveCount(1);
+  await page.getByRole("button", { name: "このレイアウトで作成" }).click();
+  await openPanel(page);
+  await page.getByRole("button", { name: "変数", exact: true }).click();
+  await page
+    .getByLabel("紹介文の値", { exact: true })
+    .fill("A completely different story");
+  await page.getByLabel("紹介文の値", { exact: true }).blur();
+  await closePanel(page);
+  await expect(page.getByRole("status")).toContainText("この端末に保存済み");
+  const projects = await readProjects(page);
+  expect(projects).toHaveLength(2);
+  const source = projects.find((p) => p.id === original.id)!,
+    copy = projects.find((p) => p.id !== original.id)!;
+  expect(source.values.description_en).toBe("A new creative story");
+  expect(copy.values.description_en).toBe("A completely different story");
+  expect(copy.pages[0].id).not.toBe(source.pages[0].id);
+  expect(copy.pages[0].layers[0].id).not.toBe(source.pages[0].layers[0].id);
+  expect(copy.templateOrigin).toBeDefined();
+});

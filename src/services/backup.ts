@@ -1,3 +1,5 @@
+import { z } from "zod";
+import fontManifest from "../../public/fonts/manifest.json";
 import { zipSync, strToU8, strFromU8, Unzip, UnzipInflate } from "fflate";
 import { LIMITS } from "../config/limits";
 import {
@@ -42,7 +44,7 @@ export async function backup(d: ProjectDocument) {
     });
   }
   entries["manifest.json"] = strToU8(
-    JSON.stringify({ version: 1, assets, fonts: ["noto", "inter", "lora"] }),
+    JSON.stringify({ version: 1, assets, fonts: fontManifest }),
   );
   if (
     Object.values(entries).reduce((n, bytes) => n + bytes.length, 0) >
@@ -160,6 +162,8 @@ export function safeUnzip(bytes: Uint8Array) {
   return result;
 }
 export async function restore(file: File) {
+  if (file.size > LIMITS.archiveBytes)
+    throw new Error("ZIPは200MiB以下にしてください");
   const entries = await safeUnzip(new Uint8Array(await file.arrayBuffer()));
   if (
     !entries["document.json"] ||
@@ -176,13 +180,66 @@ export async function restore(file: File) {
   };
   depth(data);
   const d = documentSchema.parse(data);
-  const manifest = JSON.parse(strFromU8(entries["manifest.json"]));
+  const hash = z.string().regex(/^[0-9a-f]{64}$/);
+  const manifest = z
+    .object({
+      version: z.literal(1),
+      assets: z
+        .array(
+          z
+            .object({
+              id: z.string().uuid(),
+              name: z.string().max(1024),
+              hash,
+              originalHash: hash,
+              mime: z.enum(["image/png", "image/jpeg", "image/webp"]),
+            })
+            .strict(),
+        )
+        .max(LIMITS.entries),
+      fonts: z
+        .array(
+          z
+            .object({
+              id: z.string(),
+              family: z.string(),
+              weight: z.number(),
+              file: z.string(),
+              sha256: hash,
+            })
+            .strict(),
+        )
+        .length(fontManifest.length),
+    })
+    .strict()
+    .parse(JSON.parse(strFromU8(entries["manifest.json"])));
   if (
     manifest.version !== 1 ||
     !Array.isArray(manifest.assets) ||
     manifest.assets.length > LIMITS.entries
   )
     throw new Error("manifestが不正です");
+  if (
+    !Array.isArray(manifest.fonts) ||
+    new Set(manifest.fonts.map((f) => f.file)).size !== fontManifest.length ||
+    manifest.fonts.some((font: unknown) => {
+      if (!font || typeof font !== "object") return true;
+      const f = font as {
+        id: string;
+        file: string;
+        sha256: string;
+        weight: number;
+      };
+      return !fontManifest.some(
+        (known) =>
+          known.id === f.id &&
+          known.file === f.file &&
+          known.weight === f.weight &&
+          known.sha256 === f.sha256,
+      );
+    })
+  )
+    throw new Error("フォント参照またはバージョンが一致しません");
   const assets: Asset[] = [];
   const seen = new Set<string>();
   for (const item of manifest.assets) {

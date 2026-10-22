@@ -18,6 +18,8 @@
 4. deploy jobが返すURLを確認する。標準構成の予定URLは `https://axsisaxsis0807.github.io/axfluxo/` 。**これは未公開の予定値で、稼働確認済みURLではありません。**
 5. iPhone SafariでHTTPS URLを開き、画像選択・日本語入力・ピンチ・回転・PNG/JPEG保存・ZIP復元を実機確認する。
 
+ローカルでは `NEXT_PUBLIC_BASE_PATH=/axfluxo npm run build` と専用の静的サーバーで、iPhoneサイズの画面・同梱フォント・サンプル作品の1080×1080 PNG出力を確認済み（HTTP/JavaScriptエラー0）。これは公開ホストの稼働確認ではない。
+
 準備済み設定:
 
 - build時 `NEXT_PUBLIC_BASE_PATH=/axfluxo`。NextのbasePathに加え、出力CSSの同梱フォント参照にもprefixを付けるpostbuildを用意した。

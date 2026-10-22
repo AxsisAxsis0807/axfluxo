@@ -43,6 +43,7 @@ import {
   reducer,
   requiredMissing,
   resolveAsset,
+  resolveText,
   uid,
   type ImageLayer,
   type Layer,
@@ -1408,6 +1409,7 @@ export default function Editor() {
                                         onClick={() =>
                                           patchLayer(layer.id, {
                                             textBinding: undefined,
+                                            text: resolveText(layer, doc),
                                           })
                                         }
                                       >
@@ -2094,13 +2096,17 @@ export default function Editor() {
                                     if (
                                       l.kind === "text" &&
                                       l.textBinding?.key === v.key
-                                    )
+                                    ) {
+                                      l.text = resolveText(l, doc);
                                       delete l.textBinding;
+                                    }
                                     if (
                                       l.kind === "image" &&
                                       l.imageBinding === v.key
-                                    )
+                                    ) {
+                                      l.assetId = resolveAsset(l, doc);
                                       delete l.imageBinding;
+                                    }
                                   }
                                 commit(d);
                               }}
@@ -2189,6 +2195,17 @@ export default function Editor() {
                               label: data.get("label"),
                               type: data.get("type"),
                               required: false,
+                              validation: {
+                                ...(data.get("maxLength")
+                                  ? { maxLength: Number(data.get("maxLength")) }
+                                  : {}),
+                                ...(data.get("min")
+                                  ? { min: Number(data.get("min")) }
+                                  : {}),
+                                ...(data.get("max")
+                                  ? { max: Number(data.get("max")) }
+                                  : {}),
+                              },
                               ...(data.get("default")
                                 ? {
                                     default:
@@ -2239,6 +2256,28 @@ export default function Editor() {
                           既定値（任意・画像は素材ID）
                           <input name="default" maxLength={20000} />
                         </label>
+                        <details>
+                          <summary>入力の制約（任意）</summary>
+                          <label>
+                            最大文字数
+                            <input
+                              name="maxLength"
+                              type="number"
+                              min="1"
+                              max="20000"
+                            />
+                          </label>
+                          <div className="fields">
+                            <label>
+                              数値の最小値
+                              <input name="min" type="number" />
+                            </label>
+                            <label>
+                              数値の最大値
+                              <input name="max" type="number" />
+                            </label>
+                          </div>
+                        </details>
                         <button className="full-button" type="submit">
                           <Plus size={15} />
                           変数を追加

@@ -34,6 +34,7 @@ export default function Canvas({
   callbacks.current = { onSelect, onPatch, onZoom };
   const [size, setSize] = useState({ width: 650, height: 650 }),
     [error, setError] = useState(""),
+    [warnings, setWarnings] = useState<string[]>([]),
     [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const space = useRef(false),
     pointers = useRef(new Map<number, Point>()),
@@ -115,6 +116,7 @@ export default function Canvas({
         }
         stage.current = owned;
         setError("");
+        setWarnings(result.warnings);
       })
       .catch((e) => {
         if (!cancelled) setError(String(e.message));
@@ -204,6 +206,11 @@ export default function Canvas({
           <span>ここから、つくりはじめよう</span>
           <small>画像・テキスト・図形を追加してください</small>
         </div>
+      )}
+      {!error && warnings.length > 0 && (
+        <p className="canvas-warning" role="note">
+          {[...new Set(warnings)].join(" / ")}
+        </p>
       )}
       {error && (
         <p className="canvas-error" role="alert">
