@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 async function start(page: import("@playwright/test").Page) {
-  await page.goto("/");
+  await page.goto("./");
   await expect(
     page.getByRole("heading", { name: "次のアイデアを、ここから。" }),
   ).toBeVisible();
@@ -157,7 +157,7 @@ test("image crop draft cancel/apply, PNG dimensions, ZIP backup restore", async 
     expect(downloaded.suggestedFilename()).toMatch(/\.axfluxo\.zip$/);
     const empty = await browser.newContext();
     const restored = await empty.newPage();
-    await restored.goto("http://127.0.0.1:3000/");
+    await restored.goto(page.url());
     await restored
       .getByRole("heading", { name: "次のアイデアを、ここから。" })
       .waitFor();

@@ -21,7 +21,7 @@ async function readProjects(page: Page) {
   });
 }
 async function start(page: Page) {
-  await page.goto("/");
+  await page.goto("./");
   await page
     .getByRole("button", { name: "新しいプロジェクト", exact: true })
     .click();
@@ -43,7 +43,7 @@ test("multi-tab CAS conflict retains both documents via copy recovery", async ({
   await closePanel(page);
   await expect(page.getByRole("status")).toContainText("この端末に保存済み");
   const other = await context.newPage();
-  await other.goto("/");
+  await other.goto("./");
   await other.locator(".project-meta button").first().click();
   await page.getByLabel("テキストを追加", { exact: true }).click();
   await closePanel(page);
@@ -115,7 +115,7 @@ test("JPEG background flattening, hidden layers, Undo/Redo and ordered multipage
 test("original two-page sample exports and template reuse keeps source and IDs independent", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("./");
   await page.getByRole("button", { name: "2ページのサンプルを試す ↗" }).click();
   await expect(page.getByLabel("プロジェクト名")).toHaveValue(
     "サンプル — 2ページの紹介画像",

@@ -1,39 +1,85 @@
-name: Publish GitHub Pages (manual)
+name: Publish GitHub Pages
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
-  pages: write
-  id-token: write
 concurrency:
   group: pages
   cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_BASE_PATH: /axfluxo
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000/axfluxo/
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm run typecheck && npm run lint && npm test
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
       - run: npm run build
-        env:
-          NEXT_PUBLIC_BASE_PATH: /axfluxo
+      - run: npx playwright install --with-deps chromium
+      - name: Test the Pages artifact at its production subpath
+        run: |
+          npm start > /tmp/axfluxo-server.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail "$PLAYWRIGHT_BASE_URL" > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pages-playwright-results
+          path: test-results/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out
   deploy:
     needs: build
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/configure-pages@v5
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ needs.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify the public HTTPS site
+        run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-pages-test-results
+          path: test-results/
