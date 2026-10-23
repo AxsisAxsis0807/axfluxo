@@ -15,7 +15,7 @@ npm ci
 npm run dev
 ```
 
-開発画面は http://localhost:3000 。本番相当のローカル確認は `npm run build && npm start`。出力先は `out/` です。初期版に環境変数やAPIキーは不要です。開発サーバーはネットワーク上にもbindするため、信頼できる環境で利用してください。
+開発画面は http://localhost:3000 。本番相当のローカル確認は `npm run build && npm start`。出力先は `out/` です。ゲスト編集は環境変数なしで利用できます。メール認証を使う場合は `.env.example` と [認証設定](docs/research/auth.md) を参照してください。開発サーバーはネットワーク上にもbindするため、信頼できる環境で利用してください。
 
 ### 制作の流れ
 
@@ -65,6 +65,6 @@ CIはNodeを固定し、型・Lint・単体／保存テスト・build・デス�
 
 ### 公開・設計・ライセンス
 
-GitHub Pages向けの自動デプロイを用意しています。公開状況はActionsのdeploy・verify結果を確認してください。[iPhone利用・公開手順](docs/research/deployment.md) と [設計判断](docs/adr/001-local-editor.md) を参照してください。認証・クラウド同期・AI翻訳・投稿台帳・SNS自動投稿・動画編集は将来フェーズです。
+GitHub Pages向けの自動デプロイを用意しています。公開状況はActionsのdeploy・verify結果を確認してください。[iPhone利用・公開手順](docs/research/deployment.md) と [設計判断](docs/adr/001-local-editor.md) を参照してください。メール認証は任意で利用できます。制作データは引き続き端末内保存です。クラウド同期・AI翻訳・投稿台帳・SNS自動投稿・動画編集は将来フェーズです。
 
 プロジェクト自身のライセンスは所有者の判断待ちです。第三者依存と同梱フォントの権利・ライセンスは [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) に記載します。

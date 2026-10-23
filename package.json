@@ -17,6 +17,7 @@
     "format": "prettier --write src tests scripts *.ts *.mjs *.json docs .github"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.118.0",
     "fflate": "0.8.3",
     "konva": "10.9.0",
     "lucide-react": "1.61.0",

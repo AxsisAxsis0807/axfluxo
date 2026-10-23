@@ -2153,3 +2153,84 @@ h1 {
   pointer-events: none;
   z-index: 3;
 }
+
+.account-trigger {
+  white-space: nowrap;
+  font-size: 12px;
+}
+.account-dialog {
+  position: fixed;
+  margin: auto;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 28px;
+  border: 1px solid #ddd;
+  border-radius: 14px;
+  background: #fff;
+  color: #222;
+}
+.account-dialog::backdrop {
+  background: #0006;
+}
+.account-dialog h2 {
+  margin: 0 24px 16px 0;
+}
+.account-dialog p {
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  margin: 12px 0;
+}
+.account-dialog form,
+.account-dialog label {
+  display: grid;
+  gap: 10px;
+}
+.account-dialog form {
+  gap: 16px;
+  margin: 16px 0;
+}
+.account-dialog input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #aaa;
+  border-radius: 6px;
+  font-size: 16px;
+}
+.account-dialog nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.account-close {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+}
+.account-dialog input {
+  background: #fff;
+  color: #222;
+}
+.account-dialog label {
+  color: #333;
+  font-size: 13px;
+}
+.account-dialog p {
+  color: #555;
+}
+@media (max-width: 700px) {
+  .topbar .privacy {
+    display: none;
+  }
+  .topbar .breadcrumb {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .account-trigger {
+    min-height: 44px;
+    padding: 6px;
+    font-size: 11px;
+  }
+}

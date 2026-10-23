@@ -4,6 +4,10 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+# Publishable values only. Variables override these public project defaults.
+env:
+  NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://nbyigfqkweodzlhwdryz.supabase.co' }}
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_EFXWNrd_UcG6To3sI5IlyA_Abuc1Hij' }}
 permissions:
   contents: read
 concurrency:
@@ -76,6 +80,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      - name: Verify live Supabase public authentication settings
+        run: node scripts/check-auth.mjs
       - name: Verify the public HTTPS site
         run: npm run test:e2e
       - uses: actions/upload-artifact@v4

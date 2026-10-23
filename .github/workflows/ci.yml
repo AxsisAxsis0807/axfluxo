@@ -3,6 +3,10 @@ on:
   push:
     branches: [main, "feat/**"]
   pull_request:
+# Publishable values only. Variables override these public project defaults.
+env:
+  NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://nbyigfqkweodzlhwdryz.supabase.co' }}
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_EFXWNrd_UcG6To3sI5IlyA_Abuc1Hij' }}
 permissions:
   contents: read
 jobs:

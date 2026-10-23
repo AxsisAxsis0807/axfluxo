@@ -1,4 +1,5 @@
 "use client";
+import Account from "../auth/Account";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 /* eslint-disable @next/next/no-img-element -- Blob URLs are local decoded user assets. */
 import {
@@ -731,6 +732,7 @@ export default function Editor() {
             </b>
           </div>
           <div className="top-actions">
+            <Account />
             <span className="privacy">
               <span className="online-dot" /> LOCAL FIRST
             </span>
@@ -2503,7 +2505,7 @@ export default function Editor() {
                 静止WebP。1枚20MiB、24MP、長辺8192pxまで。キャンバスは64〜4096px・8.5MP、20ページ、各100レイヤーまで。初期版はsRGBを基本とします。HEIC、動画、アニメーション、SVGには対応していません。
               </p>
               <p>
-                認証・クラウド同期・SNS自動投稿・動画編集は将来フェーズです。現在は端末内の画像制作と書き出しを行えます。
+                メール認証はアカウントメニューから利用できます。制作データは端末内に保存され、クラウド同期・SNS自動投稿・動画編集は将来フェーズです。
               </p>
             </section>
             <section className="settings-card">
