@@ -27,6 +27,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Verify Supabase before publishing
+        run: node scripts/check-auth.mjs
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
