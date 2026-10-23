@@ -21,8 +21,11 @@ export default function Account() {
   const [message, setMessage] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const client = authClient();
+  const [client, setClient] = useState<ReturnType<typeof authClient>>(null);
   useEffect(() => {
+    // Start initialization and subscribe in the same effect, before React yields.
+    const client = authClient();
+    setClient(client);
     if (!client) {
       setLoading(false);
       return;
@@ -73,7 +76,7 @@ export default function Account() {
       active = false;
       subscription.unsubscribe();
     };
-  }, [client]);
+  }, []);
   useEffect(() => {
     if (open && !dialog.current?.open) dialog.current?.showModal();
     if (!open && dialog.current?.open) dialog.current?.close();
