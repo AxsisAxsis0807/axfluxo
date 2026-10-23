@@ -52,7 +52,7 @@ Pages初回設定（iPhone SafariでGitHubにログインして操作可能。�
 
 作業開始時、mainは588227dafd06cae7a68961b4bd8d3f3c0584ba62、PR #1は同コミットへMerge済みとGitHub APIで再確認。Next.jsは16.4.2。既存mainのCI（39864066324）は全検証成功。
 
-今回のローカル環境はプロキシ接続失敗でgit fetch/npm ci/公開URLへのHTTP接続ができず、依存ツール不足により型・Lint・単体テスト・build・E2Eを実行できませんでした。過去の成功を今回のローカル成功として扱いません。変更後の結果はPRのCIとPublish GitHub Pagesのbuild、main Merge後はdeployとverifyを確認してください。
+ローカルでgit fetch、npm ci、型チェック、Lint、単体テスト29件、/axfluxo/向け静的buildを実行し成功しました。初回はサンドボックスのネットワーク権限不足で依存導入が失敗しましたが、必要な権限を指定して解消しました。公開先ドメインとPages設定APIへの直接接続は別途ネットワーク方針で拒否されています。ローカルのデスクトップ/iPhone 13サイズChromium E2Eも12件成功。PR #2のCI（39917696067）とPages用build（39917696115）も成功しました。main Merge後はdeployと公開URLのverifyを別途確認してください。
 
 GitHub連携はadmin/push権限を返しますが、Pages設定変更・workflow手動起動APIはこの連携のツールにありません。Pages設定の現在値もこの連携では取得できません。Source設定が必要な場合は上記の画面操作で行ってください。configure-pagesで「Get Pages site failed」等になる場合はSourceとActions許可を確認し、設定後にworkflowを再実行します。deploy成功でもverify失敗なら公開後動作確認は完了ではありません。
 
