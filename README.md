@@ -65,6 +65,6 @@ CIはNodeを固定し、型・Lint・単体／保存テスト・build・デス�
 
 ### 公開・設計・ライセンス
 
-公開はまだ実行していません。[iPhone利用・公開手順](docs/research/deployment.md) と [設計判断](docs/adr/001-local-editor.md) を参照してください。認証・クラウド同期・AI翻訳・投稿台帳・SNS自動投稿・動画編集は将来フェーズです。
+GitHub Pages向けの自動デプロイを用意しています。公開状況はActionsのdeploy・verify結果を確認してください。[iPhone利用・公開手順](docs/research/deployment.md) と [設計判断](docs/adr/001-local-editor.md) を参照してください。認証・クラウド同期・AI翻訳・投稿台帳・SNS自動投稿・動画編集は将来フェーズです。
 
 プロジェクト自身のライセンスは所有者の判断待ちです。第三者依存と同梱フォントの権利・ライセンスは [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) に記載します。
