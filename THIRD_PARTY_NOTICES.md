@@ -10,6 +10,8 @@
 - Zod — MIT
 - fflate — MIT
 - Lucide React — ISC
+- @xyflow/react 12.12.0 / @xyflow/system — MIT (`public/licenses/xyflow-*-LICENSE.txt`)
+- @dagrejs/dagre 3.1.2 / @dagrejs/graphlib — MIT (`public/licenses/dagre*-LICENSE.txt`)
 
 同梱フォントはすべてSIL Open Font License 1.1。権利者と全文は次のファイルに保持しています。
 

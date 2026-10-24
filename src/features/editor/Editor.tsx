@@ -1,5 +1,11 @@
 "use client";
 import Account from "../auth/Account";
+import dynamic from "next/dynamic";
+import { WORKFLOW_ENABLED } from "../../config/workflow-limits";
+const Workflow = dynamic(() => import("../workflow/Workflow"), {
+  ssr: false,
+  loading: () => <p role="status">Workflowを読み込み中…</p>,
+});
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 /* eslint-disable @next/next/no-img-element -- Blob URLs are local decoded user assets. */
 import {
@@ -70,7 +76,8 @@ import { exportPage } from "../../renderers/scene";
 import { createSample } from "../../services/sample";
 import Canvas from "./Canvas";
 import CropDialog from "./CropDialog";
-type View = "dashboard" | "studio" | "templates" | "assets" | "settings";
+type View =
+  "workflow" | "dashboard" | "studio" | "templates" | "assets" | "settings";
 type LocalTemplate = Template & { templateId?: string };
 const start = newProject();
 function NumberField({
@@ -148,6 +155,7 @@ export default function Editor() {
   const doc = history.present;
   const current = useRef(doc);
   current.current = doc;
+  const [workflowOpened, setWorkflowOpened] = useState(false);
   const [view, setView] = useState<View>("dashboard"),
     [pageId, setPageId] = useState(doc.pages[0].id),
     [selected, setSelected] = useState<string>(),
@@ -598,6 +606,7 @@ export default function Editor() {
     }
   }, [exportOpen]);
   const chooseView = (v: View) => {
+    if (v === "workflow") setWorkflowOpened(true);
     if (view === "studio" && v !== "studio") save().catch(report);
     setView(v);
   };
@@ -690,6 +699,15 @@ export default function Editor() {
               {id === "studio" && <small>EDITOR</small>}
             </button>
           ))}
+          {WORKFLOW_ENABLED && (
+            <button
+              className={view === "workflow" ? "active" : ""}
+              onClick={() => chooseView("workflow")}
+            >
+              <Shapes size={18} />
+              <span>Workflow</span>
+            </button>
+          )}
         </nav>
         <div className="nav-bottom">
           <div className="local-badge">
@@ -728,7 +746,9 @@ export default function Editor() {
                     ? "テンプレート"
                     : view === "assets"
                       ? "素材ライブラリ"
-                      : "設定"}
+                      : view === "workflow"
+                        ? "Workflow"
+                        : "設定"}
             </b>
           </div>
           <div className="top-actions">
@@ -781,6 +801,11 @@ export default function Editor() {
             <button aria-label="通知を閉じる" onClick={() => setError("")}>
               <X size={16} />
             </button>
+          </div>
+        )}
+        {workflowOpened && (
+          <div hidden={view !== "workflow"}>
+            <Workflow />
           </div>
         )}
         {view === "dashboard" && (

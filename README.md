@@ -68,3 +68,7 @@ CIはNodeを固定し、型・Lint・単体／保存テスト・build・デス�
 GitHub Pages向けの自動デプロイを用意しています。公開状況はActionsのdeploy・verify結果を確認してください。[iPhone利用・公開手順](docs/research/deployment.md) と [設計判断](docs/adr/001-local-editor.md) を参照してください。メール認証は任意で利用できます。制作データは引き続き端末内保存です。クラウド同期・AI翻訳・投稿台帳・SNS自動投稿・動画編集は将来フェーズです。
 
 プロジェクト自身のライセンスは所有者の判断待ちです。第三者依存と同梱フォントの権利・ライセンスは [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) に記載します。
+
+### Workflow Mode（Phase 1）
+
+「Workflow」からノードの配置・設定・接続を編集できます。実行は今後対応です。自動保存はStudioとは別の端末内DBを使い、直近5世代を保持します。接続は端子のドラッグ／タップ、または詳細設定の端子選択で操作できます。詳細は[Workflow設計](docs/adr/002-workflow-phase1.md)と[iPhone試験手順](docs/manual-tests/workflow-iphone.md)を参照してください。入口を無効にする場合は `NEXT_PUBLIC_WORKFLOW_ENABLED=false` で再ビルドしてください。DBやユーザーデータは削除しません。
