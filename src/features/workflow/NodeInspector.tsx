@@ -1,10 +1,63 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   definitions,
   type WorkflowNode,
   type WorkflowDocument,
 } from "../../domain/workflow/schema";
 export type Endpoint = { nodeId: string; portId: string };
+// Keep the DOM field stable for native undo/IME. Invalid intermediate numbers
+// stay visible locally, while only validated configs reach the document.
+function ConfigField({
+  value,
+  multiline,
+  numeric,
+  onChange,
+  onDraftChange,
+}: {
+  value: string;
+  multiline?: boolean;
+  numeric?: boolean;
+  onChange: (value: string) => boolean;
+  onDraftChange: (pending: boolean) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const composing = useRef(false);
+  useEffect(() => {
+    setDraft(value);
+    onDraftChange(false);
+  }, [value, onDraftChange]);
+  useEffect(() => () => onDraftChange(false), [onDraftChange]);
+  const props = {
+    value: draft,
+    onChange: (
+      e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+    ) => {
+      setDraft(e.target.value);
+      if (!composing.current) onDraftChange(!onChange(e.target.value));
+    },
+    onCompositionStart: () => {
+      composing.current = true;
+      onDraftChange(true);
+    },
+    onCompositionEnd: (
+      e: React.CompositionEvent<HTMLInputElement | HTMLTextAreaElement>,
+    ) => {
+      composing.current = false;
+      setDraft(e.currentTarget.value);
+      onDraftChange(!onChange(e.currentTarget.value));
+    },
+  };
+  return multiline ? (
+    <textarea {...props} rows={4} maxLength={20000} />
+  ) : (
+    <input
+      {...props}
+      type={numeric ? "number" : "text"}
+      min={numeric ? 64 : undefined}
+      max={numeric ? 8192 : undefined}
+    />
+  );
+}
 export default function NodeInspector({
   node,
   document: doc,
@@ -15,12 +68,14 @@ export default function NodeInspector({
   onDelete,
   onDuplicate,
   onDisconnect,
+  onDraftChange,
 }: {
   node: WorkflowNode;
   document: WorkflowDocument;
   pending?: Endpoint;
   onPort: (node: WorkflowNode, portId: string) => void;
-  onChange: (config: WorkflowNode["config"]) => void;
+  onChange: (config: WorkflowNode["config"]) => boolean;
+  onDraftChange: (pending: boolean) => void;
   onClose: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
@@ -55,23 +110,21 @@ export default function NodeInspector({
       {node.type === "source" && (
         <label>
           素材ID（任意）
-          <input
-            key={`${node.id}-${"assetId" in config ? config.assetId : ""}`}
-            defaultValue={"assetId" in config ? (config.assetId ?? "") : ""}
-            onBlur={(e) =>
-              onChange(e.target.value ? { assetId: e.target.value } : {})
-            }
+          <ConfigField
+            value={"assetId" in config ? (config.assetId ?? "") : ""}
+            onDraftChange={onDraftChange}
+            onChange={(value) => onChange(value ? { assetId: value } : {})}
           />
         </label>
       )}
       {node.type === "text" && (
         <label>
           文章
-          <textarea
-            key={`${node.id}-${"text" in config ? config.text : ""}`}
-            rows={4}
-            defaultValue={"text" in config ? config.text : ""}
-            onBlur={(e) => onChange({ text: e.target.value })}
+          <ConfigField
+            multiline
+            value={"text" in config ? config.text : ""}
+            onDraftChange={onDraftChange}
+            onChange={(text) => onChange({ text })}
           />
         </label>
       )}
@@ -94,14 +147,15 @@ export default function NodeInspector({
           </label>
           <label>
             幅
-            <input
-              key={`${node.id}-${config.width}`}
-              type="number"
-              min={64}
-              max={8192}
-              defaultValue={config.width}
-              onBlur={(e) =>
-                onChange({ ...config, width: Number(e.target.value) })
+            <ConfigField
+              numeric
+              value={String(config.width)}
+              onDraftChange={onDraftChange}
+              onChange={(value) =>
+                onChange({
+                  ...config,
+                  width: value === "" ? NaN : Number(value),
+                })
               }
             />
           </label>
@@ -110,10 +164,10 @@ export default function NodeInspector({
       {node.type === "save" && (
         <label>
           保存名
-          <input
-            key={`${node.id}-${"name" in config ? config.name : ""}`}
-            defaultValue={"name" in config ? config.name : ""}
-            onBlur={(e) => onChange({ name: e.target.value })}
+          <ConfigField
+            value={"name" in config ? config.name : ""}
+            onDraftChange={onDraftChange}
+            onChange={(name) => onChange({ name })}
           />
         </label>
       )}

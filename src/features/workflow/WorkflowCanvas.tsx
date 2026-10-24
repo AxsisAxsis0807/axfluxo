@@ -19,6 +19,7 @@ import {
   type Viewport,
 } from "../../domain/workflow/schema";
 import { connectionError } from "../../domain/workflow/connections";
+import { pinchViewport, type Point } from "../../domain/workflow/viewport";
 export type FlowNode = Node<
   { node: WorkflowNode; inspect: (id: string) => void },
   "workflow"
@@ -83,6 +84,30 @@ export default function WorkflowCanvas({
   onInit: (instance: ReactFlowInstance<FlowNode>) => void;
 }) {
   const cancelling = useRef(false);
+  // React Flow's measured dimensions belong to the adapter, not the document.
+  // Dropping them on a parent re-render hides a node just as selection starts.
+  const [measured, setMeasured] = useState<
+    Record<string, { width: number; height: number }>
+  >({});
+  const touchGesture = useRef<{
+    viewport: Viewport;
+    points: Point[];
+    suspended?: boolean;
+  } | null>(null);
+  const liveViewport = useRef(viewport);
+  liveViewport.current = viewport;
+  function touchPoints(touches: React.TouchList): Point[] {
+    const bounds = window.document
+      .querySelector(".wf-canvas")!
+      .getBoundingClientRect();
+    return Array.from(touches)
+      .slice(0, 2)
+      .map((t) => ({ x: t.clientX - bounds.left, y: t.clientY - bounds.top }));
+  }
+  function moveTouchViewport(next: Viewport) {
+    liveViewport.current = next;
+    onViewport(next);
+  }
   const pointers = useRef(new Set<number>());
   const [drag, setDrag] = useState<Record<string, { x: number; y: number }>>(
     {},
@@ -96,6 +121,7 @@ export default function WorkflowCanvas({
     type: "workflow",
     dragHandle: ".wf-drag",
     position: drag[n.id] ?? n.position,
+    measured: measured[n.id],
     selected: n.id === selected,
     ariaLabel: definitions[n.type].label,
     data: { node: n, inspect: onInspect },
@@ -119,6 +145,7 @@ export default function WorkflowCanvas({
     setDrag({});
   }
   function cancelGesture() {
+    if (touchGesture.current) touchGesture.current.suspended = true;
     finishDrag();
     pointers.current.clear();
     // End document/window drag listeners synchronously. Keep the Flow mounted:
@@ -139,6 +166,55 @@ export default function WorkflowCanvas({
       }}
       onPointerUpCapture={(e) => {
         pointers.current.delete(e.pointerId);
+      }}
+      onTouchStartCapture={(e) => {
+        const overNode = Array.from(e.touches).some((t) =>
+          (t.target as Element).closest?.(".react-flow__node"),
+        );
+        if (e.touches.length === 2 && (overNode || touchGesture.current)) {
+          cancelGesture();
+          touchGesture.current = {
+            viewport: liveViewport.current,
+            points: touchPoints(e.touches),
+          };
+          e.stopPropagation();
+        }
+      }}
+      onTouchMoveCapture={(e) => {
+        const gesture = touchGesture.current;
+        if (!gesture) return;
+        e.stopPropagation();
+        if (gesture.suspended) return;
+        const points = touchPoints(e.touches);
+        if (points.length === 2 && gesture.points.length === 2) {
+          moveTouchViewport(
+            pinchViewport(
+              gesture.viewport,
+              gesture.points as [Point, Point],
+              points as [Point, Point],
+            ),
+          );
+        } else if (points.length === 1 && gesture.points.length === 1) {
+          moveTouchViewport({
+            ...gesture.viewport,
+            x: gesture.viewport.x + points[0].x - gesture.points[0].x,
+            y: gesture.viewport.y + points[0].y - gesture.points[0].y,
+          });
+        }
+      }}
+      onTouchEndCapture={(e) => {
+        if (!touchGesture.current) return;
+        // Let D3 receive the native end event to release its first-finger drag.
+        touchGesture.current = e.touches.length
+          ? {
+              viewport: liveViewport.current,
+              points: touchPoints(e.touches),
+              suspended: touchGesture.current.suspended,
+            }
+          : null;
+      }}
+      onTouchCancelCapture={() => {
+        touchGesture.current = null;
       }}
       onPointerCancel={cancelGesture}
       onLostPointerCapture={(e) => {
@@ -179,6 +255,17 @@ export default function WorkflowCanvas({
         }}
         onNodeDragStop={finishDrag}
         onNodesChange={(changes) => {
+          for (const c of changes) {
+            if (c.type === "dimensions" && c.dimensions) {
+              const size = c.dimensions;
+              setMeasured((previous) =>
+                previous[c.id]?.width === size.width &&
+                previous[c.id]?.height === size.height
+                  ? previous
+                  : { ...previous, [c.id]: size },
+              );
+            }
+          }
           if (cancelling.current) return;
           for (const c of changes)
             if (c.type === "select" && c.selected) onSelect(c.id);

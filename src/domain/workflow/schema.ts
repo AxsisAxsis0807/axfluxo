@@ -72,7 +72,10 @@ const configs = {
         .string()
         .max(20000)
         .refine(
-          (v) => !/data:|base64|sb_secret_|eyJ[a-zA-Z0-9_-]+\./i.test(v),
+          (v) =>
+            !/data:image\/[\w.+-]+;[^,\s]*base64,|sb_secret_[\w-]+|eyJ[\w-]+\.[\w-]+\.[\w-]+/i.test(
+              v,
+            ),
           "画像やトークンは保存できません",
         ),
     })

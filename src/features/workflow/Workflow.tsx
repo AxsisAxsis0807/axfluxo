@@ -37,6 +37,8 @@ export default function Workflow() {
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
   const [status, setStatus] = useState<SaveStatus>("未保存");
   const [error, setError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [pendingConfig, setPendingConfig] = useState(false);
   const [selected, setSelected] = useState<string>();
   const [inspector, setInspector] = useState<string>();
   const [pending, setPending] = useState<Endpoint>();
@@ -50,7 +52,9 @@ export default function Workflow() {
   current.current = { history, viewport };
   const notify = useCallback((status: SaveStatus, error?: unknown) => {
     setStatus(status);
-    if (error) setError(error instanceof Error ? error.message : String(error));
+    setSaveError(
+      error ? (error instanceof Error ? error.message : String(error)) : "",
+    );
   }, []);
   const install = useCallback(
     (d: WorkflowDocument, v: Viewport, revision: number | null) => {
@@ -61,6 +65,8 @@ export default function Workflow() {
       setHistory(next);
       setViewport(v);
       setError("");
+      setSaveError("");
+      setPendingConfig(false);
       setSelected(undefined);
       setInspector(undefined);
       setPending(undefined);
@@ -95,11 +101,11 @@ export default function Workflow() {
   }, [install]);
   useEffect(() => {
     const prevent = (e: BeforeUnloadEvent) => {
-      if (status !== "保存済み") e.preventDefault();
+      if (status !== "保存済み" || pendingConfig) e.preventDefault();
     };
     window.addEventListener("beforeunload", prevent);
     return () => window.removeEventListener("beforeunload", prevent);
-  }, [status]);
+  }, [status, pendingConfig]);
   function change(next: History) {
     if (next === current.current.history) return;
     current.current.history = next;
@@ -108,11 +114,16 @@ export default function Workflow() {
   }
   const edit = (d: WorkflowDocument) => {
     const h = current.current.history;
-    if (!h) return;
+    if (!h) return false;
     try {
       change(commit(h, d));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "設定を確認してください");
+      setError("");
+      return true;
+    } catch {
+      setError(
+        "設定値を確認してください。入力中の値はまだ保存されていません。",
+      );
+      return false;
     }
   };
   function setView(v: Viewport) {
@@ -197,7 +208,9 @@ export default function Workflow() {
             }}
           />
         </label>
-        <span role="status">{status}</span>
+        <span role="status">
+          {pendingConfig ? "入力未確定・未保存" : status}
+        </span>
         <button disabled title="実行エンジンは後続フェーズ">
           実行（今後対応）
         </button>
@@ -260,9 +273,9 @@ export default function Workflow() {
           />
         )}
       </div>
-      {error && (
+      {(error || saveError) && (
         <div role="alert" className="wf-notice">
-          {error}
+          {error || saveError}
         </div>
       )}
       {status === "競合・未保存" && doc && (
@@ -279,7 +292,9 @@ export default function Workflow() {
           >
             保存版を再読込（現在の編集を破棄）
           </button>
-          <button onClick={() => copy(doc)}>別コピーとして保存</button>
+          <button disabled={pendingConfig} onClick={() => copy(doc)}>
+            別コピーとして保存
+          </button>
         </div>
       )}
       {status === "保存失敗・未保存" && (
@@ -287,8 +302,15 @@ export default function Workflow() {
       )}
       {recoveries.length > 0 && (
         <div className="wf-recovery">
+          {(status !== "保存済み" || pendingConfig) && (
+            <p>現在の編集を保存してからコピー復旧できます。</p>
+          )}
           {recoveries.map((d) => (
-            <button key={d.revision} onClick={() => copy(d)}>
+            <button
+              key={d.revision}
+              disabled={status !== "保存済み" || pendingConfig}
+              onClick={() => copy(d)}
+            >
               revision {d.revision} をコピー復旧
             </button>
           ))}
@@ -336,6 +358,7 @@ export default function Workflow() {
                 ),
               })
             }
+            onDraftChange={setPendingConfig}
             onDelete={() => {
               edit(deleteNode(doc, node.id));
               setInspector(undefined);

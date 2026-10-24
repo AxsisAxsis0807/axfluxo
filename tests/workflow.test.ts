@@ -326,3 +326,66 @@ it("unknown stored schema is rejected without overwriting the original row", asy
   after.close();
   expect(row.document).toEqual(raw);
 });
+it("accepts ordinary technical text but rejects embedded images and access tokens", () => {
+  const doc = newWorkflow(),
+    node = newNode("text");
+  const withText = (text: string) => ({
+    ...doc,
+    nodes: [{ ...node, config: { text } }],
+  });
+  expect(() =>
+    parseWorkflow(withText("metadata: base64という単語の説明")),
+  ).not.toThrow();
+  for (const text of [
+    "data:image/png;base64,iVBORw0KGgo=",
+    "sb_secret_exampletoken",
+    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signature",
+  ])
+    expect(() => parseWorkflow(withText(text))).toThrow();
+});
+it("node-origin pinch preserves its moving midpoint, clamps zoom and handles coincident touches", async () => {
+  const { pinchViewport } = await import("../src/domain/workflow/viewport");
+  const start = { x: -40, y: 25, zoom: 0.75 },
+    from: [{ x: number; y: number }, { x: number; y: number }] = [
+      { x: 90, y: 110 },
+      { x: 150, y: 130 },
+    ],
+    to: typeof from = [
+      { x: 80, y: 140 },
+      { x: 200, y: 180 },
+    ];
+  const result = pinchViewport(start, from, to);
+  expect((120 - start.x) / start.zoom).toBeCloseTo(
+    (140 - result.x) / result.zoom,
+    10,
+  );
+  expect((120 - start.y) / start.zoom).toBeCloseTo(
+    (160 - result.y) / result.zoom,
+    10,
+  );
+  expect(
+    pinchViewport(start, from, [
+      { x: -1000, y: 0 },
+      { x: 1000, y: 0 },
+    ]).zoom,
+  ).toBe(2);
+  expect(
+    pinchViewport(start, from, [
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+    ]).zoom,
+  ).toBe(0.25);
+  expect(
+    pinchViewport(
+      start,
+      [
+        { x: 10, y: 10 },
+        { x: 10, y: 10 },
+      ],
+      [
+        { x: 20, y: 20 },
+        { x: 20, y: 20 },
+      ],
+    ),
+  ).toEqual({ x: -30, y: 35, zoom: 0.75 });
+});

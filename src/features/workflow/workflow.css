@@ -212,3 +212,11 @@
     scroll-behavior: auto !important;
   }
 }
+/* A save-status change must not reflow the toolbar under an active gesture. */
+.wf-toolbar > [role="status"] {
+  flex: 0 0 11em;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
