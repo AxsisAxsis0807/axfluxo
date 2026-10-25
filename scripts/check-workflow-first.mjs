@@ -35,6 +35,9 @@ try {
     .getByRole("button", { name: "保存してWorkflowへ戻る", exact: true })
     .click();
   await expect(
+    panel.getByRole("button", { name: "画像エディターを開く", exact: true }),
+  ).toBeFocused();
+  await expect(
     panel
       .getByLabel("出力対象ページ", { exact: true })
       .locator("option:checked"),
@@ -62,8 +65,108 @@ try {
     "96",
   );
   result.paletteImageEditSearch = true;
-  result.selectedPage = { width: 128, height: 96, reopenedSelectedPage: true };
+  result.selectedPage = {
+    width: 128,
+    height: 96,
+    reopenedSelectedPage: true,
+    focusReturned: true,
+  };
   await page.close();
+  const migrated = await browser.newPage({
+    viewport: { width: 1440, height: 1000 },
+  });
+  await migrated.goto(
+    process.env.WORKFLOW_REVIEW_URL || "http://127.0.0.1:3100/",
+  );
+  await migrated
+    .getByRole("button", { name: "旧Studioを開く", exact: true })
+    .click();
+  await migrated
+    .getByRole("button", { name: "新しいプロジェクト", exact: true })
+    .click();
+  await migrated
+    .getByLabel("プロジェクト名", { exact: true })
+    .fill("移行fixture");
+  await migrated.getByLabel("プロジェクト名", { exact: true }).blur();
+  const jpeg = await migrated.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 64;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "red";
+    ctx.fillRect(0, 0, 64, 64);
+    return [
+      ...Uint8Array.from(
+        atob(canvas.toDataURL("image/jpeg").split(",")[1]),
+        (v) => v.charCodeAt(0),
+      ),
+    ];
+  });
+  await migrated
+    .locator("input[type=file]")
+    .first()
+    .setInputFiles({
+      name: "migration.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from(jpeg),
+    });
+  await expect(migrated.getByRole("status")).toContainText(
+    "この端末に保存済み",
+  );
+  const rows = async (databaseName, store) =>
+    migrated.evaluate(
+      ({ databaseName, store }) =>
+        new Promise((resolve, reject) => {
+          const r = indexedDB.open(databaseName, 1);
+          r.onerror = () => reject(r.error);
+          r.onsuccess = () => {
+            const db = r.result,
+              q = db.transaction(store).objectStore(store).getAll();
+            q.onsuccess = () => {
+              db.close();
+              resolve(q.result);
+            };
+          };
+        }),
+      { databaseName, store },
+    );
+  const oldProjects = await rows("axfluxo", "projects"),
+    oldAssets = await rows("axfluxo", "assets");
+  await migrated
+    .getByRole("button", { name: "Workflowワークスペースへ戻る", exact: true })
+    .click();
+  await migrated
+    .getByRole("button", { name: "旧作品を取り込む", exact: true })
+    .click();
+  await migrated
+    .getByRole("button", {
+      name: "移行fixture を画像編集ノードへコピー",
+      exact: true,
+    })
+    .click();
+  await expect(migrated.locator(".react-flow__node")).toHaveCount(1);
+  expect(await rows("axfluxo", "projects")).toEqual(oldProjects);
+  expect(await rows("axfluxo", "assets")).toEqual(oldAssets);
+  const copiedAssets = await rows("axfluxo-workspace", "assets");
+  expect(copiedAssets).toHaveLength(1);
+  expect(copiedAssets[0].id).not.toBe(oldAssets[0].id);
+  expect(copiedAssets[0].hash).toBe(oldAssets[0].hash);
+  expect(copiedAssets[0].blobMime).toBe("image/png");
+  expect(copiedAssets[0].originalMime).toBe("image/jpeg");
+  await migrated
+    .getByRole("button", { name: "画像エディターを開く", exact: true })
+    .click();
+  await expect(migrated.locator(".artboard canvas").first()).toBeVisible();
+  await migrated
+    .getByRole("button", { name: "保存してWorkflowへ戻る", exact: true })
+    .click();
+  result.legacyStudioCopy = {
+    originalUnchanged: true,
+    newAssetId: true,
+    originalMime: "image/jpeg",
+    blobMime: "image/png",
+    reopened: true,
+  };
+  await migrated.close();
   if (process.env.WORKFLOW_ROLLBACK_URL) {
     const rollback = await browser.newPage();
     await rollback.goto(process.env.WORKFLOW_ROLLBACK_URL);

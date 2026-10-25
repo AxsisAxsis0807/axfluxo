@@ -27,6 +27,11 @@ async function apply(page: Page) {
   await expect(
     page.getByRole("complementary", { name: "画像編集ノード詳細" }),
   ).toBeVisible();
+  await expect(
+    page
+      .getByRole("complementary", { name: "画像編集ノード詳細" })
+      .getByRole("button", { name: "画像エディターを開く", exact: true }),
+  ).toBeFocused();
 }
 test("Workflow-first sessions persist, isolate nodes, render and restore a separate backup copy", async ({
   page,
@@ -150,6 +155,7 @@ test("duplicate and delete Undo retain independent editor documents", async ({
   panel = page.getByRole("complementary", { name: "画像編集ノード詳細" });
   await panel.getByRole("button", { name: "複製", exact: true }).click();
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
+  await panel.getByLabel("ノード設定を閉じる", { exact: true }).click();
   await page
     .locator(".react-flow__node")
     .last()

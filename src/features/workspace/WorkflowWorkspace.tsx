@@ -362,7 +362,6 @@ export default function WorkflowWorkspace({
     await refresh();
   };
   const startEditor = async (target: ImageEditNode) => {
-    opener.current = window.document.activeElement as HTMLElement;
     const expected = ++generation.current;
     renderController.current?.abort();
     const document = current.current.history!.present,
@@ -1117,7 +1116,10 @@ export default function WorkflowWorkspace({
                   <p>{nodeStatus[node.id]}</p>
                   <button
                     disabled={operation || !!generating}
-                    onClick={() => void action(() => startEditor(node))}
+                    onClick={(event) => {
+                      opener.current = event.currentTarget;
+                      void action(() => startEditor(node));
+                    }}
                   >
                     画像エディターを開く
                   </button>
