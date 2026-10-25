@@ -366,12 +366,12 @@ export default function Editor() {
         document.querySelector("dialog[open]")
       )
         return;
+      if (view !== "studio") return;
       const command = e.metaKey || e.ctrlKey;
       if (command && e.key.toLowerCase() === "s") {
         e.preventDefault();
         save().catch(report);
       }
-      if (view !== "studio") return;
       if (command && e.key.toLowerCase() === "z") {
         e.preventDefault();
         dispatch({

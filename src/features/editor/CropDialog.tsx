@@ -43,13 +43,21 @@ export default function CropDialog({
     return () => focus?.focus();
   }, []);
   useEffect(() => {
+    let cancelled = false;
     assetResolver(resolveAsset(layer, doc))
       .then(async (a) => {
         if (!a) throw new Error("画像がありません");
+        const decoded = await decodeImage(a.blob);
+        if (cancelled) return;
         setAsset(a);
-        setImage(await decodeImage(a.blob));
+        setImage(decoded);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [layer, doc, assetResolver]);
   const size = 320;
   const scale = Math.min(260 / draft.width, 260 / draft.height);

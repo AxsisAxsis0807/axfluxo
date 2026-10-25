@@ -430,18 +430,21 @@ export async function exportPage(
     };
     p.layers.unshift(bg);
   }
-  const { stage } = await createScene(container, p, exportDoc, {
-    allowOverflow,
-    assetResolver,
-  });
+  let stage: Konva.Stage | undefined;
   try {
-    return (await stage.toBlob({
+    ({ stage } = await createScene(container, p, exportDoc, {
+      allowOverflow,
+      assetResolver,
+    }));
+    const blob = await stage.toBlob({
       mimeType: `image/${format}`,
       quality,
       pixelRatio: 1,
-    })) as Blob;
+    });
+    if (!(blob instanceof Blob)) throw new Error("画像の生成に失敗しました");
+    return blob;
   } finally {
-    stage.destroy();
+    stage?.destroy();
     container.remove();
   }
 }
