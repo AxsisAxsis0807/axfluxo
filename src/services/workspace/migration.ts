@@ -1,6 +1,7 @@
 import { cloneProject } from "../../domain/document";
 import { parseWorkflow } from "../../domain/workflow/connections";
 import { get, all, type Asset } from "../storage";
+import { decodeImage, imageMime, sha256 } from "../assets";
 import type { ProjectDocument } from "../../domain/document";
 import { openWorkflowDB, requestValue } from "../workflow/db";
 import { loadWorkflow } from "../workflow/repository";
@@ -33,6 +34,25 @@ export async function copyAssets(ids: string[]) {
     const asset = await get<Asset>("assets", id);
     if (!asset)
       throw new Error("旧画像が見つかりません。元データは変更していません");
+    if (
+      (await sha256(asset.blob)) !== asset.hash ||
+      asset.original.size > 20 * 1024 * 1024 ||
+      imageMime(
+        new Uint8Array(await asset.original.slice(0, 32).arrayBuffer()),
+      ) !== asset.mime
+    )
+      throw new Error(
+        "旧画像のhashまたは原本形式が不正です。元データは保持されています",
+      );
+    const normalized = await decodeImage(asset.blob),
+      original = await decodeImage(asset.original);
+    if (
+      normalized.naturalWidth !== asset.width ||
+      normalized.naturalHeight !== asset.height ||
+      original.naturalWidth !== asset.width ||
+      original.naturalHeight !== asset.height
+    )
+      throw new Error("旧画像のデコード寸法が一致しません");
     const copy = await prepareAsset({ ...asset, id: crypto.randomUUID() });
     assets.push(copy);
     refs[id] = { assetId: copy.id, hash: copy.hash };

@@ -12,6 +12,14 @@ try {
     viewport: { width: 1440, height: 1000 },
   });
   await page.goto(process.env.WORKFLOW_REVIEW_URL || "http://127.0.0.1:3100/");
+  await page.getByText("＋ ノードを追加", { exact: true }).click();
+  await page.getByLabel("ノード検索", { exact: true }).fill("画像編集");
+  await expect(
+    page.getByRole("button", { name: "画像編集 個別描画", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "ノード一覧を閉じる", exact: true })
+    .click();
   await page.getByRole("button", { name: "＋ 画像編集", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "画像編集ノード詳細" });
   await panel.getByLabel("入力方法", { exact: true }).selectOption("blank");
@@ -53,6 +61,7 @@ try {
   await expect(page.getByLabel("キャンバス高さ", { exact: true })).toHaveValue(
     "96",
   );
+  result.paletteImageEditSearch = true;
   result.selectedPage = { width: 128, height: 96, reopenedSelectedPage: true };
   await page.close();
   if (process.env.WORKFLOW_ROLLBACK_URL) {

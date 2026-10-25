@@ -263,6 +263,11 @@ it("concurrent legacy imports are idempotent, copy assets and never mutate old D
   const { importLegacyWorkflow } =
     await import("../src/services/workspace/migration");
   const { newWorkflow } = await import("../src/domain/workflow/schema");
+  const assetService = await import("../src/services/assets");
+  const decode = vi.spyOn(assetService, "decodeImage").mockResolvedValue({
+    naturalWidth: 1,
+    naturalHeight: 1,
+  } as HTMLImageElement);
   const assetId = crypto.randomUUID(),
     blob = new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], {
       type: "image/png",
@@ -272,7 +277,7 @@ it("concurrent legacy imports are idempotent, copy assets and never mutate old D
     name: "old.png",
     width: 1,
     height: 1,
-    hash: "old-hash-is-not-trusted",
+    hash: await assetService.sha256(blob),
     mime: "image/png",
     blob,
     original: blob,
@@ -300,6 +305,7 @@ it("concurrent legacy imports are idempotent, copy assets and never mutate old D
   expect(migrated.nodes[0].config.assetId).not.toBe(assetId);
   await saveWorkflow({ ...old, name: "updated original" }, view, old.revision);
   expect(await importLegacyWorkflow(old.workflowId)).not.toBe(a);
+  decode.mockRestore();
 });
 it("cancelled and stale generation results cannot replace an existing output", async () => {
   const { publishArtifact, currentOutput } =
@@ -399,4 +405,37 @@ it("a development effect remount can resume its save coordinator", async () => {
   expect(write).toHaveBeenCalledOnce();
   expect(saver.dirty).toBe(false);
   saver.dispose();
+});
+it("a corrupt legacy image aborts import without publishing or changing the source", async () => {
+  const { put } = await import("../src/services/storage"),
+    { saveWorkflow, loadWorkflow } =
+      await import("../src/services/workflow/repository"),
+    { newWorkflow } = await import("../src/domain/workflow/schema"),
+    { importLegacyWorkflow } =
+      await import("../src/services/workspace/migration");
+  const id = crypto.randomUUID(),
+    blob = new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], {
+      type: "image/png",
+    });
+  await put("assets", {
+    id,
+    name: "bad.png",
+    width: 1,
+    height: 1,
+    hash: "a".repeat(64),
+    mime: "image/png",
+    blob,
+    original: blob,
+  });
+  const node = newNode("source");
+  node.config = { assetId: id };
+  const old = await saveWorkflow(
+      { ...newWorkflow(), nodes: [node] },
+      view,
+      null,
+    ),
+    before = await read<unknown[]>("workflows");
+  await expect(importLegacyWorkflow(old.workflowId)).rejects.toThrow("hash");
+  expect(await read("workflows")).toEqual(before);
+  expect((await loadWorkflow(old.workflowId)).document).toEqual(old);
 });
