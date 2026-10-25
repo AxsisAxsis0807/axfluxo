@@ -79,17 +79,23 @@ export async function importImage(
   )
     throw new Error("画像は24MP・長辺8192px以下にしてください");
   const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  canvas.getContext("2d")!.drawImage(image, 0, 0);
-  const blob = await new Promise<Blob>((resolve, reject) =>
-    canvas.toBlob(
-      (b) =>
-        b ? resolve(b) : reject(new Error("画像の正立変換に失敗しました")),
-      "image/png",
-    ),
-  );
-  canvas.width = canvas.height = 0;
+  let blob: Blob;
+  try {
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("画像変換用のCanvasを確保できません");
+    context.drawImage(image, 0, 0);
+    blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(
+        (b) =>
+          b ? resolve(b) : reject(new Error("画像の正立変換に失敗しました")),
+        "image/png",
+      ),
+    );
+  } finally {
+    canvas.width = canvas.height = 0;
+  }
   return {
     id: uid(),
     name: file.name,

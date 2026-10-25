@@ -61,6 +61,18 @@ test("an asynchronous image import cannot be discarded by applying early", async
       ),
     )
     .toBe("function");
+  await page.goBack();
+  await expect(session).toBeVisible();
+  await expect(session.locator(".session-bar").getByRole("status")).toHaveText(
+    "画像取り込み中",
+  );
+  const unload = page.waitForEvent("dialog");
+  await page.close({ runBeforeUnload: true });
+  const warning = await unload;
+  expect(warning.type()).toBe("beforeunload");
+  await warning.dismiss();
+  expect(page.isClosed()).toBe(false);
+  await expect(session).toBeVisible();
   await page
     .getByRole("button", { name: "保存してWorkflowへ戻る", exact: true })
     .click();
