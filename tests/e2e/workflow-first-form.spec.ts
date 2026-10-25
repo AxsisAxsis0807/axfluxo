@@ -9,6 +9,9 @@ test("invalid variable forms remain uncommitted and can be cancelled or correcte
   await panel
     .getByRole("button", { name: "画像エディターを開く", exact: true })
     .click();
+  await expect(
+    page.getByLabel("画像編集セッション", { exact: true }),
+  ).toBeVisible();
   const property = page.getByLabel("プロパティを表示", { exact: true });
   if (await property.isVisible()) await property.click();
   await page.getByRole("button", { name: "変数", exact: true }).click();
