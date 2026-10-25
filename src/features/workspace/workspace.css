@@ -196,3 +196,16 @@ dialog.workspace-import::backdrop,
 dialog.session-export::backdrop {
   background: #000a;
 }
+/* Keep port coordinates stable even when a node name is long. */
+.workspace-main .wf-node header b {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-main .wf-node header span {
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-left: 8px;
+}
