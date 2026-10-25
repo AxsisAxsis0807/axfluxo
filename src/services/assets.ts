@@ -1,3 +1,4 @@
+import { imageHeaderDimensions } from "./image-header";
 import { LIMITS } from "../config/limits";
 import { uid } from "../domain/document";
 import type { Asset } from "./storage";
@@ -41,6 +42,15 @@ export async function importImage(
     throw new Error("画像は20MiB以下にしてください");
   const bytes = new Uint8Array(await file.arrayBuffer());
   const mime = imageMime(bytes);
+  const dimensions = imageHeaderDimensions(bytes, mime);
+  if (
+    dimensions &&
+    (!dimensions.width ||
+      !dimensions.height ||
+      dimensions.width * dimensions.height > LIMITS.imagePixels ||
+      Math.max(dimensions.width, dimensions.height) > LIMITS.imageSide)
+  )
+    throw new Error("画像は24MP・長辺8192px以下にしてください");
   if (mime === "image/png") {
     let offset = 8;
     while (offset + 12 <= bytes.length) {
