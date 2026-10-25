@@ -9,10 +9,14 @@ import {
   type ImageLayer,
 } from "../domain/document";
 import { families, layoutText } from "../domain/text";
-import { get, type Asset } from "../services/storage";
+import {
+  legacyAssetResolver,
+  type AssetResolver,
+} from "../services/editor/asset-resolver";
 import { decodeImage } from "../services/assets";
 import { loadFonts } from "../services/fonts";
 export type RenderOptions = {
+  assetResolver?: AssetResolver;
   scale?: number;
   selected?: string;
   onSelect?: (id: string) => void;
@@ -86,7 +90,9 @@ export async function createScene(
         }),
       );
       if (l.kind === "image") {
-        const a = await get<Asset>("assets", resolveAsset(l, doc));
+        const a = await (options.assetResolver ?? legacyAssetResolver)(
+          resolveAsset(l, doc),
+        );
         if (!a) throw new Error("画像素材が見つかりません");
         const image = await decodeImage(a.blob);
         const { s, crop } = cropGeometry(
@@ -393,6 +399,7 @@ export async function exportPage(
   quality: number,
   jpegBackground: string,
   allowOverflow: boolean,
+  assetResolver: AssetResolver = legacyAssetResolver,
 ) {
   const container = document.createElement("div");
   const exportDoc = structuredClone(doc);
@@ -425,6 +432,7 @@ export async function exportPage(
   }
   const { stage } = await createScene(container, p, exportDoc, {
     allowOverflow,
+    assetResolver,
   });
   try {
     return (await stage.toBlob({

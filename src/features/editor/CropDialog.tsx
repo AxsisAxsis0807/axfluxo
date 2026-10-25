@@ -6,7 +6,11 @@ import {
   type ProjectDocument,
 } from "../../domain/document";
 import { cropGeometry, dragCrop, pinchCrop } from "../../domain/crop";
-import { get, type Asset } from "../../services/storage";
+import {
+  legacyAssetResolver,
+  type AssetResolver,
+  type ResolvedAsset,
+} from "../../services/editor/asset-resolver";
 import { decodeImage } from "../../services/assets";
 import { resolveAsset } from "../../domain/document";
 export default function CropDialog({
@@ -14,14 +18,16 @@ export default function CropDialog({
   doc,
   onApply,
   onClose,
+  assetResolver = legacyAssetResolver,
 }: {
   layer: ImageLayer;
   doc: ProjectDocument;
   onApply: (l: ImageLayer) => void;
   onClose: () => void;
+  assetResolver?: AssetResolver;
 }) {
   const [draft, setDraft] = useState(structuredClone(layer));
-  const [asset, setAsset] = useState<Asset>();
+  const [asset, setAsset] = useState<ResolvedAsset>();
   const [image, setImage] = useState<HTMLImageElement>();
   const [error, setError] = useState("");
   const canvas = useRef<HTMLCanvasElement>(null),
@@ -37,14 +43,14 @@ export default function CropDialog({
     return () => focus?.focus();
   }, []);
   useEffect(() => {
-    get<Asset>("assets", resolveAsset(layer, doc))
+    assetResolver(resolveAsset(layer, doc))
       .then(async (a) => {
         if (!a) throw new Error("画像がありません");
         setAsset(a);
         setImage(await decodeImage(a.blob));
       })
       .catch((e) => setError(e.message));
-  }, [layer, doc]);
+  }, [layer, doc, assetResolver]);
   const size = 320;
   const scale = Math.min(260 / draft.width, 260 / draft.height);
   useEffect(() => {

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Layer, Page, ProjectDocument } from "../../domain/document";
 import { createScene } from "../../renderers/scene";
 import type Konva from "konva";
+import type { AssetResolver } from "../../services/editor/asset-resolver";
 type Point = { x: number; y: number };
 export default function Canvas({
   page,
@@ -15,6 +16,7 @@ export default function Canvas({
   snap,
   panMode,
   fitToken,
+  assetResolver,
 }: {
   page: Page;
   document: ProjectDocument;
@@ -26,6 +28,7 @@ export default function Canvas({
   snap: boolean;
   panMode: boolean;
   fitToken: number;
+  assetResolver?: AssetResolver;
 }) {
   const outer = useRef<HTMLDivElement>(null),
     container = useRef<HTMLDivElement>(null),
@@ -97,6 +100,7 @@ export default function Canvas({
     let owned: Konva.Stage | undefined;
     createScene(el, page, project, {
       scale,
+      assetResolver,
       selected,
       snap,
       onSelect: (id) => {
@@ -127,7 +131,7 @@ export default function Canvas({
       if (stage.current === owned) stage.current = null;
       el.remove();
     };
-  }, [page, project, scale, selected, snap]);
+  }, [page, project, scale, selected, snap, assetResolver]);
   const distance = (p: Point[]) => Math.hypot(p[1].x - p[0].x, p[1].y - p[0].y);
   const midpoint = (p: Point[]) => ({
     x: (p[0].x + p[1].x) / 2,
