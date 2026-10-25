@@ -7,7 +7,7 @@ import {
 export type Endpoint = { nodeId: string; portId: string };
 // Keep the DOM field stable for native undo/IME. Invalid intermediate numbers
 // stay visible locally, while only validated configs reach the document.
-function ConfigField({
+export function ConfigField({
   value,
   multiline,
   numeric,
@@ -69,8 +69,14 @@ export default function NodeInspector({
   onDuplicate,
   onDisconnect,
   onDraftChange,
+  nodeDefinitions = definitions,
+  allNodes,
+  assetChoices,
 }: {
   node: WorkflowNode;
+  nodeDefinitions?: Record<string, { label: string }>;
+  allNodes?: { id: string; type: string }[];
+  assetChoices?: { id: string; name: string }[];
   document: WorkflowDocument;
   pending?: Endpoint;
   onPort: (node: WorkflowNode, portId: string) => void;
@@ -110,11 +116,28 @@ export default function NodeInspector({
       {node.type === "source" && (
         <label>
           素材ID（任意）
-          <ConfigField
-            value={"assetId" in config ? (config.assetId ?? "") : ""}
-            onDraftChange={onDraftChange}
-            onChange={(value) => onChange(value ? { assetId: value } : {})}
-          />
+          {assetChoices ? (
+            <select
+              aria-label="入力素材を選択"
+              value={"assetId" in config ? (config.assetId ?? "") : ""}
+              onChange={(e) =>
+                onChange(e.target.value ? { assetId: e.target.value } : {})
+              }
+            >
+              <option value="">未選択</option>
+              {assetChoices.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <ConfigField
+              value={"assetId" in config ? (config.assetId ?? "") : ""}
+              onDraftChange={onDraftChange}
+              onChange={(value) => onChange(value ? { assetId: value } : {})}
+            />
+          )}
         </label>
       )}
       {node.type === "text" && (
@@ -204,14 +227,16 @@ export default function NodeInspector({
           <div key={e.id} className="wf-connection">
             <span>
               {
-                definitions[
-                  doc.nodes.find((n) => n.id === e.sourceNodeId)!.type
+                nodeDefinitions[
+                  (allNodes ?? doc.nodes).find((n) => n.id === e.sourceNodeId)!
+                    .type
                 ].label
               }{" "}
               →{" "}
               {
-                definitions[
-                  doc.nodes.find((n) => n.id === e.targetNodeId)!.type
+                nodeDefinitions[
+                  (allNodes ?? doc.nodes).find((n) => n.id === e.targetNodeId)!
+                    .type
                 ].label
               }
             </span>

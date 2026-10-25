@@ -95,6 +95,8 @@ export type ImageEditorProps = {
   deleteLayer: () => void;
   onBack: () => void;
   assetResolver?: AssetResolver;
+  workflowSession?: boolean;
+  sessionBusy?: boolean;
 };
 export default function ImageEditor({
   onBack,
@@ -141,24 +143,25 @@ export default function ImageEditor({
   deleteLayer,
   changePage,
   assetResolver,
+  workflowSession = false,
+  sessionBusy = false,
 }: ImageEditorProps) {
   return (
     <>
       <div className="studio">
         <div className="editor-header">
           <div className="editor-title">
-            <button aria-label="ホームへ戻る" onClick={() => onBack()}>
+            <button
+              disabled={sessionBusy}
+              aria-label={workflowSession ? "Workflowへ戻る" : "ホームへ戻る"}
+              onClick={() => onBack()}
+            >
               <ArrowLeft size={18} />
             </button>
-            <input
-              aria-label="プロジェクト名"
-              key={doc.id + doc.name}
-              defaultValue={doc.name}
-              maxLength={200}
-              onBlur={(e) => {
-                if (e.target.value && e.target.value !== doc.name)
-                  commit({ ...doc, name: e.target.value });
-              }}
+            <TextField
+              label="プロジェクト名"
+              value={doc.name}
+              onChange={(name) => commit({ ...doc, name })}
             />
             <span className="save-state" role="status">
               {status === "この端末に保存済み" && <Check size={12} />} {status}
@@ -194,12 +197,14 @@ export default function ImageEditor({
               <Download size={16} />
               <span>バックアップ</span>
             </button>
-            <button className="text-action" onClick={saveTemplate}>
-              <LayoutTemplate size={16} />
-              <span>
-                {editingTemplate ? "テンプレート更新" : "テンプレート保存"}
-              </span>
-            </button>
+            {!workflowSession && (
+              <button className="text-action" onClick={saveTemplate}>
+                <LayoutTemplate size={16} />
+                <span>
+                  {editingTemplate ? "テンプレート更新" : "テンプレート保存"}
+                </span>
+              </button>
+            )}
           </div>
         </div>
         <div className="editor-body">

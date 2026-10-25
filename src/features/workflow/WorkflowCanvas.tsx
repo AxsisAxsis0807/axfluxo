@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element -- local output thumbnail URLs are owned by the workspace */
 import { useRef, useState } from "react";
 import {
   ReactFlow,
@@ -14,24 +15,37 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   definitions,
-  type WorkflowDocument,
-  type WorkflowNode,
+  type WorkflowEdge,
+  type Port,
   type Viewport,
 } from "../../domain/workflow/schema";
 import { connectionError } from "../../domain/workflow/connections";
 import { pinchViewport, type Point } from "../../domain/workflow/viewport";
 export type FlowNode = Node<
-  { node: WorkflowNode; inspect: (id: string) => void },
+  {
+    node: { id: string; type: string };
+    definition: { label: string; ports: Port[] };
+    status?: string;
+    thumbnail?: string;
+    inspect: (id: string) => void;
+  },
   "workflow"
 >;
 function WorkflowCard({ data }: NodeProps<FlowNode>) {
-  const definition = definitions[data.node.type];
+  const definition = data.definition;
   return (
     <article className="wf-node">
       <header className="wf-drag">
         <b>{definition.label}</b>
-        <span>設定のみ</span>
+        <span>{data.status ?? "設定のみ"}</span>
       </header>
+      {data.thumbnail && (
+        <img
+          className="wf-thumbnail"
+          src={data.thumbnail}
+          alt="出力サムネイル"
+        />
+      )}
       <div className="wf-ports">
         {definition.ports.map((p, i) => (
           <div key={p.id} className={`wf-port wf-${p.direction}`}>
@@ -62,7 +76,11 @@ function WorkflowCard({ data }: NodeProps<FlowNode>) {
   );
 }
 const nodeTypes = { workflow: WorkflowCard };
-export default function WorkflowCanvas({
+type Graph = {
+  nodes: { id: string; type: string; position: { x: number; y: number } }[];
+  edges: WorkflowEdge[];
+};
+export default function WorkflowCanvas<T extends Graph>({
   document: doc,
   viewport,
   selected,
@@ -72,11 +90,17 @@ export default function WorkflowCanvas({
   onSelect,
   onError,
   onInit,
+  nodeDefinitions = definitions,
+  nodeStatus,
+  thumbnails,
 }: {
-  document: WorkflowDocument;
+  document: T;
   viewport: Viewport;
+  nodeDefinitions?: Record<string, { label: string; ports: Port[] }>;
+  nodeStatus?: Record<string, string>;
+  thumbnails?: Record<string, string>;
   selected?: string;
-  onEdit: (d: WorkflowDocument) => void;
+  onEdit: (d: T) => void;
   onViewport: (v: Viewport) => void;
   onInspect: (id: string) => void;
   onSelect: (id: string) => void;
@@ -123,8 +147,14 @@ export default function WorkflowCanvas({
     position: drag[n.id] ?? n.position,
     measured: measured[n.id],
     selected: n.id === selected,
-    ariaLabel: definitions[n.type].label,
-    data: { node: n, inspect: onInspect },
+    ariaLabel: nodeDefinitions[n.type].label,
+    data: {
+      node: n,
+      definition: nodeDefinitions[n.type],
+      status: nodeStatus?.[n.id],
+      thumbnail: thumbnails?.[n.id],
+      inspect: onInspect,
+    },
   }));
   const edgeFor = (c: Connection | Edge) => ({
     sourceNodeId: c.source,
@@ -296,14 +326,14 @@ export default function WorkflowCanvas({
         }}
         onNodeDoubleClick={(_, n) => onInspect(n.id)}
         isValidConnection={(c) => {
-          const reason = connectionError(doc, edgeFor(c));
+          const reason = connectionError(doc, edgeFor(c), nodeDefinitions);
           invalid.current = reason ?? "";
           return !reason;
         }}
         onConnect={(c) => {
           if (cancelling.current) return;
           const e = edgeFor(c),
-            reason = connectionError(doc, e);
+            reason = connectionError(doc, e, nodeDefinitions);
           if (reason) onError(reason);
           else
             onEdit({

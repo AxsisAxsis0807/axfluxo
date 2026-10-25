@@ -1,0 +1,198 @@
+.workflow-first {
+  display: flex;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+}
+.workspace-nav {
+  width: 216px;
+  flex-shrink: 0;
+  padding: 24px 16px;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.workspace-nav b {
+  font-size: 26px;
+  margin-bottom: 24px;
+}
+.workspace-nav button {
+  min-height: 44px;
+  justify-content: flex-start;
+}
+.workspace-nav p {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+.workspace-main {
+  flex: 1;
+  min-width: 0;
+}
+.workspace-main .workflow {
+  height: 100dvh;
+  min-height: 500px;
+}
+.workspace-main .wf-toolbar {
+  max-height: 228px;
+  overflow: auto;
+}
+.workspace-main .wf-inspector {
+  width: 340px;
+}
+.workspace-main .wf-port-button {
+  min-height: 44px;
+}
+.workspace-main select,
+.workspace-main input {
+  max-width: 100%;
+}
+.workspace-import,
+.session-export {
+  position: fixed;
+  z-index: 100;
+  inset: 10dvh 15%;
+  max-height: 80dvh;
+  overflow: auto;
+  padding: 24px;
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 0 0 100vmax #000a;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.workspace-import button,
+.session-export button {
+  min-height: 44px;
+}
+.image-edit-session {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.image-edit-session .studio {
+  flex: 1;
+  height: calc(100dvh - 112px);
+}
+.image-edit-session .editor-title > label {
+  margin: 0;
+  font-size: 11px;
+}
+.image-edit-session .save-state {
+  min-width: 12em;
+}
+.session-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px max(12px, env(safe-area-inset-left));
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.session-bar button {
+  min-height: 44px;
+}
+.session-bar [role="status"] {
+  display: inline-flex;
+  width: 12em;
+  min-height: 44px;
+  align-items: center;
+}
+.session-note {
+  padding: 4px 16px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.wf-thumbnail {
+  display: block;
+  width: auto;
+  max-width: 120px;
+  height: 72px;
+  object-fit: contain;
+  margin: 8px auto;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (max-width: 760px) {
+  .workflow-first {
+    flex-direction: column;
+  }
+  .workspace-nav {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 8px max(8px, env(safe-area-inset-left));
+    gap: 4px;
+  }
+  .workspace-nav b {
+    font-size: 18px;
+    margin: 0 8px 0 0;
+    align-self: center;
+  }
+  .workspace-nav p {
+    display: none;
+  }
+  .workspace-nav button {
+    font-size: 12px;
+    padding: 8px;
+  }
+  .workspace-main .workflow {
+    height: calc(100dvh - 116px);
+  }
+  .workspace-main .wf-toolbar {
+    max-height: 190px;
+  }
+  .workspace-main .wf-inspector {
+    width: 100%;
+    max-height: 78%;
+  }
+  .session-bar {
+    gap: 4px;
+  }
+  .session-bar b {
+    width: calc(100% - 13em);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .session-bar button {
+    flex: 1;
+    padding: 8px;
+  }
+  .image-edit-session .studio {
+    height: calc(100dvh - 158px);
+  }
+  .image-edit-session .editor-title {
+    min-width: 0;
+  }
+  .session-note {
+    max-height: 3em;
+    overflow: auto;
+    margin: 0;
+  }
+  .workspace-import,
+  .session-export {
+    inset: 4dvh 8px;
+    max-height: 92dvh;
+    padding-bottom: max(24px, env(safe-area-inset-bottom));
+  }
+}
+.workflow-first[hidden] {
+  display: none !important;
+}
+dialog.workspace-import::backdrop,
+dialog.session-export::backdrop {
+  background: #000a;
+}

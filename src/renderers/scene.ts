@@ -392,7 +392,7 @@ function applyEffects(node: Konva.Image, l: ImageLayer, scale: number) {
   node.filters(e.blur ? [color, Konva.Filters.Blur] : [color]);
   node.blurRadius(e.blur / scale);
 }
-export async function exportPage(
+async function renderExportPage(
   page: Page,
   doc: ProjectDocument,
   format: "png" | "jpeg",
@@ -447,4 +447,35 @@ export async function exportPage(
     stage?.destroy();
     container.remove();
   }
+}
+
+// Serialize all full-resolution exports, including legacy Studio and node output.
+let exportQueue: Promise<void> = Promise.resolve();
+export function exportPage(
+  page: Page,
+  doc: ProjectDocument,
+  format: "png" | "jpeg",
+  quality: number,
+  jpegBackground: string,
+  allowOverflow: boolean,
+  assetResolver: AssetResolver = legacyAssetResolver,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const task = exportQueue.then(() => {
+    signal?.throwIfAborted();
+    return renderExportPage(
+      page,
+      doc,
+      format,
+      quality,
+      jpegBackground,
+      allowOverflow,
+      assetResolver,
+    );
+  });
+  exportQueue = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  return task;
 }
