@@ -25,3 +25,10 @@ test("page, CSS, scripts and bundled fonts load without browser errors", async (
   expect(errors).toEqual([]);
   expect(failed).toEqual([]);
 });
+
+// Preserve the existing Studio/Phase 1 regression suite through its explicit legacy entry.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("axfluxo-view", "legacy"),
+  );
+});

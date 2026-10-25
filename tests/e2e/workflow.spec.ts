@@ -345,3 +345,10 @@ test("conflict reload replaces the draft and viewport without re-saving the stal
   );
   expect(await stored(second)).toEqual(original);
 });
+
+// Preserve the existing Studio/Phase 1 regression suite through its explicit legacy entry.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("axfluxo-view", "legacy"),
+  );
+});

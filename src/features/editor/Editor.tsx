@@ -60,7 +60,9 @@ type View =
   "workflow" | "dashboard" | "studio" | "templates" | "assets" | "settings";
 type LocalTemplate = Template & { templateId?: string };
 const start = newProject();
-export default function Editor() {
+export default function Editor({
+  onWorkflowFirst,
+}: { onWorkflowFirst?: () => void } = {}) {
   const {
     history,
     dispatch,
@@ -523,9 +525,16 @@ export default function Editor() {
       return () => previous?.focus();
     }
   }, [exportOpen]);
-  const chooseView = (v: View) => {
+  const chooseView = async (v: View) => {
     if (v === "workflow") setWorkflowOpened(true);
-    if (view === "studio" && v !== "studio") save().catch(report);
+    if (view === "studio" && v !== "studio") {
+      try {
+        await save();
+      } catch (e) {
+        report(e);
+        return;
+      }
+    }
     setView(v);
   };
   const newWork = () => void open(newProject());
@@ -581,6 +590,25 @@ export default function Editor() {
         </button>
         <div className="workspace-label">WORKSPACE</div>
         <nav>
+          {onWorkflowFirst && (
+            <button
+              onClick={async () => {
+                try {
+                  if (exportBusy)
+                    throw new Error(
+                      "書き出しを完了またはキャンセルしてから戻ってください",
+                    );
+                  if (doc.revision > 0 || saved.current.has(doc.id))
+                    await save();
+                  onWorkflowFirst();
+                } catch (e) {
+                  report(e);
+                }
+              }}
+            >
+              Workflowワークスペースへ戻る
+            </button>
+          )}
           {(
             [
               { id: "dashboard", label: "ホーム", Icon: Grid2X2 },

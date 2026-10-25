@@ -10,3 +10,7 @@ export const WORKFLOW_LIMITS = {
 } as const;
 export const WORKFLOW_ENABLED =
   process.env.NEXT_PUBLIC_WORKFLOW_ENABLED !== "false";
+
+export const WORKFLOW_FIRST_ENABLED =
+  WORKFLOW_ENABLED &&
+  process.env.NEXT_PUBLIC_WORKFLOW_FIRST_ENABLED !== "false";

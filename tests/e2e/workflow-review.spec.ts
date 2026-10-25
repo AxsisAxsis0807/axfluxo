@@ -325,3 +325,10 @@ test("review: composition stays unsaved until confirmation without replacing the
     text: "日本語の変換中",
   });
 });
+
+// Preserve the existing Studio/Phase 1 regression suite through its explicit legacy entry.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("axfluxo-view", "legacy"),
+  );
+});

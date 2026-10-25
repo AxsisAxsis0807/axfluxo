@@ -198,3 +198,10 @@ test("email confirmation callback restores a signed-in account", async ({
   ).toBeVisible();
   expect(new URL(page.url()).hash).toBe("");
 });
+
+// Preserve the existing Studio/Phase 1 regression suite through its explicit legacy entry.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("axfluxo-view", "legacy"),
+  );
+});

@@ -45,3 +45,10 @@ test("hidden Studio does not handle Workflow save shortcuts", async ({
   );
   expect(projects).toBe(0);
 });
+
+// Preserve the existing Studio/Phase 1 regression suite through its explicit legacy entry.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() =>
+    sessionStorage.setItem("axfluxo-view", "legacy"),
+  );
+});
