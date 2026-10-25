@@ -72,3 +72,21 @@ GitHub Pages向けの自動デプロイを用意しています。公開状況�
 ### Workflow Mode（Phase 1）
 
 「Workflow」からノードの配置・設定・接続を編集できます。実行は今後対応です。自動保存はStudioとは別の端末内DBを使い、直近5世代を保持します。接続は端子のドラッグ／タップ、または詳細設定の端子選択で操作できます。詳細は[Workflow設計](docs/adr/002-workflow-phase1.md)と[iPhone試験手順](docs/manual-tests/workflow-iphone.md)を参照してください。入口を無効にする場合は `NEXT_PUBLIC_WORKFLOW_ENABLED=false` で再ビルドしてください。DBやユーザーデータは削除しません。
+
+### Workflow First（WFR-5）
+
+新しいタブではWorkflowから制作を始めます。「画像編集」を追加し、入力方法を選んで
+共通エディターを開きます。作業版は自動保存。「保存してWorkflowへ戻る」で適用版を
+確定し、「出力画像を更新」で選択ページのPNGを生成します。複数ノードの編集は独立し、
+入力変更は固定入力を維持/コピー後に差し替え/コピーして作り直しから選べます。
+全体実行エンジンとSNS直接投稿は未実装です。
+
+「旧Studioを開く」から既存作品・テンプレート・旧ZIPを利用できます。
+「旧作品を取り込む」は元を変更せず新DBへ独立コピーします。新Workflowの完全バックアップは
+専用ZIP形式で、復元は新IDの別作品です。DB保存と端末へのダウンロードは別操作です。
+
+`NEXT_PUBLIC_WORKFLOW_FIRST_ENABLED=false` で再ビルドすると旧入口へ戻ります。
+新DBは削除せず、新形式を旧DBへ逆変換しません。新版を再有効化するか対応ZIPで回復します。
+実機iPhone Safari/IME/VoiceOverの受入は未実施です。
+[設計](docs/adr/004-workflow-first-workspace.md) / [検証記録](docs/manual-tests/workflow-first-wfr5-results.md) /
+[実機手順](docs/manual-tests/workflow-first-iphone.md)。

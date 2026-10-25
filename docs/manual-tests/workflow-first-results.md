@@ -1,5 +1,7 @@
 # Workflow First Refactor — WFR-0/1 検証記録
 
+> WFR-0/1時点の履歴。現行実装は [WFR-5検証記録](../manual-tests/workflow-first-wfr5-results.md) と [ADR 004](../adr/004-workflow-first-workspace.md) を参照。
+
 2026-10-25 JST。これは**共通エディター抽出の段階報告**。
 Workflow First全体の完了報告ではない。WFR-2〜6は未実装。
 

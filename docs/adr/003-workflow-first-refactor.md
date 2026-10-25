@@ -1,5 +1,7 @@
 # ADR 003 — Workflow First Refactor, staged editor extraction
 
+> WFR-0/1時点の履歴。現行実装は [WFR-5検証記録](../manual-tests/workflow-first-wfr5-results.md) と [ADR 004](../adr/004-workflow-first-workspace.md) を参照。
+
 Date: 2026-10-25 JST. Independent of Phase 2–6. **This change is WFR-0/1;
 WFR-2–6 and the complete Workflow First experience are not implemented here.**
 
