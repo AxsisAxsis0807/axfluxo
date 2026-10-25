@@ -156,6 +156,9 @@ test("image crop draft cancel/apply, PNG dimensions, ZIP backup restore", async 
     const path = await downloaded.path();
     expect(downloaded.suggestedFilename()).toMatch(/\.axfluxo\.zip$/);
     const empty = await browser.newContext();
+    await empty.addInitScript(() =>
+      sessionStorage.setItem("axfluxo-view", "legacy"),
+    );
     const restored = await empty.newPage();
     await restored.goto(page.url());
     await restored
@@ -180,8 +183,8 @@ test("image crop draft cancel/apply, PNG dimensions, ZIP backup restore", async 
 });
 
 // Preserve the existing Studio/Phase 1 regression suite through its explicit legacy entry.
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() =>
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() =>
     sessionStorage.setItem("axfluxo-view", "legacy"),
   );
 });
