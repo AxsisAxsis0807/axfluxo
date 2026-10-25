@@ -439,3 +439,50 @@ it("a corrupt legacy image aborts import without publishing or changing the sour
   expect(await read("workflows")).toEqual(before);
   expect((await loadWorkflow(old.workflowId)).document).toEqual(old);
 });
+it("cancelling during artifact publication aborts the transaction before output adoption", async () => {
+  const { publishArtifact, currentOutput } =
+    await import("../src/services/workspace/repository");
+  const { node, editor, workflow } = await fixture();
+  const applied = await applyEditor(
+    workflow,
+    view,
+    node.id,
+    editor,
+    0,
+    0,
+    editor.document.pages[0].id,
+  );
+  const controller = new AbortController();
+  const output = {
+    id: crypto.randomUUID(),
+    key: "a".repeat(64),
+    revisionId: applied.revision.id,
+    pageId: editor.document.pages[0].id,
+    blob: new Blob(["image"]),
+    thumbnail: new Blob(["thumb"]),
+    hash: "b".repeat(64),
+    width: 1080,
+    height: 1080,
+    format: "png" as const,
+  };
+  const original = IDBObjectStore.prototype.put;
+  const spy = vi
+    .spyOn(IDBObjectStore.prototype, "put")
+    .mockImplementation(function (
+      this: IDBObjectStore,
+      ...args: Parameters<IDBObjectStore["put"]>
+    ) {
+      const result = original.apply(this, args);
+      if (this.name === "artifacts") controller.abort();
+      return result;
+    });
+  try {
+    await expect(
+      publishArtifact(workflow.workflowId, node.id, output, controller.signal),
+    ).rejects.toThrow();
+  } finally {
+    spy.mockRestore();
+  }
+  expect(await currentOutput(workflow.workflowId, node.id)).toBeUndefined();
+  expect(await read("artifacts", output.id)).toBeUndefined();
+});

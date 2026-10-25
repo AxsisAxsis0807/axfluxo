@@ -67,7 +67,7 @@ export async function write(
       const tx = db.transaction(names, "readwrite");
       let error: unknown;
       const fail = (e: unknown) => {
-        error = e;
+        error ??= e;
         try {
           tx.abort();
         } catch {}

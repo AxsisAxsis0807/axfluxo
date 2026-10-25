@@ -555,6 +555,19 @@ export async function publishArtifact(
 ) {
   let adopted = false;
   await write(["workflows", "artifacts", "preferences"], (tx, fail) => {
+    const cancel = () =>
+      fail(
+        signal.reason ??
+          new DOMException("生成をキャンセルしました", "AbortError"),
+      );
+    const detach = () => signal.removeEventListener("abort", cancel);
+    signal.addEventListener("abort", cancel, { once: true });
+    tx.addEventListener("complete", detach, { once: true });
+    tx.addEventListener("abort", detach, { once: true });
+    if (signal.aborted) {
+      cancel();
+      return;
+    }
     const r = tx.objectStore("workflows").get(workflowId);
     r.onsuccess = () => {
       try {
