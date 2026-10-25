@@ -66,6 +66,8 @@ export default function ImageEditSession({
     composing = useRef(false),
     formPending = useRef(false),
     invalid = useRef(false);
+  const commits = useRef(0),
+    submittedAt = useRef(0);
   const [assets, setAssets] = useState<Asset[]>([]),
     [crop, setCrop] = useState<ImageLayer>();
   const importing = useRef(false);
@@ -118,6 +120,7 @@ export default function ImageEditSession({
       currentHistory.current = next;
       record.current = { ...record.current, document: next.present };
       session.dispatch(action);
+      commits.current++;
       invalid.current = false;
       setError("");
       saver.edit(record.current);
@@ -146,6 +149,10 @@ export default function ImageEditSession({
       ),
     });
   const addLayer = (item: Layer) => {
+    if (formPending.current) {
+      report(new Error("変数フォームを確定または取り消してください"));
+      return;
+    }
     if (page.layers.length >= 100) {
       report(new Error("レイヤーは100個までです"));
       return;
@@ -247,6 +254,10 @@ export default function ImageEditSession({
     }
   };
   const addFile = async (file: File, replace = false) => {
+    if (formPending.current) {
+      report(new Error("変数フォームを確定または取り消してください"));
+      return;
+    }
     if (busy || exporting || importing.current) {
       report(new Error("処理の完了後に画像を追加してください"));
       return;
@@ -347,8 +358,16 @@ export default function ImageEditSession({
             setPending(true);
           }
         }}
+        onSubmitCapture={() => {
+          submittedAt.current = commits.current;
+        }}
+        onResetCapture={() => {
+          formPending.current = false;
+          setPending(pendingFields.current.size > 0 || invalid.current);
+          setError("");
+        }}
         onSubmit={() => {
-          if (!invalid.current) {
+          if (!invalid.current && commits.current > submittedAt.current) {
             formPending.current = false;
             setPending(pendingFields.current.size > 0);
           }
@@ -478,6 +497,13 @@ export default function ImageEditSession({
         <div inert={busy || exporting || importBusy ? true : undefined}>
           <ImageEditor
             {...session}
+            setPanel={(next) => {
+              if (formPending.current) {
+                report(new Error("変数フォームを確定または取り消してください"));
+                return;
+              }
+              session.setPanel(next);
+            }}
             doc={session.doc}
             page={page}
             layer={layer}

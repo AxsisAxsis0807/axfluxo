@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import {
+  documentSchema,
   resolveAsset,
   resolveText,
   type ImageLayer,
@@ -1370,10 +1371,11 @@ export default function ImageEditor({
                         });
                         if (doc.variables.some((x) => x.key === v.key))
                           throw new Error("同じキーが既にあります");
-                        commit({
+                        const next = documentSchema.parse({
                           ...doc,
                           variables: [...doc.variables, v],
                         });
+                        commit(next);
                         e.currentTarget.reset();
                       } catch (e) {
                         report(e);
@@ -1431,6 +1433,7 @@ export default function ImageEditor({
                       <Plus size={15} />
                       変数を追加
                     </button>
+                    <button type="reset">変数フォームを取り消す</button>
                   </form>
                 </>
               )}

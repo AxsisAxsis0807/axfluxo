@@ -114,6 +114,8 @@ export default function Editor({
     }>();
   const [imageImportBusy, setImageImportBusy] = useState(false);
   const imageImportPending = useRef(false);
+  const variableFormPending = useRef(false);
+  const [variableFormBusy, setVariableFormBusy] = useState(false);
   const queue = useRef(new SaveQueue()),
     saved = useRef(new Map<string, number>()),
     saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
@@ -178,6 +180,8 @@ export default function Editor({
   );
   const save = useCallback(
     async (snapshot = current.current) => {
+      if (variableFormPending.current)
+        throw new Error("変数フォームを確定または取り消してください");
       if (imageImportPending.current)
         throw new Error("画像の取り込み完了後に保存・移動してください");
       const frozen = structuredClone(snapshot);
@@ -222,6 +226,7 @@ export default function Editor({
     const listener = (e: BeforeUnloadEvent) => {
       if (
         imageImportPending.current ||
+        variableFormPending.current ||
         current.current.revision !==
           (saved.current.get(current.current.id) ?? 0)
       ) {
@@ -237,6 +242,8 @@ export default function Editor({
     template?: { id: string; version: number },
   ) => {
     try {
+      if (variableFormPending.current)
+        throw new Error("変数フォームを確定または取り消してください");
       if (imageImportPending.current)
         throw new Error("画像の取り込み完了後に作品を開いてください");
       if (current.current.revision > 0) await save();
@@ -256,6 +263,10 @@ export default function Editor({
     }
   };
   const addLayer = (l: Layer) => {
+    if (variableFormPending.current) {
+      report(new Error("変数フォームを確定または取り消してください"));
+      return;
+    }
     if (page.layers.length >= 100)
       return report(new Error("レイヤーは100個までです"));
     l.x = page.width / 2;
@@ -282,6 +293,10 @@ export default function Editor({
       height: shape === "line" ? 16 : 300,
     });
   const addImage = async (file: File, replacing = false) => {
+    if (variableFormPending.current) {
+      report(new Error("変数フォームを確定または取り消してください"));
+      return;
+    }
     if (imageImportPending.current) {
       report(new Error("画像の取り込み完了を待ってください"));
       return;
@@ -430,6 +445,8 @@ export default function Editor({
   });
   const makeBackup = async () => {
     try {
+      if (variableFormPending.current)
+        throw new Error("変数フォームを確定または取り消してください");
       if (imageImportPending.current)
         throw new Error("画像の取り込み完了後にバックアップしてください");
       download(
@@ -482,6 +499,10 @@ export default function Editor({
       ),
   );
   const runExport = async () => {
+    if (variableFormPending.current) {
+      report(new Error("変数フォームを確定または取り消してください"));
+      return;
+    }
     if (imageImportPending.current) {
       report(new Error("画像の取り込み完了後に書き出してください"));
       return;
@@ -564,7 +585,21 @@ export default function Editor({
   };
   const newWork = () => void open(newProject());
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      onInputCapture={(event) => {
+        if ((event.target as HTMLElement).closest(".variable-form")) {
+          variableFormPending.current = true;
+          setVariableFormBusy(true);
+        }
+      }}
+      onResetCapture={(event) => {
+        if ((event.target as HTMLElement).closest(".variable-form")) {
+          variableFormPending.current = false;
+          setVariableFormBusy(false);
+        }
+      }}
+    >
       <input
         ref={input}
         type="file"
@@ -619,6 +654,10 @@ export default function Editor({
             <button
               onClick={async () => {
                 try {
+                  if (variableFormPending.current)
+                    throw new Error(
+                      "変数フォームを確定または取り消してください",
+                    );
                   if (imageImportPending.current)
                     throw new Error("画像の取り込み完了後に戻ってください");
                   if (exportBusy)
@@ -939,7 +978,13 @@ export default function Editor({
               onBack={() => chooseView("dashboard")}
               doc={doc}
               commit={commit}
-              status={imageImportBusy ? "画像取り込み中" : status}
+              status={
+                imageImportBusy
+                  ? "画像取り込み中"
+                  : variableFormBusy
+                    ? "入力未確定・未保存"
+                    : status
+              }
               history={history}
               dispatch={dispatch}
               save={save}
@@ -952,7 +997,15 @@ export default function Editor({
               addShape={addShape}
               setMobilePanel={setMobilePanel}
               mobilePanel={mobilePanel}
-              setPanel={setPanel}
+              setPanel={(next) => {
+                if (variableFormPending.current) {
+                  report(
+                    new Error("変数フォームを確定または取り消してください"),
+                  );
+                  return;
+                }
+                setPanel(next);
+              }}
               page={page}
               setPanMode={setPanMode}
               panMode={panMode}
