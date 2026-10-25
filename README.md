@@ -90,3 +90,8 @@ GitHub Pages向けの自動デプロイを用意しています。公開状況�
 実機iPhone Safari/IME/VoiceOverの受入は未実施です。
 [設計](docs/adr/004-workflow-first-workspace.md) / [検証記録](docs/manual-tests/workflow-first-wfr5-results.md) /
 [実機手順](docs/manual-tests/workflow-first-iphone.md)。
+
+WFR-6ではPR #5の受け入れ検証と画像取込失敗時の一時Canvas解放を実施しています。
+[WFR-6検証・Merge判断](docs/manual-tests/workflow-first-wfr6-results.md) と
+[実機iPhoneの操作・期待結果](docs/manual-tests/workflow-first-iphone.md) を参照してください。
+実機受入は未実施で、Merge・本番公開は承認待ちです。
