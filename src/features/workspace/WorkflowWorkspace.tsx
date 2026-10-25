@@ -103,6 +103,7 @@ export default function WorkflowWorkspace({
       node: ImageEditNode;
       editor: EditorRecord;
       ref: AssetRef | null;
+      unavailable?: string;
     }>();
   const [oldWorkflows, setOldWorkflows] = useState<
       Awaited<ReturnType<typeof legacyWorkflows>>
@@ -373,11 +374,26 @@ export default function WorkflowWorkspace({
     )
       throw new Error("編集対象が変わりました");
     let editor = await loadEditor(target.config.editorDocumentId);
-    const ref = await resolveInput(
-      document,
-      target,
-      new AbortController().signal,
-    );
+    let ref: AssetRef | null;
+    try {
+      ref = await resolveInput(document, target, new AbortController().signal);
+    } catch (e) {
+      if (expected !== generation.current || !active) return;
+      if (
+        editor.input ||
+        editor.document.revision > 0 ||
+        target.config.appliedRevisionId
+      ) {
+        setInputChoice({
+          node: target,
+          editor,
+          ref: null,
+          unavailable: e instanceof Error ? e.message : String(e),
+        });
+        return;
+      }
+      throw e;
+    }
     if (expected !== generation.current || !active) return;
     if (
       (editor.input && inputChanged(editor, ref)) ||
@@ -411,6 +427,10 @@ export default function WorkflowWorkspace({
         setInputChoice(undefined);
         return;
       }
+      if (choice.unavailable)
+        throw new Error(
+          "現在の入力を解決してから差し替え・作り直しを選んでください",
+        );
       // Copy before replacing; the original editor and applied revision remain recoverable.
       const duplicate = await duplicateEditor(choice.node);
       duplicate.editor = await replaceInput(
@@ -1375,7 +1395,16 @@ export default function WorkflowWorkspace({
               if (!operation) setInputChoice(undefined);
             }}
           >
-            <h2>上流入力が変わりました</h2>
+            <h2>
+              {inputChoice.unavailable
+                ? "現在の入力を解決できません"
+                : "上流入力が変わりました"}
+            </h2>
+            {inputChoice.unavailable && (
+              <p role="alert">
+                {inputChoice.unavailable}。保存済みの固定入力で再開できます。
+              </p>
+            )}
             <p>
               文字・図形・別画像を自動変更しません。差し替え・作り直しは別ノードへコピーし、元の文書を保持します。
             </p>
@@ -1386,13 +1415,13 @@ export default function WorkflowWorkspace({
               現在の固定入力を維持
             </button>
             <button
-              disabled={operation}
+              disabled={operation || !!inputChoice.unavailable}
               onClick={() => void chooseInput("replace")}
             >
               コピー後に入力レイヤーのみ差し替え
             </button>
             <button
-              disabled={operation}
+              disabled={operation || !!inputChoice.unavailable}
               onClick={() => void chooseInput("rebuild")}
             >
               コピーして新入力から作り直す
