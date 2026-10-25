@@ -33,6 +33,7 @@ import NodePalette from "./NodePalette";
 import NodeInspector, { type Endpoint } from "./NodeInspector";
 import "./workflow.css";
 export default function Workflow() {
+  const workspaceElement = useRef<HTMLElement>(null);
   const [history, setHistory] = useState<History>();
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, zoom: 1 });
   const [status, setStatus] = useState<SaveStatus>("未保存");
@@ -179,6 +180,7 @@ export default function Workflow() {
   return (
     <section
       className="workflow"
+      ref={workspaceElement}
       aria-label="Workflow"
       onKeyDown={(e) => {
         const target = e.target as HTMLElement;
@@ -258,8 +260,8 @@ export default function Workflow() {
         {doc && (
           <NodePalette
             onAdd={(type) => {
-              const bounds = window.document
-                .querySelector(".wf-canvas")
+              const bounds = workspaceElement.current
+                ?.querySelector(".wf-canvas")
                 ?.getBoundingClientRect();
               const position =
                 bounds && flow.current

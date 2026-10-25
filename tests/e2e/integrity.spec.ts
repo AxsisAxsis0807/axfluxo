@@ -162,3 +162,10 @@ test("original two-page sample exports and template reuse keeps source and IDs i
   expect(copy.pages[0].layers[0].id).not.toBe(source.pages[0].layers[0].id);
   expect(copy.templateOrigin).toBeDefined();
 });
+
+// Preserve the existing Studio/Phase 1 regression suite through its explicit legacy entry.
+test.beforeEach(async ({ context }) => {
+  await context.addInitScript(() =>
+    sessionStorage.setItem("axfluxo-view", "legacy"),
+  );
+});

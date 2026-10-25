@@ -90,7 +90,7 @@ export const defaults = {
   save: { name: "" },
   post: { mode: "draft" },
 } as const;
-const nodeSchema = z
+export const nodeSchema = z
   .object({
     id,
     type: z.enum(nodeTypes),

@@ -9,10 +9,14 @@ import {
   type ImageLayer,
 } from "../domain/document";
 import { families, layoutText } from "../domain/text";
-import { get, type Asset } from "../services/storage";
+import {
+  legacyAssetResolver,
+  type AssetResolver,
+} from "../services/editor/asset-resolver";
 import { decodeImage } from "../services/assets";
 import { loadFonts } from "../services/fonts";
 export type RenderOptions = {
+  assetResolver?: AssetResolver;
   scale?: number;
   selected?: string;
   onSelect?: (id: string) => void;
@@ -86,7 +90,9 @@ export async function createScene(
         }),
       );
       if (l.kind === "image") {
-        const a = await get<Asset>("assets", resolveAsset(l, doc));
+        const a = await (options.assetResolver ?? legacyAssetResolver)(
+          resolveAsset(l, doc),
+        );
         if (!a) throw new Error("画像素材が見つかりません");
         const image = await decodeImage(a.blob);
         const { s, crop } = cropGeometry(
@@ -386,13 +392,14 @@ function applyEffects(node: Konva.Image, l: ImageLayer, scale: number) {
   node.filters(e.blur ? [color, Konva.Filters.Blur] : [color]);
   node.blurRadius(e.blur / scale);
 }
-export async function exportPage(
+async function renderExportPage(
   page: Page,
   doc: ProjectDocument,
   format: "png" | "jpeg",
   quality: number,
   jpegBackground: string,
   allowOverflow: boolean,
+  assetResolver: AssetResolver = legacyAssetResolver,
 ) {
   const container = document.createElement("div");
   const exportDoc = structuredClone(doc);
@@ -423,17 +430,52 @@ export async function exportPage(
     };
     p.layers.unshift(bg);
   }
-  const { stage } = await createScene(container, p, exportDoc, {
-    allowOverflow,
-  });
+  let stage: Konva.Stage | undefined;
   try {
-    return (await stage.toBlob({
+    ({ stage } = await createScene(container, p, exportDoc, {
+      allowOverflow,
+      assetResolver,
+    }));
+    const blob = await stage.toBlob({
       mimeType: `image/${format}`,
       quality,
       pixelRatio: 1,
-    })) as Blob;
+    });
+    if (!(blob instanceof Blob)) throw new Error("画像の生成に失敗しました");
+    return blob;
   } finally {
-    stage.destroy();
+    stage?.destroy();
     container.remove();
   }
+}
+
+// Serialize all full-resolution exports, including legacy Studio and node output.
+let exportQueue: Promise<void> = Promise.resolve();
+export function exportPage(
+  page: Page,
+  doc: ProjectDocument,
+  format: "png" | "jpeg",
+  quality: number,
+  jpegBackground: string,
+  allowOverflow: boolean,
+  assetResolver: AssetResolver = legacyAssetResolver,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  const task = exportQueue.then(() => {
+    signal?.throwIfAborted();
+    return renderExportPage(
+      page,
+      doc,
+      format,
+      quality,
+      jpegBackground,
+      allowOverflow,
+      assetResolver,
+    );
+  });
+  exportQueue = task.then(
+    () => undefined,
+    () => undefined,
+  );
+  return task;
 }

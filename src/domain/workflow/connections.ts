@@ -4,18 +4,20 @@ import {
   type WorkflowDocument,
   type WorkflowEdge,
   type PortType,
+  type Port,
 } from "./schema";
 export const compatible = (a: PortType, b: PortType) => a === b;
 export function connectionError(
-  d: WorkflowDocument,
+  d: { nodes: { id: string; type: string }[]; edges: WorkflowEdge[] },
   e: Omit<WorkflowEdge, "id">,
+  catalog: Record<string, { ports: Port[] }> = definitions,
 ): string | null {
   const s = d.nodes.find((n) => n.id === e.sourceNodeId),
     t = d.nodes.find((n) => n.id === e.targetNodeId);
   if (!s || !t) return "ノードが存在しません";
   if (s.id === t.id) return "自己接続はできません";
-  const out = definitions[s.type].ports.find((p) => p.id === e.sourcePortId),
-    input = definitions[t.type].ports.find((p) => p.id === e.targetPortId);
+  const out = catalog[s.type]?.ports.find((p) => p.id === e.sourcePortId),
+    input = catalog[t.type]?.ports.find((p) => p.id === e.targetPortId);
   if (!out || !input) return "端子が存在しません";
   if (out.direction !== "output" || input.direction !== "input")
     return "出力から入力へ接続してください";

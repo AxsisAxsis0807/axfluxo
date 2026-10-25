@@ -62,7 +62,12 @@ export function duplicateNode(
       }
     : d;
 }
-export function arrange(d: WorkflowDocument): WorkflowDocument {
+export function arrange<
+  T extends {
+    nodes: { id: string; position: { x: number; y: number } }[];
+    edges: { sourceNodeId: string; targetNodeId: string }[];
+  },
+>(d: T): T {
   const graph = new dagre.graphlib.Graph()
     .setGraph({ rankdir: "LR", nodesep: 60, ranksep: 100 })
     .setDefaultEdgeLabel(() => ({}));
