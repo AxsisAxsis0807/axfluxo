@@ -110,6 +110,7 @@ export default function WorkflowCanvas<T extends Graph>({
   onError: (s: string) => void;
   onInit: (instance: ReactFlowInstance<FlowNode>) => void;
 }) {
+  const canvasRoot = useRef<HTMLDivElement>(null);
   const cancelling = useRef(false);
   // React Flow's measured dimensions belong to the adapter, not the document.
   // Dropping them on a parent re-render hides a node just as selection starts.
@@ -124,9 +125,7 @@ export default function WorkflowCanvas<T extends Graph>({
   const liveViewport = useRef(viewport);
   liveViewport.current = viewport;
   function touchPoints(touches: React.TouchList): Point[] {
-    const bounds = window.document
-      .querySelector(".wf-canvas")!
-      .getBoundingClientRect();
+    const bounds = canvasRoot.current!.getBoundingClientRect();
     return Array.from(touches)
       .slice(0, 2)
       .map((t) => ({ x: t.clientX - bounds.left, y: t.clientY - bounds.top }));
@@ -193,6 +192,7 @@ export default function WorkflowCanvas<T extends Graph>({
   return (
     <div
       className="wf-canvas"
+      ref={canvasRoot}
       aria-label="Workflowキャンバス"
       onPointerDownCapture={(e) => {
         pointers.current.add(e.pointerId);
