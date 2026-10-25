@@ -477,7 +477,12 @@ export default function WorkflowWorkspace({
     setSession(undefined);
     await refresh();
     requestAnimationFrame(() => {
-      if (opener.current?.isConnected) opener.current.focus();
+      const target = opener.current?.isConnected
+        ? opener.current
+        : window.document.querySelector<HTMLElement>(
+            `[data-editor-opener="${open.node.id}"]`,
+          );
+      target?.focus();
     });
   };
   const renderOutput = async (target: ImageEditNode) => {
@@ -1116,6 +1121,7 @@ export default function WorkflowWorkspace({
                   <p>{nodeStatus[node.id]}</p>
                   <button
                     disabled={operation || !!generating}
+                    data-editor-opener={node.id}
                     onClick={(event) => {
                       opener.current = event.currentTarget;
                       void action(() => startEditor(node));
@@ -1406,15 +1412,35 @@ export default function WorkflowWorkspace({
           onApply={backFromSession}
           onBackup={backup}
           onReload={async () => {
-            const editor = await loadEditor(session.editor.id);
+            const fresh = await loadWorkspace(
+              current.current.history!.present.workflowId,
+            );
+            const target = fresh.document.nodes.find(
+              (n) => n.id === session.node.id,
+            );
+            if (
+              !target ||
+              target.type !== "image-edit" ||
+              target.config.editorDocumentId !== session.editor.id
+            )
+              throw new Error(
+                "元ノードは変更/削除されています。別コピーとして保存してください",
+              );
+            const editor = await loadEditor(target.config.editorDocumentId);
+            install(fresh.document, fresh.viewport);
             setSession({
-              ...session,
+              node: target,
               editor,
               generation: ++generation.current,
             });
           }}
           onSaveCopy={async (record) => {
             await barrier();
+            const fresh = await loadWorkspace(
+              current.current.history!.present.workflowId,
+            );
+            if (fresh.document.revision !== saver.current!.revision)
+              install(fresh.document, current.current.viewport);
             const pair = await duplicateEditor(session.node);
             pair.editor = {
               ...structuredClone(record),

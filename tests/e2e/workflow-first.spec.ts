@@ -472,4 +472,9 @@ test("two simultaneous editor sessions detect draft CAS and save an independent 
   await expect(
     page.getByLabel("画像編集セッション", { exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "別コピーとして保存", exact: true })
+    .click();
+  await apply(page);
+  await expect(page.locator(".react-flow__node")).toHaveCount(3);
 });

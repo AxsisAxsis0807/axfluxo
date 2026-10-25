@@ -22,6 +22,7 @@ import {
 import { Autosave, type Status } from "../../services/workspace/autosave";
 import {
   saveDraft,
+  WorkspaceConflict,
   storeAsset,
   getAsset,
 } from "../../services/workspace/repository";
@@ -57,6 +58,9 @@ export default function ImageEditSession({
   currentHistory.current = session.history;
   const [status, setStatus] = useState<Status>("保存済み"),
     [error, setError] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [applyConflict, setApplyConflict] = useState(false);
+  const saveFailure = useRef<unknown>(undefined);
   const [pending, setPending] = useState(false),
     pendingFields = useRef(new Set<string>()),
     composing = useRef(false),
@@ -81,10 +85,11 @@ export default function ImageEditSession({
       session.doc.pages.find((p) => p.id === session.pageId) ??
       session.doc.pages[0],
     layer = page.layers.find((l) => l.id === session.selected);
-  const report = useCallback(
-    (e: unknown) => setError(e instanceof Error ? e.message : String(e)),
-    [],
-  );
+  const report = useCallback((e: unknown) => {
+    if (saveFailure.current === e) return;
+    if (e instanceof WorkspaceConflict) setApplyConflict(true);
+    setError(e instanceof Error ? e.message : String(e));
+  }, []);
   const [saver] = useState(
     () =>
       new Autosave<EditorRecord, EditorRecord>(
@@ -94,8 +99,8 @@ export default function ImageEditSession({
           if (saved) record.current.revision = saved.revision;
           if (mounted.current) {
             setStatus(next);
-            if (e) setError(e instanceof Error ? e.message : String(e));
-            else setError("");
+            saveFailure.current = e;
+            setSaveError(e ? (e instanceof Error ? e.message : String(e)) : "");
           }
         },
       ),
@@ -114,6 +119,7 @@ export default function ImageEditSession({
       record.current = { ...record.current, document: next.present };
       session.dispatch(action);
       invalid.current = false;
+      setError("");
       saver.edit(record.current);
       setPending(pendingFields.current.size > 0 || formPending.current);
     } catch (e) {
@@ -398,13 +404,20 @@ export default function ImageEditSession({
         <p className="session-note">
           作業版を自動保存しています。戻る操作で適用版を確定し、出力画像はWorkflowで個別に更新します。Undo履歴はこのセッション内のみです。
         </p>
-        {error && (
+        {(error || saveError || applyConflict) && (
           <div role="alert" className="wf-notice">
-            {error}
-            <button onClick={() => void saver.retry().catch(report)}>
+            {error ||
+              saveError ||
+              "適用時の更新が競合しました。再読込または別コピー保存を選んでください"}
+            <button
+              onClick={() => {
+                setError("");
+                void saver.retry().catch(report);
+              }}
+            >
               保存を再試行
             </button>
-            {status === "競合・未保存" && (
+            {(status === "競合・未保存" || applyConflict) && (
               <>
                 <button
                   disabled={busy}
