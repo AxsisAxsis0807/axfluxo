@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "workflowId": "00000000-0000-4000-8000-000000000010",
+  "name": "旧Workflow互換fixture",
+  "revision": 5,
+  "createdAt": "2026-10-25T00:00:00.000Z",
+  "updatedAt": "2026-10-25T00:00:00.000Z",
+  "nodes": [
+    {
+      "id": "00000000-0000-4000-8000-000000000011",
+      "type": "source",
+      "typeVersion": 1,
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "config": {
+        "assetId": "00000000-0000-4000-8000-000000000100"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000012",
+      "type": "image",
+      "typeVersion": 1,
+      "position": {
+        "x": 300,
+        "y": 0
+      },
+      "config": {
+        "operation": "crop",
+        "width": 1080
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000013",
+      "type": "save",
+      "typeVersion": 1,
+      "position": {
+        "x": 600,
+        "y": 0
+      },
+      "config": {
+        "name": "旧出力設定"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "00000000-0000-4000-8000-000000000020",
+      "sourceNodeId": "00000000-0000-4000-8000-000000000011",
+      "sourcePortId": "image",
+      "targetNodeId": "00000000-0000-4000-8000-000000000012",
+      "targetPortId": "in"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000021",
+      "sourceNodeId": "00000000-0000-4000-8000-000000000012",
+      "sourcePortId": "out",
+      "targetNodeId": "00000000-0000-4000-8000-000000000013",
+      "targetPortId": "image"
+    }
+  ]
+}

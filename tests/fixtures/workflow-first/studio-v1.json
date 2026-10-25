@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "id": "00000000-0000-4000-8000-000000000001",
+  "name": "旧Studio互換fixture",
+  "revision": 7,
+  "createdAt": "2026-10-25T00:00:00.000Z",
+  "updatedAt": "2026-10-25T00:00:00.000Z",
+  "pages": [
+    {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "name": "出力ページ",
+      "width": 1080,
+      "height": 1080,
+      "background": "#16191f",
+      "alpha": 0,
+      "layers": [
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "name": "固定入力",
+          "x": 540,
+          "y": 540,
+          "width": 600,
+          "height": 600,
+          "rotation": 0,
+          "opacity": 1,
+          "visible": true,
+          "locked": false,
+          "kind": "image",
+          "assetId": "00000000-0000-4000-8000-000000000100",
+          "imageBinding": "photo",
+          "crop": {
+            "version": 1,
+            "shape": "ellipse",
+            "mode": "cover",
+            "focus": {
+              "u": 0.3,
+              "v": 0.6
+            },
+            "zoom": 1.4,
+            "rotation": 30
+          },
+          "effects": {
+            "brightness": 1,
+            "contrast": 1,
+            "saturation": 1,
+            "blur": 0
+          }
+        }
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000004",
+      "name": "空白ページ",
+      "width": 1080,
+      "height": 1350,
+      "background": "#ffffff",
+      "alpha": 1,
+      "layers": []
+    }
+  ],
+  "variables": [
+    {
+      "key": "photo",
+      "label": "写真",
+      "type": "image",
+      "required": false,
+      "default": "00000000-0000-4000-8000-000000000101"
+    }
+  ],
+  "values": {
+    "photo": "00000000-0000-4000-8000-000000000102"
+  },
+  "caption": "",
+  "hashtags": ""
+}
