@@ -5,6 +5,11 @@ test("an independent duplicate can explicitly resume its frozen image when disco
   await page.goto("./");
   await page.getByRole("button", { name: "＋ 画像編集", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "画像編集ノード詳細" });
+  // File injection bypasses the visible picker; wait for the add transaction
+  // and its inert barrier before delivering a file to the selected node.
+  await panel
+    .getByRole("button", { name: "入力画像を取り込む", exact: true })
+    .click({ trial: true });
   const bytes = await page.evaluate(() => {
     const c = document.createElement("canvas");
     c.width = c.height = 64;

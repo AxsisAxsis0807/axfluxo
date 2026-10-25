@@ -118,6 +118,8 @@ test("review: real touch taps and drag connect ports after disconnect", async ({
   const source = page.locator(".react-flow__handle.source"),
     target = page.locator(".react-flow__handle.target");
   const tap = async (locator: typeof source) => {
+    // CDP coordinates do not auto-wait for fitView/layout like Locator actions.
+    await locator.click({ trial: true });
     const b = (await locator.boundingBox())!;
     await session.send("Input.dispatchTouchEvent", {
       type: "touchStart",
@@ -129,6 +131,7 @@ test("review: real touch taps and drag connect ports after disconnect", async ({
     });
   };
   await tap(source);
+  await expect(source).toHaveClass(/clickconnecting/);
   await tap(target);
   await expect(page.locator(".react-flow__edge")).toHaveCount(1);
   await page
@@ -137,6 +140,8 @@ test("review: real touch taps and drag connect ports after disconnect", async ({
     .click();
   await page.getByRole("button", { name: /^接続解除 / }).click();
   await page.getByLabel("ノード設定を閉じる").click();
+  await source.click({ trial: true });
+  await target.click({ trial: true });
   const a = (await source.boundingBox())!,
     b = (await target.boundingBox())!;
   await session.send("Input.dispatchTouchEvent", {
