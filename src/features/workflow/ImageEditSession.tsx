@@ -49,7 +49,7 @@ export default function ImageEditSession({
   ) => Promise<void>;
   onBackup: () => Promise<void>;
   onSaveCopy: (record: EditorRecord) => Promise<void>;
-  onReload: () => void;
+  onReload: () => Promise<void>;
 }) {
   const session = useEditorSession(initial.document, initialPageId),
     record = useRef(structuredClone(initial));
@@ -64,6 +64,7 @@ export default function ImageEditSession({
     invalid = useRef(false);
   const [assets, setAssets] = useState<Asset[]>([]),
     [crop, setCrop] = useState<ImageLayer>();
+  const importing = useRef(false);
   const [busy, setBusy] = useState(false),
     [exporting, setExporting] = useState(false),
     [exportOpen, setExportOpen] = useState(false);
@@ -162,6 +163,8 @@ export default function ImageEditSession({
     if (mounted.current) setAssets(entries);
   }, []);
   useEffect(() => {
+    mounted.current = true;
+    saver.resume();
     void refreshAssets().catch(report);
     return () => {
       mounted.current = false;
@@ -178,6 +181,8 @@ export default function ImageEditSession({
     [],
   );
   const save = async () => {
+    if (importing.current)
+      throw new Error("画像の取り込み完了後に保存してください");
     if (
       composing.current ||
       pendingFields.current.size ||
@@ -233,6 +238,11 @@ export default function ImageEditSession({
     }
   };
   const addFile = async (file: File, replace = false) => {
+    if (busy || exporting || importing.current) {
+      report(new Error("処理の完了後に画像を追加してください"));
+      return;
+    }
+    importing.current = true;
     try {
       const asset = await importImage(file),
         ref = await storeAsset(asset),
@@ -253,6 +263,8 @@ export default function ImageEditSession({
         });
     } catch (e) {
       report(e);
+    } finally {
+      importing.current = false;
     }
   };
   const exportImages = async () => {
@@ -382,10 +394,33 @@ export default function ImageEditSession({
             </button>
             {status === "競合・未保存" && (
               <>
-                <button onClick={onReload}>保存版を再読込</button>
+                <button
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true);
+                    void onReload()
+                      .catch(report)
+                      .finally(() => {
+                        if (mounted.current) setBusy(false);
+                      });
+                  }}
+                >
+                  保存版を再読込（現在の編集を破棄）
+                </button>
                 <button
                   disabled={pending}
-                  onClick={() => void onSaveCopy(record.current).catch(report)}
+                  onClick={() => {
+                    if (importing.current) {
+                      report(new Error("画像取り込み完了を待ってください"));
+                      return;
+                    }
+                    setBusy(true);
+                    void onSaveCopy(structuredClone(record.current))
+                      .catch(report)
+                      .finally(() => {
+                        if (mounted.current) setBusy(false);
+                      });
+                  }}
                 >
                   別コピーとして保存
                 </button>
@@ -415,107 +450,109 @@ export default function ImageEditSession({
             e.target.value = "";
           }}
         />
-        <ImageEditor
-          {...session}
-          doc={session.doc}
-          page={page}
-          layer={layer}
-          status={pending ? "入力未確定・未保存" : status}
-          dispatch={send}
-          input={input}
-          replaceInput={replacement}
-          assets={assets}
-          crop={crop}
-          setCrop={setCrop}
-          commit={commit}
-          patchLayer={patchLayer}
-          changePage={changePage}
-          save={save}
-          report={report}
-          onBack={() => void apply()}
-          makeBackup={async () => {
-            try {
-              await save();
-              await onBackup();
-            } catch (e) {
-              report(e);
-            }
-          }}
-          saveTemplate={async () => {}}
-          workflowSession
-          assetResolver={resolver}
-          addText={() => addLayer(newText())}
-          addShape={(shape = "rect") =>
-            addLayer({
-              ...baseLayer("shape"),
-              kind: "shape",
-              shape,
-              fill: "#b6ed79",
-              fillAlpha: 1,
-              stroke: "#b6ed79",
-              strokeWidth: shape === "line" ? 8 : 0,
-              radius: 24,
-              width: 400,
-              height: shape === "line" ? 16 : 300,
-            })
-          }
-          duplicateLayer={() => {
-            if (layer)
+        <div inert={busy || exporting ? true : undefined}>
+          <ImageEditor
+            {...session}
+            doc={session.doc}
+            page={page}
+            layer={layer}
+            status={pending ? "入力未確定・未保存" : status}
+            dispatch={send}
+            input={input}
+            replaceInput={replacement}
+            assets={assets}
+            crop={crop}
+            setCrop={setCrop}
+            commit={commit}
+            patchLayer={patchLayer}
+            changePage={changePage}
+            save={save}
+            report={report}
+            onBack={() => void apply()}
+            makeBackup={async () => {
+              try {
+                await save();
+                await onBackup();
+              } catch (e) {
+                report(e);
+              }
+            }}
+            saveTemplate={async () => {}}
+            workflowSession
+            assetResolver={resolver}
+            addText={() => addLayer(newText())}
+            addShape={(shape = "rect") =>
               addLayer({
-                ...structuredClone(layer),
-                id: crypto.randomUUID(),
-                locked: false,
-                name: layer.name + " のコピー",
-              });
-          }}
-          reorderLayer={moveLayer}
-          deleteLayer={() => {
-            if (layer && !layer.locked) {
-              changePage({
-                layers: page.layers.filter((l) => l.id !== layer.id),
-              });
-              session.setSelected(undefined);
+                ...baseLayer("shape"),
+                kind: "shape",
+                shape,
+                fill: "#b6ed79",
+                fillAlpha: 1,
+                stroke: "#b6ed79",
+                strokeWidth: shape === "line" ? 8 : 0,
+                radius: 24,
+                width: 400,
+                height: shape === "line" ? 16 : 300,
+              })
             }
-          }}
-          addPage={(duplicate = false) => {
-            if (session.doc.pages.length >= 20) {
-              report(new Error("ページは20枚までです"));
-              return;
-            }
-            const p = duplicate
-              ? {
-                  ...structuredClone(page),
+            duplicateLayer={() => {
+              if (layer)
+                addLayer({
+                  ...structuredClone(layer),
                   id: crypto.randomUUID(),
-                  layers: page.layers.map((l) => ({
-                    ...structuredClone(l),
+                  locked: false,
+                  name: layer.name + " のコピー",
+                });
+            }}
+            reorderLayer={moveLayer}
+            deleteLayer={() => {
+              if (layer && !layer.locked) {
+                changePage({
+                  layers: page.layers.filter((l) => l.id !== layer.id),
+                });
+                session.setSelected(undefined);
+              }
+            }}
+            addPage={(duplicate = false) => {
+              if (session.doc.pages.length >= 20) {
+                report(new Error("ページは20枚までです"));
+                return;
+              }
+              const p = duplicate
+                ? {
+                    ...structuredClone(page),
                     id: crypto.randomUUID(),
-                  })),
-                }
-              : newPage();
-            commit({
-              ...record.current.document,
-              pages: [...record.current.document.pages, p],
-            });
-            session.setPageId(p.id);
-            session.setSelected(undefined);
-          }}
-          removePage={() => {
-            if (session.doc.pages.length === 1) return;
-            const pages = session.doc.pages.filter((p) => p.id !== page.id);
-            commit({ ...record.current.document, pages });
-            session.setPageId(pages[0].id);
-            session.setSelected(undefined);
-          }}
-          reorderPage={(direction) => {
-            const pages = [...session.doc.pages],
-              i = pages.findIndex((p) => p.id === page.id),
-              to = i + direction;
-            if (to < 0 || to >= pages.length) return;
-            [pages[i], pages[to]] = [pages[to], pages[i]];
-            commit({ ...record.current.document, pages });
-          }}
-          sessionBusy={busy || exporting}
-        />
+                    layers: page.layers.map((l) => ({
+                      ...structuredClone(l),
+                      id: crypto.randomUUID(),
+                    })),
+                  }
+                : newPage();
+              commit({
+                ...record.current.document,
+                pages: [...record.current.document.pages, p],
+              });
+              session.setPageId(p.id);
+              session.setSelected(undefined);
+            }}
+            removePage={() => {
+              if (session.doc.pages.length === 1) return;
+              const pages = session.doc.pages.filter((p) => p.id !== page.id);
+              commit({ ...record.current.document, pages });
+              session.setPageId(pages[0].id);
+              session.setSelected(undefined);
+            }}
+            reorderPage={(direction) => {
+              const pages = [...session.doc.pages],
+                i = pages.findIndex((p) => p.id === page.id),
+                to = i + direction;
+              if (to < 0 || to >= pages.length) return;
+              [pages[i], pages[to]] = [pages[to], pages[i]];
+              commit({ ...record.current.document, pages });
+            }}
+            sessionBusy={busy || exporting}
+          />
+        </div>
         {exportOpen && (
           <WorkspaceDialog
             label="画像書き出し"

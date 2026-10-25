@@ -78,6 +78,9 @@ export class Autosave<T, R extends { revision: number }> {
     this.error = undefined;
     await this.flush();
   }
+  resume() {
+    this.stopped = false;
+  }
   dispose() {
     this.stopped = true;
     clearTimeout(this.timer);

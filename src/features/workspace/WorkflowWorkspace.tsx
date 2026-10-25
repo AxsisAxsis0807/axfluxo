@@ -183,6 +183,7 @@ export default function WorkflowWorkspace({
     let cancelled = false;
     (async () => {
       const rows = await listWorkspaces();
+      if (cancelled) return;
       const loaded = rows.length
         ? await loadWorkspace(rows[0].workflowId)
         : {
@@ -825,7 +826,10 @@ export default function WorkflowWorkspace({
               >
                 自動整列
               </button>
-              <NodePalette onAdd={addLegacyNode} />
+              <NodePalette
+                onAdd={addLegacyNode}
+                onAddImageEdit={() => void action(addEditor)}
+              />
               <button
                 disabled={!doc || operation}
                 onClick={() => void action(addEditor)}
@@ -925,6 +929,14 @@ export default function WorkflowWorkspace({
                   selected={selected}
                   nodeDefinitions={workspaceDefinitions}
                   nodeStatus={nodeStatus}
+                  nodeTitles={Object.fromEntries(
+                    doc.nodes.map((n) => [
+                      n.id,
+                      n.type === "image-edit"
+                        ? n.config.name
+                        : workspaceDefinitions[n.type].label,
+                    ]),
+                  )}
                   thumbnails={thumbnails}
                   onEdit={edit}
                   onViewport={moveViewport}
@@ -1391,17 +1403,14 @@ export default function WorkflowWorkspace({
           nodeName={session.node.config.name}
           onApply={backFromSession}
           onBackup={backup}
-          onReload={() =>
-            void loadEditor(session.editor.id)
-              .then((editor) =>
-                setSession({
-                  ...session,
-                  editor,
-                  generation: ++generation.current,
-                }),
-              )
-              .catch(report)
-          }
+          onReload={async () => {
+            const editor = await loadEditor(session.editor.id);
+            setSession({
+              ...session,
+              editor,
+              generation: ++generation.current,
+            });
+          }}
           onSaveCopy={async (record) => {
             await barrier();
             const pair = await duplicateEditor(session.node);

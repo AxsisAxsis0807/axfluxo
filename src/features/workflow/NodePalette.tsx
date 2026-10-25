@@ -6,9 +6,16 @@ import {
 } from "../../domain/workflow/schema";
 export default function NodePalette({
   onAdd,
+  onAddImageEdit,
 }: {
   onAdd: (type: NodeType) => void;
+  onAddImageEdit?: () => void;
 }) {
+  const types: (NodeType | "image-edit")[] = onAddImageEdit
+    ? [...nodeTypes, "image-edit"]
+    : [...nodeTypes];
+  const label = (type: NodeType | "image-edit") =>
+    type === "image-edit" ? "画像編集" : definitions[type].label;
   const [query, setQuery] = useState("");
   return (
     <details className="wf-palette">
@@ -29,20 +36,22 @@ export default function NodePalette({
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
-        {nodeTypes
-          .filter((t) => definitions[t].label.includes(query))
+        {types
+          .filter((t) => label(t).includes(query))
           .map((t) => (
             <button
               key={t}
               onClick={(e) => {
-                onAdd(t);
+                if (t === "image-edit") onAddImageEdit?.();
+                else onAdd(t);
                 e.currentTarget.closest("details")?.removeAttribute("open");
               }}
             >
-              {definitions[t].label} <small>設定のみ</small>
+              {label(t)}{" "}
+              <small>{t === "image-edit" ? "個別描画" : "設定のみ"}</small>
             </button>
           ))}
-        {!nodeTypes.some((t) => definitions[t].label.includes(query)) && (
+        {!types.some((t) => label(t).includes(query)) && (
           <p>一致するノードがありません</p>
         )}
       </div>

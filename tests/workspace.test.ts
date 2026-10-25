@@ -387,3 +387,16 @@ it("unknown stored schemas are refused without overwriting the original record",
     tx.objectStore("workflows").delete(document.workflowId);
   });
 });
+it("a development effect remount can resume its save coordinator", async () => {
+  const write = vi.fn(async (_value: number, revision: number) => ({
+    revision: revision + 1,
+  }));
+  const saver = new Autosave<number, { revision: number }>(0, write, () => {});
+  saver.dispose();
+  saver.resume();
+  saver.edit(1);
+  await saver.flush();
+  expect(write).toHaveBeenCalledOnce();
+  expect(saver.dirty).toBe(false);
+  saver.dispose();
+});

@@ -25,6 +25,7 @@ export type FlowNode = Node<
   {
     node: { id: string; type: string };
     definition: { label: string; ports: Port[] };
+    title?: string;
     status?: string;
     thumbnail?: string;
     inspect: (id: string) => void;
@@ -36,16 +37,9 @@ function WorkflowCard({ data }: NodeProps<FlowNode>) {
   return (
     <article className="wf-node">
       <header className="wf-drag">
-        <b>{definition.label}</b>
+        <b>{data.title ?? definition.label}</b>
         <span>{data.status ?? "設定のみ"}</span>
       </header>
-      {data.thumbnail && (
-        <img
-          className="wf-thumbnail"
-          src={data.thumbnail}
-          alt="出力サムネイル"
-        />
-      )}
       <div className="wf-ports">
         {definition.ports.map((p, i) => (
           <div key={p.id} className={`wf-port wf-${p.direction}`}>
@@ -65,6 +59,13 @@ function WorkflowCard({ data }: NodeProps<FlowNode>) {
           </div>
         ))}
       </div>
+      {data.thumbnail && (
+        <img
+          className="wf-thumbnail"
+          src={data.thumbnail}
+          alt="出力サムネイル"
+        />
+      )}
       <button
         className="nodrag nopan"
         onClick={() => data.inspect(data.node.id)}
@@ -92,12 +93,14 @@ export default function WorkflowCanvas<T extends Graph>({
   onInit,
   nodeDefinitions = definitions,
   nodeStatus,
+  nodeTitles,
   thumbnails,
 }: {
   document: T;
   viewport: Viewport;
   nodeDefinitions?: Record<string, { label: string; ports: Port[] }>;
   nodeStatus?: Record<string, string>;
+  nodeTitles?: Record<string, string>;
   thumbnails?: Record<string, string>;
   selected?: string;
   onEdit: (d: T) => void;
@@ -147,10 +150,11 @@ export default function WorkflowCanvas<T extends Graph>({
     position: drag[n.id] ?? n.position,
     measured: measured[n.id],
     selected: n.id === selected,
-    ariaLabel: nodeDefinitions[n.type].label,
+    ariaLabel: nodeTitles?.[n.id] ?? nodeDefinitions[n.type].label,
     data: {
       node: n,
       definition: nodeDefinitions[n.type],
+      title: nodeTitles?.[n.id],
       status: nodeStatus?.[n.id],
       thumbnail: thumbnails?.[n.id],
       inspect: onInspect,
