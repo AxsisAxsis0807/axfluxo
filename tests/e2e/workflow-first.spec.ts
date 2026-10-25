@@ -462,6 +462,9 @@ test("two simultaneous editor sessions detect draft CAS and save an independent 
     .getByRole("button", { name: "別コピーとして保存", exact: true })
     .click();
   await expect(
+    second.getByRole("button", { name: "別コピーとして保存", exact: true }),
+  ).toHaveCount(0);
+  await expect(
     second.getByLabel("画像編集セッション", { exact: true }),
   ).toBeVisible();
   await apply(second);
@@ -475,6 +478,9 @@ test("two simultaneous editor sessions detect draft CAS and save an independent 
   await page
     .getByRole("button", { name: "別コピーとして保存", exact: true })
     .click();
+  await expect(
+    page.getByRole("button", { name: "別コピーとして保存", exact: true }),
+  ).toHaveCount(0);
   await apply(page);
   await expect(page.locator(".react-flow__node")).toHaveCount(3);
 });

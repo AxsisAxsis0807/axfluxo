@@ -120,7 +120,7 @@ try {
     };
   });
   await migrated
-    .locator("input[type=file]")
+    .locator(".legacy-workspace input[type=file]")
     .first()
     .setInputFiles({
       name: "migration.jpg",
