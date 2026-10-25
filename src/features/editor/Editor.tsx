@@ -112,6 +112,8 @@ export default function Editor({
       id: string;
       version: number;
     }>();
+  const [imageImportBusy, setImageImportBusy] = useState(false);
+  const imageImportPending = useRef(false);
   const queue = useRef(new SaveQueue()),
     saved = useRef(new Map<string, number>()),
     saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined),
@@ -176,6 +178,8 @@ export default function Editor({
   );
   const save = useCallback(
     async (snapshot = current.current) => {
+      if (imageImportPending.current)
+        throw new Error("画像の取り込み完了後に保存・移動してください");
       const frozen = structuredClone(snapshot);
       return queue.current.enqueue(async () => {
         const expected = saved.current.get(frozen.id) ?? null;
@@ -217,8 +221,9 @@ export default function Editor({
   useEffect(() => {
     const listener = (e: BeforeUnloadEvent) => {
       if (
+        imageImportPending.current ||
         current.current.revision !==
-        (saved.current.get(current.current.id) ?? 0)
+          (saved.current.get(current.current.id) ?? 0)
       ) {
         e.preventDefault();
         e.returnValue = "";
@@ -232,6 +237,8 @@ export default function Editor({
     template?: { id: string; version: number },
   ) => {
     try {
+      if (imageImportPending.current)
+        throw new Error("画像の取り込み完了後に作品を開いてください");
       if (current.current.revision > 0) await save();
       const valid = documentSchema.parse(d);
       if (projects.some((p) => p.id === valid.id))
@@ -253,7 +260,9 @@ export default function Editor({
       return report(new Error("レイヤーは100個までです"));
     l.x = page.width / 2;
     l.y = page.height / 2;
-    changePage({ layers: [...page.layers, l] });
+    const latest = current.current.pages.find((p) => p.id === page.id);
+    if (!latest) return;
+    changePage({ layers: [...latest.layers, l] });
     setSelected(l.id);
     setPanel("design");
     setMobilePanel(true);
@@ -273,6 +282,12 @@ export default function Editor({
       height: shape === "line" ? 16 : 300,
     });
   const addImage = async (file: File, replacing = false) => {
+    if (imageImportPending.current) {
+      report(new Error("画像の取り込み完了を待ってください"));
+      return;
+    }
+    imageImportPending.current = true;
+    setImageImportBusy(true);
     try {
       const a = await importImage(file);
       if (
@@ -300,6 +315,9 @@ export default function Editor({
       addLayer(l);
     } catch (e) {
       report(e);
+    } finally {
+      imageImportPending.current = false;
+      setImageImportBusy(false);
     }
   };
   const deleteLayer = () => {
@@ -374,6 +392,7 @@ export default function Editor({
         e.preventDefault();
         save().catch(report);
       }
+      if (imageImportPending.current) return;
       if (command && e.key.toLowerCase() === "z") {
         e.preventDefault();
         dispatch({
@@ -411,6 +430,8 @@ export default function Editor({
   });
   const makeBackup = async () => {
     try {
+      if (imageImportPending.current)
+        throw new Error("画像の取り込み完了後にバックアップしてください");
       download(
         await legacyStudioAdapter.backup(structuredClone(doc)),
         `${safeName(doc.name)}.axfluxo.zip`,
@@ -461,6 +482,10 @@ export default function Editor({
       ),
   );
   const runExport = async () => {
+    if (imageImportPending.current) {
+      report(new Error("画像の取り込み完了後に書き出してください"));
+      return;
+    }
     if (exportBusy) return;
     setExportBlob(undefined);
     cancelExport.current = false;
@@ -594,6 +619,8 @@ export default function Editor({
             <button
               onClick={async () => {
                 try {
+                  if (imageImportPending.current)
+                    throw new Error("画像の取り込み完了後に戻ってください");
                   if (exportBusy)
                     throw new Error(
                       "書き出しを完了またはキャンセルしてから戻ってください",
@@ -906,52 +933,54 @@ export default function Editor({
           </div>
         )}
         {view === "studio" && (
-          <ImageEditor
-            assetResolver={legacyStudioAdapter.assetResolver}
-            onBack={() => chooseView("dashboard")}
-            doc={doc}
-            commit={commit}
-            status={status}
-            history={history}
-            dispatch={dispatch}
-            save={save}
-            report={report}
-            makeBackup={makeBackup}
-            saveTemplate={saveTemplate}
-            editingTemplate={editingTemplate}
-            input={input}
-            addText={addText}
-            addShape={addShape}
-            setMobilePanel={setMobilePanel}
-            mobilePanel={mobilePanel}
-            setPanel={setPanel}
-            page={page}
-            setPanMode={setPanMode}
-            panMode={panMode}
-            snap={snap}
-            setSnap={setSnap}
-            selected={selected}
-            setSelected={setSelected}
-            patchLayer={patchLayer}
-            zoom={zoom}
-            setZoom={setZoom}
-            fitToken={fitToken}
-            setFitToken={setFitToken}
-            setPageId={setPageId}
-            addPage={addPage}
-            reorderPage={reorderPage}
-            removePage={removePage}
-            panel={panel}
-            layer={layer}
-            setCrop={setCrop}
-            crop={crop}
-            replaceInput={replaceInput}
-            assets={assets}
-            duplicateLayer={duplicateLayer}
-            reorderLayer={reorderLayer}
-            deleteLayer={deleteLayer}
-            changePage={changePage}
-          />
+          <div inert={imageImportBusy ? true : undefined}>
+            <ImageEditor
+              assetResolver={legacyStudioAdapter.assetResolver}
+              onBack={() => chooseView("dashboard")}
+              doc={doc}
+              commit={commit}
+              status={imageImportBusy ? "画像取り込み中" : status}
+              history={history}
+              dispatch={dispatch}
+              save={save}
+              report={report}
+              makeBackup={makeBackup}
+              saveTemplate={saveTemplate}
+              editingTemplate={editingTemplate}
+              input={input}
+              addText={addText}
+              addShape={addShape}
+              setMobilePanel={setMobilePanel}
+              mobilePanel={mobilePanel}
+              setPanel={setPanel}
+              page={page}
+              setPanMode={setPanMode}
+              panMode={panMode}
+              snap={snap}
+              setSnap={setSnap}
+              selected={selected}
+              setSelected={setSelected}
+              patchLayer={patchLayer}
+              zoom={zoom}
+              setZoom={setZoom}
+              fitToken={fitToken}
+              setFitToken={setFitToken}
+              setPageId={setPageId}
+              addPage={addPage}
+              reorderPage={reorderPage}
+              removePage={removePage}
+              panel={panel}
+              layer={layer}
+              setCrop={setCrop}
+              crop={crop}
+              replaceInput={replaceInput}
+              assets={assets}
+              duplicateLayer={duplicateLayer}
+              reorderLayer={reorderLayer}
+              deleteLayer={deleteLayer}
+              changePage={changePage}
+            />
+          </div>
         )}
         {view === "templates" && (
           <div className="dashboard">

@@ -101,6 +101,24 @@ try {
       ),
     ];
   });
+  await migrated.evaluate(() => {
+    const original = HTMLImageElement.prototype.decode;
+    let held = false;
+    HTMLImageElement.prototype.decode = function () {
+      const decoded = original.call(this);
+      if (held) return decoded;
+      held = true;
+      return decoded.then(
+        () =>
+          new Promise((resolve) => {
+            window.releaseLegacyImport = () => {
+              HTMLImageElement.prototype.decode = original;
+              resolve();
+            };
+          }),
+      );
+    };
+  });
   await migrated
     .locator("input[type=file]")
     .first()
@@ -109,6 +127,16 @@ try {
       mimeType: "image/jpeg",
       buffer: Buffer.from(jpeg),
     });
+  await expect
+    .poll(() => migrated.evaluate(() => typeof window.releaseLegacyImport))
+    .toBe("function");
+  await migrated
+    .getByRole("button", { name: "Workflowワークスペースへ戻る", exact: true })
+    .click();
+  await expect(
+    migrated.getByLabel("プロジェクト名", { exact: true }),
+  ).toBeVisible();
+  await migrated.evaluate(() => window.releaseLegacyImport());
   await expect(migrated.getByRole("status")).toContainText(
     "この端末に保存済み",
   );
@@ -131,6 +159,8 @@ try {
     );
   const oldProjects = await rows("axfluxo", "projects"),
     oldAssets = await rows("axfluxo", "assets");
+  expect(oldAssets).toHaveLength(1);
+  expect(oldProjects[0].pages[0].layers).toHaveLength(1);
   await migrated
     .getByRole("button", { name: "Workflowワークスペースへ戻る", exact: true })
     .click();
@@ -161,6 +191,7 @@ try {
     .click();
   result.legacyStudioCopy = {
     originalUnchanged: true,
+    pendingLegacyImportRetained: true,
     newAssetId: true,
     originalMime: "image/jpeg",
     blobMime: "image/png",

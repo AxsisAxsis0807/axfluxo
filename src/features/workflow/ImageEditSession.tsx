@@ -65,6 +65,7 @@ export default function ImageEditSession({
   const [assets, setAssets] = useState<Asset[]>([]),
     [crop, setCrop] = useState<ImageLayer>();
   const importing = useRef(false);
+  const [importBusy, setImportBusy] = useState(false);
   const [busy, setBusy] = useState(false),
     [exporting, setExporting] = useState(false),
     [exportOpen, setExportOpen] = useState(false);
@@ -143,9 +144,11 @@ export default function ImageEditSession({
       report(new Error("レイヤーは100個までです"));
       return;
     }
+    const latest = record.current.document.pages.find((p) => p.id === page.id);
+    if (!latest) return;
     changePage({
       layers: [
-        ...page.layers,
+        ...latest.layers,
         { ...item, x: page.width / 2, y: page.height / 2 },
       ],
     });
@@ -196,14 +199,14 @@ export default function ImageEditSession({
   };
   useEffect(() => {
     const prevent = (event: BeforeUnloadEvent) => {
-      if (saver.dirty || pending || busy) {
+      if (saver.dirty || pending || busy || importBusy) {
         event.preventDefault();
         event.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", prevent);
     return () => window.removeEventListener("beforeunload", prevent);
-  }, [saver, pending, busy]);
+  }, [saver, pending, busy, importBusy]);
   // A real history entry prevents Back from discarding this full-screen session.
   useEffect(() => {
     window.history.pushState({ ...window.history.state, imageEdit: true }, "");
@@ -243,6 +246,7 @@ export default function ImageEditSession({
       return;
     }
     importing.current = true;
+    setImportBusy(true);
     try {
       const asset = await importImage(file),
         ref = await storeAsset(asset),
@@ -265,6 +269,7 @@ export default function ImageEditSession({
       report(e);
     } finally {
       importing.current = false;
+      if (mounted.current) setImportBusy(false);
     }
   };
   const exportImages = async () => {
@@ -343,6 +348,7 @@ export default function ImageEditSession({
           }
         }}
         onKeyDown={(e) => {
+          if (importing.current || busy || exporting) return;
           if (
             e.nativeEvent.isComposing ||
             (e.target as HTMLElement).closest(
@@ -375,7 +381,13 @@ export default function ImageEditSession({
       >
         <header className="session-bar">
           <b>{nodeName}</b>
-          <span role="status">{pending ? "入力未確定・未保存" : status}</span>
+          <span role="status">
+            {importBusy
+              ? "画像取り込み中"
+              : pending
+                ? "入力未確定・未保存"
+                : status}
+          </span>
           <button disabled={busy || exporting} onClick={() => void apply()}>
             保存してWorkflowへ戻る
           </button>
@@ -450,13 +462,19 @@ export default function ImageEditSession({
             e.target.value = "";
           }}
         />
-        <div inert={busy || exporting ? true : undefined}>
+        <div inert={busy || exporting || importBusy ? true : undefined}>
           <ImageEditor
             {...session}
             doc={session.doc}
             page={page}
             layer={layer}
-            status={pending ? "入力未確定・未保存" : status}
+            status={
+              importBusy
+                ? "画像取り込み中"
+                : pending
+                  ? "入力未確定・未保存"
+                  : status
+            }
             dispatch={send}
             input={input}
             replaceInput={replacement}
