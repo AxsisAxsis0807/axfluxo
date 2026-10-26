@@ -129,8 +129,11 @@ export const runRepository: RunRepository = {
       },
       signal,
     ),
-  list: (id) =>
+  list: (id, limit = 100) =>
     transaction<Run[]>(["runs"], "readonly", (tx, result) => {
+      const maximum = Number.isFinite(limit)
+        ? Math.max(1, Math.min(100, Math.floor(limit)))
+        : 100;
       const store = tx.objectStore("runs");
       const request = id
         ? store
@@ -140,7 +143,7 @@ export const runRepository: RunRepository = {
       const rows: Run[] = [];
       request.onsuccess = () => {
         const cursor = request.result;
-        if (!cursor || rows.length >= 100) {
+        if (!cursor || rows.length >= maximum) {
           result(rows);
           return;
         }

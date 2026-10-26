@@ -182,7 +182,7 @@ export default function RunPanel({
                 )}
                 {node.state === "succeeded" &&
                   Object.entries(node.outputs ?? {}).map(([port, value]) => (
-                    <Result key={port} value={value} />
+                    <Result key={`${run.id}:${port}`} value={value} />
                   ))}
               </li>
             ))}
@@ -248,7 +248,13 @@ function Result({ value }: { value: Value }) {
     return <p>{value.items.length}枚（順序固定）</p>;
   return (
     <div>
-      <button onClick={() => setOpen(!open)}>
+      <button
+        onClick={() => {
+          setUrl(undefined);
+          setError(false);
+          setOpen(!open);
+        }}
+      >
         {open ? "プレビューを閉じる" : "結果をプレビュー"}
       </button>
       {open && url && (

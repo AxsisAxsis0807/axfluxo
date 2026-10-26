@@ -115,3 +115,7 @@ See [ADR 005](docs/adr/005-workflow-execution.md) for state/order/reference/cach
 contracts, DB selection, Phase 3/6 boundaries and rollback, and
 [Phase 2 verification](docs/manual-tests/workflow-phase2-results.md) for evidence and
 physical Safari checks that remain manual.
+
+Phase 2のMerge前監査・不具合再現・最新の再検証結果は
+[最終受け入れ記録](docs/manual-tests/workflow-phase2-acceptance.md)を参照してください。
+最新runが未確定・不成功の場合、過去の成功出力は新しい入力として自動採用しません。

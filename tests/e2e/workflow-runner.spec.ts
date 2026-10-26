@@ -415,6 +415,8 @@ test("T10: encode cancellation publishes no late result; reload marks interrupte
       ),
     )
     .toBe(true);
+  const lifecycle = await page.context().newCDPSession(page);
+  await lifecycle.send("Page.setWebLifecycleState", { state: "frozen" });
   const other = await page.context().newPage();
   await other.goto(page.url());
   await expect(other.getByLabel("Workflow名", { exact: true })).toBeVisible();
@@ -427,7 +429,12 @@ test("T10: encode cancellation publishes no late result; reload marks interrupte
     "別のタブで実行中です",
   );
   expect(await runs(other)).toHaveLength(1);
+  await lifecycle.send("Page.setWebLifecycleState", { state: "active" });
+  await lifecycle.detach();
   await other.close();
+  await page.bringToFront();
+  if (test.info().project.name === "mobile")
+    await page.setViewportSize({ width: 844, height: 390 });
   await page.getByRole("button", { name: "実行を中断", exact: true }).click();
   await page.evaluate(() =>
     (
@@ -476,4 +483,65 @@ test("T10: encode cancellation publishes no late result; reload marks interrupte
     "前回の実行が途切れました",
   );
   expect(await runs(page)).toHaveLength(1);
+});
+
+test("history selection never displays the previous run image for a missing output", async ({
+  page,
+}) => {
+  const f = await seed(page);
+  await openRun(page);
+  await page
+    .getByRole("button", { name: "Workflowを実行", exact: true })
+    .click();
+  await expect(page.locator(".run-panel")).toContainText(
+    "実行状態: 成功 (9/9)",
+  );
+  const first = (await runs(page))[0];
+  await page.evaluate(
+    async ({ first, resizeId }) => {
+      const prior = structuredClone(first);
+      prior.id = crypto.randomUUID();
+      prior.createdAt = new Date(
+        Date.parse(first.createdAt) - 1000,
+      ).toISOString();
+      const output = prior.nodes[resizeId].outputs!.out;
+      if (output.type !== "image" || output.reference.scope !== "execution")
+        throw new Error("image fixture missing");
+      output.reference.outputId = crypto.randomUUID();
+      const db = await new Promise<IDBDatabase>((resolve) => {
+        const r = indexedDB.open("axfluxo-execution", 1);
+        r.onsuccess = () => resolve(r.result);
+      });
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction("runs", "readwrite");
+        tx.objectStore("runs").add(prior);
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => reject(tx.error);
+      });
+      db.close();
+    },
+    { first, resizeId: f.resize.id },
+  );
+  await page.reload();
+  await openRun(page);
+  const result = page
+    .locator(".run-panel li")
+    .filter({ hasText: /^image-resize:/ });
+  await result
+    .getByRole("button", { name: "結果をプレビュー", exact: true })
+    .click();
+  await expect(result.getByRole("img", { name: "実行結果" })).toBeVisible();
+  await page
+    .locator(".run-panel > ul")
+    .last()
+    .getByRole("button")
+    .filter({ hasText: "· 成功" })
+    .last()
+    .click();
+  await expect(result.getByRole("img", { name: "実行結果" })).toHaveCount(0);
+  await result
+    .getByRole("button", { name: "結果をプレビュー", exact: true })
+    .click();
+  await expect(result).toContainText("結果を読み込めません");
+  await expect(result.getByRole("img", { name: "実行結果" })).toHaveCount(0);
 });

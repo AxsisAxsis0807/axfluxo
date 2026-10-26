@@ -98,8 +98,10 @@ function registry() {
   });
   return registry;
 }
-const prepare = (graph: Graph, catalog = registry()) =>
-  prepareSnapshot(graph, catalog, resolver, versions, signal());
+const prepare = (
+  graph: Graph,
+  catalog: ReturnType<typeof createRegistry> = registry(),
+) => prepareSnapshot(graph, catalog, resolver, versions, signal());
 beforeEach(() => repository.evictCache());
 afterEach(() => vi.restoreAllMocks());
 it("T07: deterministic diamond, shared immutable version, collection port order and rerun attempts", async () => {
@@ -469,5 +471,96 @@ it("preflight rejects supported configs exceeding output allocation limits witho
     expect(() => validateGraph(graph, createRegistry())).toThrowError(
       expect.objectContaining({ code: "OUTPUT_LIMIT", nodeId: node.id }),
     );
+  }
+});
+
+it("T08: serializability failures use a safe graph validation error", () => {
+  const cyclic: Record<string, unknown> = {};
+  cyclic.self = cyclic;
+  for (const raw of [undefined, 1n, cyclic])
+    expect(() => validateGraph(raw, createRegistry())).toThrowError(
+      expect.objectContaining({ code: "GRAPH_INVALID" }),
+    );
+});
+it("T07: legacy source IDs resembling object prototype keys survive pinned execution and history", async () => {
+  const catalog = registry(),
+    source = newNode("source");
+  source.id = "__proto__";
+  source.config = { assetId: crypto.randomUUID() };
+  const snapshot = await prepare(
+    { ...newWorkspace(), nodes: [source] },
+    catalog,
+  );
+  expect(Object.hasOwn(snapshot.sources, source.id)).toBe(true);
+  const run = await new Runner(catalog, repository, resolver).run(snapshot, {
+    signal: signal(),
+  });
+  expect(run.state).toBe("succeeded");
+  expect(run.nodes[source.id].outputs?.image).toEqual(image);
+  expect(
+    (await repository.list(run.workflowId))[0].nodes[source.id].outputs?.image,
+  ).toEqual(image);
+});
+it("T11: number cache preserves negative zero instead of reusing positive zero", async () => {
+  const node = newExecutionNode("number"),
+    graph = { ...newWorkspace(), nodes: [node] },
+    catalog = createRegistry();
+  const positive = await prepare(graph, catalog),
+    runner = new Runner(catalog, repository, resolver);
+  await runner.run(positive, { signal: signal() });
+  node.config = { value: -0 };
+  const negative = await prepare(graph, catalog);
+  expect(await cacheKey(node, {}, negative)).not.toBe(
+    await cacheKey(positive.graph.nodes[0], {}, positive),
+  );
+  const run = await runner.run(negative, { signal: signal() });
+  expect(run.nodes[node.id].outputs?.number).toEqual({
+    type: "number",
+    value: -0,
+  });
+});
+
+it("T08: graph byte limits count UTF-8 rather than JavaScript characters", () => {
+  const text = newNode("text");
+  text.config = { text: "あ".repeat(10000) };
+  const graph = {
+    ...newWorkspace(),
+    nodes: Array.from({ length: 180 }, () => ({
+      ...text,
+      id: crypto.randomUUID(),
+    })),
+  };
+  expect(JSON.stringify(graph).length).toBeLessThan(5 * 1024 * 1024);
+  expect(new Blob([JSON.stringify(graph)]).size).toBeGreaterThan(
+    5 * 1024 * 1024,
+  );
+  expect(() => validateGraph(graph, createRegistry())).toThrowError(
+    expect.objectContaining({ code: "GRAPH_LIMIT" }),
+  );
+});
+
+it("T11: run ordering remains newest-first when the wall clock repeats or moves backwards", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    vi.setSystemTime(new Date("2026-10-26T00:00:00.000Z"));
+    const node = newExecutionNode("number"),
+      graph = { ...newWorkspace(), nodes: [node] },
+      snapshot = await prepare(graph),
+      runner = new Runner(registry(), repository, resolver);
+    const first = await runner.run(snapshot, { signal: signal() });
+    const second = await runner.run(snapshot, { signal: signal() });
+    vi.setSystemTime(new Date("2026-10-25T23:00:00.000Z"));
+    const third = await runner.run(snapshot, { signal: signal() });
+    expect(Date.parse(second.createdAt)).toBeGreaterThan(
+      Date.parse(first.createdAt),
+    );
+    expect(Date.parse(third.createdAt)).toBeGreaterThan(
+      Date.parse(second.createdAt),
+    );
+    expect(
+      (await repository.list(graph.workflowId)).map((run) => run.id),
+    ).toEqual([third.id, second.id, first.id]);
+  } finally {
+    vi.useRealTimers();
   }
 });

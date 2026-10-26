@@ -52,20 +52,32 @@ export async function executionEditorInput(
   signal: AbortSignal,
 ): Promise<AssetRef | undefined> {
   const identity = graphIdentity(doc, nodeId);
-  for (const run of await runRepository.list(doc.workflowId)) {
+  const runs = await runRepository.list(doc.workflowId);
+  for (const [index, run] of runs.entries()) {
+    if (graphIdentity(run.snapshot.graph, nodeId) !== identity) continue;
+    // Old records can have identical timestamps; UUID order is not chronology.
     if (
-      run.state === "cancelled" ||
-      run.state === "interrupted" ||
-      graphIdentity(run.snapshot.graph, nodeId) !== identity
+      runs
+        .slice(index + 1)
+        .some(
+          (other) =>
+            other.createdAt === run.createdAt &&
+            graphIdentity(other.snapshot.graph, nodeId) === identity,
+        )
     )
-      continue;
+      return undefined;
+    // The newest matching run is authoritative. A retry must never revive an
+    // older descendant output while this run is pending, blocked or failed.
+    if (run.state === "cancelled" || run.state === "interrupted")
+      return undefined;
     const node = run.nodes[nodeId];
-    if (node?.state !== "succeeded") continue;
+    if (node?.state !== "succeeded") return undefined;
     const value = node.outputs?.[portId];
-    if (value?.type !== "image") continue;
+    if (value?.type !== "image") return undefined;
     signal.throwIfAborted();
     if (value.reference.scope === "workspace") {
       await getAsset(value.reference.reference);
+      signal.throwIfAborted();
       return value.reference.reference;
     }
     if (value.reference.scope !== "execution")

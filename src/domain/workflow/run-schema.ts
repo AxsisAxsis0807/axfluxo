@@ -5,6 +5,21 @@ import { referenceSchema } from "./asset-reference";
 const id = z.string().min(1).max(128),
   uuid = z.string().uuid(),
   hash = z.string().regex(/^[a-f0-9]{64}$/);
+// Zod's record parser strips __proto__. Legacy graph IDs can legally contain
+// that string, so validate own entries without renaming or losing their keys.
+const record = <T extends z.ZodType>(value: T) =>
+  z.custom<Record<string, z.output<T>>>(
+    (input) =>
+      input !== null &&
+      typeof input === "object" &&
+      (Object.getPrototypeOf(input) === Object.prototype ||
+        Object.getPrototypeOf(input) === null) &&
+      Object.entries(input).every(
+        ([key, entry]) =>
+          id.safeParse(key).success && value.safeParse(entry).success,
+      ),
+    "辞書の形式が不正です",
+  );
 const state = z.enum([
   "queued",
   "running",
@@ -55,7 +70,7 @@ export const valueSchema = z.discriminatedUnion("type", [
     })
     .strict(),
 ]);
-const outputs = z.record(id, valueSchema);
+const outputs = record(valueSchema);
 export const attemptSchema = z
   .object({
     id: uuid,
@@ -76,8 +91,8 @@ export const runSchema = z
     snapshot: z
       .object({
         graph: z.union([workflowSchema, workspaceSchema]),
-        sources: z.record(id, image),
-        revisions: z.record(id, uuid),
+        sources: record(image),
+        revisions: record(uuid),
         rendererVersion: id,
         fontVersion: id,
         outputSpec: z.literal("png-v1"),
@@ -87,8 +102,7 @@ export const runSchema = z
     state,
     createdAt: z.iso.datetime(),
     endedAt: z.iso.datetime().optional(),
-    nodes: z.record(
-      id,
+    nodes: record(
       z
         .object({
           nodeId: id,

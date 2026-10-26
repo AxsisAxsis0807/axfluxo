@@ -95,7 +95,7 @@ export type Commit = {
 };
 export interface RunRepository {
   commit(change: Commit, signal?: AbortSignal): Promise<void>;
-  list(workflowId?: string): Promise<Run[]>;
+  list(workflowId?: string, limit?: number): Promise<Run[]>;
   attempts(runId: string): Promise<Attempt[]>;
   cached(key: string): Promise<CacheEntry | undefined>;
   output(id: string): Promise<Output | undefined>;

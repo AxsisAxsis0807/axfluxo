@@ -20,7 +20,21 @@ export function validateGraph(
   raw: unknown,
   registry: Registry,
 ): { graph: Graph; order: string[] } {
-  if (JSON.stringify(raw).length > 5 * 1024 * 1024)
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(raw);
+  } catch {
+    throw new ExecutionError(
+      "GRAPH_INVALID",
+      "Workflowは有効なJSONで指定してください",
+    );
+  }
+  if (serialized === undefined)
+    throw new ExecutionError(
+      "GRAPH_INVALID",
+      "Workflowは有効なJSONで指定してください",
+    );
+  if (new Blob([serialized]).size > 5 * 1024 * 1024)
     throw new ExecutionError("GRAPH_LIMIT", "Workflowが大きすぎます");
   let graph: Graph;
   try {
@@ -111,8 +125,8 @@ export async function prepareSnapshot(
   const { graph } = validateGraph(structuredClone(raw), registry);
   const snapshot: Snapshot = {
     graph,
-    sources: {},
-    revisions: {},
+    sources: Object.create(null),
+    revisions: Object.create(null),
     ...versions,
     outputSpec: "png-v1",
   };
@@ -175,13 +189,19 @@ export class Runner {
   ): Promise<Run> {
     const { order } = validateGraph(snapshot.graph, this.registry);
     const fixed = freeze(structuredClone(snapshot));
+    // The host serializes runs. Clamp against durable history so same-tick or
+    // backwards wall clocks cannot make a retry look older than its ancestor.
+    const [latest] = await this.repository.list(undefined, 1);
+    const createdAt = new Date(
+      Math.max(Date.now(), latest ? Date.parse(latest.createdAt) + 1 : 0),
+    ).toISOString();
     const run: Run = {
       id: crypto.randomUUID(),
       workflowId: fixed.graph.workflowId,
       snapshot: fixed,
       policy: options.policy ?? "stop",
       state: "queued",
-      createdAt: date(),
+      createdAt,
       nodes: Object.fromEntries(
         order.map((nodeId) => [
           nodeId,

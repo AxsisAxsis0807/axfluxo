@@ -1,5 +1,7 @@
 # Workflow Phase 2 verification — 2026-10-26 JST
 
+This is the original implementation record at `97d60df`. The later [final acceptance audit](workflow-phase2-acceptance.md) records fresh commands, follow-up fixes, current counts and CI results.
+
 Starting main/HEAD: `15b51bfabce277ff040559a66616c0f255011ab6`, clean branch work; origin AxsisAxsis0807/axfluxo. Fetched latest main (same), then created feat/workflow-phase-2. No AGENTS.md found. Inspected package/lock/engines, v1/v2 schemas, connections/palette/inspector/canvas/workspace/session, Studio/Canvas/CropDialog/cropGeometry/scene/fonts/effects, legacy/Workspace assets/resolvers, persistence/recovery/migration/backup, Account/auth/guest/logout, Next static export/basePath/Pages/CI and ADR 002–004/manual evidence. No dependency changes. No deployment or merge.
 
 ## Baseline and environment

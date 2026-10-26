@@ -287,3 +287,134 @@ it("generated output is consumed into the existing editor once, remains hash-fix
     asset.hash,
   );
 });
+
+it.each([
+  "failed",
+  "blocked",
+  "queued",
+  "running",
+  "cancelled",
+  "interrupted",
+] as const)(
+  "T11: latest matching %s result must not fall back to a previous successful editor input",
+  async (state) => {
+    const { asset } = await fixture();
+    await write(["assets"], (tx) => {
+      tx.objectStore("assets").add(asset);
+    });
+    const { createRegistry } =
+      await import("../src/services/workflow/registry");
+    const { prepareSnapshot, Runner } =
+      await import("../src/services/workflow/runner");
+    const { runRepository } =
+      await import("../src/services/workflow/run-repository");
+    const { executionEditorInput } =
+      await import("../src/services/workflow/editor-input");
+    const source = newNode("source");
+    source.config = { assetId: asset.id };
+    const graph = { ...newWorkspace(), nodes: [source] },
+      resolver = createAssetResolver(),
+      registry = createRegistry();
+    const snapshot = await prepareSnapshot(
+      graph,
+      registry,
+      resolver,
+      { rendererVersion: "audit", fontVersion: "audit" },
+      new AbortController().signal,
+    );
+    const first = await new Runner(registry, runRepository, resolver).run(
+      snapshot,
+      { signal: new AbortController().signal },
+    );
+    expect(
+      await executionEditorInput(
+        graph,
+        source.id,
+        "image",
+        new AbortController().signal,
+      ),
+    ).toEqual({ assetId: asset.id, hash: asset.hash });
+    const next = structuredClone(first);
+    next.id = crypto.randomUUID();
+    next.createdAt = new Date(Date.parse(first.createdAt) + 1000).toISOString();
+    next.state = state;
+    next.nodes[source.id].state = state;
+    delete next.nodes[source.id].outputs;
+    await runRepository.commit({ run: next });
+    expect(
+      await executionEditorInput(
+        graph,
+        source.id,
+        "image",
+        new AbortController().signal,
+      ),
+    ).toBeUndefined();
+    expect(
+      (await runRepository.list(graph.workflowId)).find(
+        (run) => run.id === first.id,
+      )?.nodes[source.id].outputs,
+    ).toBeDefined();
+  },
+);
+
+it("T11: ambiguous old run timestamps never choose an arbitrary UUID's editor output", async () => {
+  const { asset } = await fixture();
+  await write(["assets"], (tx) => {
+    tx.objectStore("assets").add(asset);
+  });
+  const { createRegistry } = await import("../src/services/workflow/registry");
+  const { prepareSnapshot, Runner } =
+    await import("../src/services/workflow/runner");
+  const { runRepository } =
+    await import("../src/services/workflow/run-repository");
+  const { executionEditorInput } =
+    await import("../src/services/workflow/editor-input");
+  const source = newNode("source");
+  source.config = { assetId: asset.id };
+  const graph = { ...newWorkspace(), nodes: [source] },
+    resolver = createAssetResolver(),
+    registry = createRegistry();
+  const snapshot = await prepareSnapshot(
+    graph,
+    registry,
+    resolver,
+    { rendererVersion: "audit", fontVersion: "audit" },
+    new AbortController().signal,
+  );
+  const run = await new Runner(registry, runRepository, resolver).run(
+    snapshot,
+    { signal: new AbortController().signal },
+  );
+  const success = structuredClone(run);
+  success.id = "ffffffff-ffff-4fff-bfff-ffffffffffff";
+  const failed = structuredClone(run);
+  failed.id = "00000000-0000-4000-8000-000000000000";
+  failed.state = "failed";
+  failed.nodes[source.id].state = "failed";
+  delete failed.nodes[source.id].outputs;
+  await runRepository.commit({ run: success });
+  await runRepository.commit({ run: failed });
+  expect(
+    await executionEditorInput(
+      graph,
+      source.id,
+      "image",
+      new AbortController().signal,
+    ),
+  ).toBeUndefined();
+  const retry = await new Runner(registry, runRepository, resolver).run(
+    snapshot,
+    { signal: new AbortController().signal },
+  );
+  expect(Date.parse(retry.createdAt)).toBeGreaterThan(
+    Date.parse(run.createdAt),
+  );
+  expect(
+    await executionEditorInput(
+      graph,
+      source.id,
+      "image",
+      new AbortController().signal,
+    ),
+  ).toEqual({ assetId: asset.id, hash: asset.hash });
+});
