@@ -95,3 +95,23 @@ WFR-6ではPR #5の受け入れ検証と画像取込失敗時の一時Canvas解�
 [WFR-6検証・Merge判断](docs/manual-tests/workflow-first-wfr6-results.md) と
 [実機iPhoneの操作・期待結果](docs/manual-tests/workflow-first-iphone.md) を参照してください。
 実機受入は未実施で、Merge・本番公開は承認待ちです。
+
+### Workflow Phase 2 execution
+
+Workflow First has a collapsible RunPanel for start/cancel, failure policy, node status,
+result preview, recent history and pinned-input reruns. Source/text/number, resize/crop/
+adjust, ordered image collections and applied image-edit output use a UI-independent
+runner. Save/post remain unsupported; no SNS operation is performed.
+
+The original Workspace v1 DB and v2 AssetRef remain intact. Execution history/cache/
+immutable intermediate outputs use a separate local `axfluxo-execution` v1 DB. Graphs
+contain references, not image bytes. A consumed execution result is copied once into
+the existing editor input contract; Workspace ZIP includes that fixed editor input,
+while execution history/unconsumed results remain local. Back up existing works as usual.
+
+`NEXT_PUBLIC_WORKFLOW_RUNNER_ENABLED=false` hides/disables execution on rebuild while
+retaining all documents and data. Existing Workflow First rollback flags still apply.
+See [ADR 005](docs/adr/005-workflow-execution.md) for state/order/reference/cache/resource
+contracts, DB selection, Phase 3/6 boundaries and rollback, and
+[Phase 2 verification](docs/manual-tests/workflow-phase2-results.md) for evidence and
+physical Safari checks that remain manual.

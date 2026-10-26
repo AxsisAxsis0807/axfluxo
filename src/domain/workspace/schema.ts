@@ -8,6 +8,11 @@ import {
   type Port,
 } from "../workflow/schema";
 import { connectionError } from "../workflow/connections";
+import {
+  executionNodeSchema,
+  executionDefinitions,
+  isExecutionNode,
+} from "../workflow/execution-schema";
 const uuid = z.string().uuid();
 export const assetRefSchema = z
   .object({ assetId: uuid, hash: z.string().regex(/^[a-f0-9]{64}$/) })
@@ -45,7 +50,9 @@ export const workspaceSchema = z
   .object({
     ...workflowSchema.shape,
     schemaVersion: z.literal(2),
-    nodes: z.array(z.union([nodeSchema, imageEditNodeSchema])).max(200),
+    nodes: z
+      .array(z.union([nodeSchema, imageEditNodeSchema, executionNodeSchema]))
+      .max(200),
   })
   .strict()
   .superRefine((doc, ctx) => {
@@ -61,6 +68,7 @@ export const workspaceDefinitions: Record<
   { label: string; ports: Port[] }
 > = {
   ...definitions,
+  ...executionDefinitions,
   "image-edit": {
     label: "画像編集",
     ports: [
@@ -121,5 +129,5 @@ export function referencedAssets(doc: ProjectDocument): string[] {
   return [...ids];
 }
 export function isLegacyNode(node: WorkspaceNode): node is WorkflowNode {
-  return node.type !== "image-edit";
+  return node.type !== "image-edit" && !isExecutionNode(node);
 }

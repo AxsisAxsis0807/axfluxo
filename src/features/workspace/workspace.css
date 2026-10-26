@@ -209,3 +209,40 @@ dialog.session-export::backdrop {
   white-space: nowrap;
   margin-left: 8px;
 }
+
+.execution-tools {
+  flex: 0 0 auto;
+  max-height: 35dvh;
+  overflow: auto;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.execution-tools summary {
+  min-height: 44px;
+  cursor: pointer;
+  padding: 10px 0;
+}
+.run-panel ul {
+  list-style: none;
+  padding: 0;
+}
+.run-panel li {
+  padding: 6px 0;
+  overflow-wrap: anywhere;
+}
+.run-panel button {
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+}
+.run-panel .button-row {
+  flex-wrap: wrap;
+}
+.run-panel progress {
+  max-width: 100%;
+}
+.run-panel img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}

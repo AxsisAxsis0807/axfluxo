@@ -14,3 +14,6 @@ export const WORKFLOW_ENABLED =
 export const WORKFLOW_FIRST_ENABLED =
   WORKFLOW_ENABLED &&
   process.env.NEXT_PUBLIC_WORKFLOW_FIRST_ENABLED !== "false";
+
+export const WORKFLOW_RUNNER_ENABLED =
+  process.env.NEXT_PUBLIC_WORKFLOW_RUNNER_ENABLED !== "false";

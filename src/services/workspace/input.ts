@@ -51,15 +51,33 @@ export async function resolveInput(
     signal.throwIfAborted();
     return ref;
   }
-  if (upstream.type !== "image-edit")
-    throw new Error("上流入力は未生成です。画像処理の実行エンジンは未実装です");
+  if (upstream.type !== "image-edit") {
+    const { executionEditorInput } = await import("../workflow/editor-input");
+    const reference = await executionEditorInput(
+      doc,
+      upstream.id,
+      edge!.sourcePortId,
+      signal,
+    );
+    if (reference) return reference;
+    throw new Error("上流入力は未生成です。Workflowを実行してください");
+  }
   const artifact = await currentOutput(doc.workflowId, upstream.id);
   if (
     !artifact ||
     artifact.revisionId !== upstream.config.appliedRevisionId ||
     artifact.pageId !== upstream.config.outputPageId
-  )
+  ) {
+    const { executionEditorInput } = await import("../workflow/editor-input");
+    const reference = await executionEditorInput(
+      doc,
+      upstream.id,
+      edge!.sourcePortId,
+      signal,
+    );
+    if (reference) return reference;
     throw new Error("上流入力は未生成または古い出力です");
+  }
   let asset = await read<WorkspaceAsset | undefined>("assets", artifact.id);
   if (!asset) {
     asset = await prepareAsset({
