@@ -11,12 +11,16 @@ export function ConfigField({
   value,
   multiline,
   numeric,
+  min = 64,
+  max = 8192,
   onChange,
   onDraftChange,
 }: {
   value: string;
   multiline?: boolean;
   numeric?: boolean;
+  min?: number | null;
+  max?: number | null;
   onChange: (value: string) => boolean;
   onDraftChange: (pending: boolean) => void;
 }) {
@@ -53,8 +57,8 @@ export function ConfigField({
     <input
       {...props}
       type={numeric ? "number" : "text"}
-      min={numeric ? 64 : undefined}
-      max={numeric ? 8192 : undefined}
+      min={numeric ? (min ?? undefined) : undefined}
+      max={numeric ? (max ?? undefined) : undefined}
     />
   );
 }

@@ -2,6 +2,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactFlowInstance } from "@xyflow/react";
 import WorkflowCanvas, { type FlowNode } from "../workflow/WorkflowCanvas";
+import RunPanel from "../workflow/RunPanel";
+import ExecutionInspector from "../workflow/ExecutionInspector";
+import {
+  newExecutionNode,
+  executionNodeTypes,
+  executionDefinitions,
+  isExecutionNode,
+} from "../../domain/workflow/execution-schema";
+import { WORKFLOW_RUNNER_ENABLED } from "../../config/workflow-limits";
 import NodePalette from "../workflow/NodePalette";
 import NodeInspector, { ConfigField } from "../workflow/NodeInspector";
 import ImageEditSession from "../workflow/ImageEditSession";
@@ -14,6 +23,7 @@ import {
 import { arrange } from "../../domain/workflow/commands";
 import { connectionError } from "../../domain/workflow/connections";
 import {
+  isLegacyNode,
   parseWorkspace,
   workspaceDefinitions,
   type WorkspaceDocument,
@@ -872,8 +882,21 @@ export default function WorkflowWorkspace({
               >
                 Workflowバックアップを復元
               </button>
-              <button disabled title="Workflow全体の実行エンジンは未実装">
-                全体実行（今後対応）
+              <button
+                disabled={!doc || !WORKFLOW_RUNNER_ENABLED}
+                onClick={(event) => {
+                  const panel = event.currentTarget
+                    .closest(".workflow")
+                    ?.querySelector<HTMLDetailsElement>(".run-panel");
+                  if (panel) {
+                    panel.open = true;
+                    panel.scrollIntoView({ block: "nearest" });
+                  }
+                }}
+              >
+                {WORKFLOW_RUNNER_ENABLED
+                  ? "実行パネルを開く"
+                  : "Workflow実行は無効"}
               </button>
               <button
                 disabled={!doc || operation}
@@ -945,6 +968,39 @@ export default function WorkflowWorkspace({
                 <button onClick={() => setRecoveries([])}>履歴を閉じる</button>
               </div>
             )}
+            {doc && WORKFLOW_RUNNER_ENABLED && (
+              <div className="execution-tools">
+                <RunPanel
+                  key={doc.workflowId}
+                  workflowId={doc.workflowId}
+                  active={active && !session}
+                  disabled={!!generating || operation || pendingConfig}
+                  snapshot={async () => {
+                    await barrier();
+                    return current.current.history!.present;
+                  }}
+                />
+                <details>
+                  <summary>＋ 実行ノードを追加</summary>
+                  <div className="button-row">
+                    {executionNodeTypes.map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => {
+                          const added = newExecutionNode(type);
+                          if (edit({ ...doc, nodes: [...doc.nodes, added] })) {
+                            setSelected(added.id);
+                            setInspector(added.id);
+                          }
+                        }}
+                      >
+                        {executionDefinitions[type].label}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            )}
             <div className="wf-body workspace-canvas">
               {doc && (
                 <WorkflowCanvas
@@ -985,15 +1041,51 @@ export default function WorkflowWorkspace({
                   }}
                 />
               )}
-              {doc && node && node.type !== "image-edit" && (
+              {doc && node && isExecutionNode(node) && (
+                <ExecutionInspector
+                  onDraftChange={setPendingConfig}
+                  key={node.id}
+                  node={node}
+                  document={doc}
+                  onChange={(changed) =>
+                    edit({
+                      ...doc,
+                      nodes: doc.nodes.map((n) =>
+                        n.id === node.id ? changed : n,
+                      ),
+                    })
+                  }
+                  onPort={(port) => selectPort(node, port)}
+                  onClose={() => setInspector(undefined)}
+                  onDelete={() => {
+                    edit({
+                      ...doc,
+                      nodes: doc.nodes.filter((n) => n.id !== node.id),
+                      edges: doc.edges.filter(
+                        (e) =>
+                          e.sourceNodeId !== node.id &&
+                          e.targetNodeId !== node.id,
+                      ),
+                    });
+                    setInspector(undefined);
+                  }}
+                  onDisconnect={(id) =>
+                    edit({
+                      ...doc,
+                      edges: doc.edges.filter((e) => e.id !== id),
+                    })
+                  }
+                />
+              )}
+              {doc && node && isLegacyNode(node) && (
                 <NodeInspector
                   key={node.id}
                   node={node}
                   document={{
                     ...doc,
                     schemaVersion: 1,
-                    nodes: doc.nodes.filter(
-                      (n): n is WorkflowNode => n.type !== "image-edit",
+                    nodes: doc.nodes.filter((n): n is WorkflowNode =>
+                      isLegacyNode(n),
                     ),
                   }}
                   nodeDefinitions={workspaceDefinitions}

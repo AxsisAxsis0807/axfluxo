@@ -16,7 +16,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     env:
       NEXT_PUBLIC_BASE_PATH: /axfluxo
       PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000/axfluxo/

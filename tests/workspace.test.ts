@@ -486,3 +486,62 @@ it("cancelling during artifact publication aborts the transaction before output 
   expect(await currentOutput(workflow.workflowId, node.id)).toBeUndefined();
   expect(await read("artifacts", output.id)).toBeUndefined();
 });
+
+it("legacy copy migration rolls back a late transaction failure and resumes exactly once", async () => {
+  const { saveWorkflow, loadWorkflow } =
+    await import("../src/services/workflow/repository");
+  const { newWorkflow } = await import("../src/domain/workflow/schema");
+  const { importLegacyWorkflow } =
+    await import("../src/services/workspace/migration");
+  const source = await saveWorkflow(
+    { ...newWorkflow(), nodes: [newNode("text")] },
+    view,
+    null,
+  );
+  const names = [
+    "workflows",
+    "preferences",
+    "recovery",
+    "migrations",
+    "assets",
+  ] as const;
+  const before = await Promise.all(names.map((name) => read<unknown[]>(name)));
+  const original = IDBObjectStore.prototype.add;
+  const spy = vi
+    .spyOn(IDBObjectStore.prototype, "add")
+    .mockImplementation(function (
+      this: IDBObjectStore,
+      ...args: Parameters<IDBObjectStore["add"]>
+    ) {
+      if (
+        this.name === "migrations" &&
+        (args[0] as { sourceId?: string }).sourceId === source.workflowId
+      )
+        throw new DOMException("synthetic late quota", "QuotaExceededError");
+      return original.apply(this, args);
+    });
+  try {
+    await expect(importLegacyWorkflow(source.workflowId)).rejects.toMatchObject(
+      { name: "QuotaExceededError" },
+    );
+  } finally {
+    spy.mockRestore();
+  }
+  expect(await Promise.all(names.map((name) => read<unknown[]>(name)))).toEqual(
+    before,
+  );
+  expect((await loadWorkflow(source.workflowId)).document).toEqual(source);
+  const [first, again] = await Promise.all([
+    importLegacyWorkflow(source.workflowId),
+    importLegacyWorkflow(source.workflowId),
+  ]);
+  expect(again).toBe(first);
+  expect((await loadWorkflow(source.workflowId)).document).toEqual(source);
+  expect(
+    (await read<{ sourceId: string }[]>("migrations")).filter(
+      (row) => row.sourceId === source.workflowId,
+    ),
+  ).toHaveLength(1);
+  expect(await read<unknown[]>("workflows")).toHaveLength(before[0].length + 1);
+  expect((await loadWorkspace(first)).document.nodes).toHaveLength(1);
+});
