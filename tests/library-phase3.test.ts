@@ -13,7 +13,7 @@ import {
   pinReferences,
 } from "../src/services/library/repository";
 
-import { read, openWorkspaceDB } from "../src/services/workspace/db";
+import { read, write, openWorkspaceDB } from "../src/services/workspace/db";
 import {
   newWorkspace,
   saveWorkspace,
@@ -522,4 +522,254 @@ it("T16: cancellation during restore publication rolls back Workflow and all lib
   expect(await read("workflows")).toEqual([]);
   expect(await read("libraryFiles")).toEqual([]);
   expect(await read("migrations")).toEqual([]);
+});
+it("T16: restore rejects conflicting immutable version metadata without publishing", async () => {
+  const f = await fixture();
+  await saveWorkspace(f.graph, { x: 0, y: 0, zoom: 1 }, null);
+  const archive = new File(
+    [await backupWorkspace(f.graph.workflowId)],
+    "conflict.zip",
+  );
+  const db = await openWorkspaceDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("libraryVersions", "readwrite");
+    const store = tx.objectStore("libraryVersions");
+    const r = store.get(f.ref.versionId);
+    r.onsuccess = () => store.put({ ...r.result, width: 2 });
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error);
+  });
+  db.close();
+  await expect(restoreWorkspace(archive)).rejects.toThrow("衝突");
+  expect(await read("workflows")).toHaveLength(1);
+  expect(await read("migrations")).toHaveLength(0);
+  expect((await versionFor((await listFiles())[0])).width).toBe(2);
+});
+it("T16: oversized original headers are rejected before decoder allocation", async () => {
+  const f = await fixture();
+  await saveWorkspace(f.graph, { x: 0, y: 0, zoom: 1 }, null);
+  const zip = unzipSync(
+    new Uint8Array(
+      await (await backupWorkspace(f.graph.workflowId)).arrayBuffer(),
+    ),
+  );
+  const manifest = JSON.parse(strFromU8(zip["manifest.json"]));
+  const meta = manifest.library.versions[0];
+  const original = zip[`library/${meta.id}.original`];
+  new DataView(
+    original.buffer,
+    original.byteOffset,
+    original.byteLength,
+  ).setUint32(16, 9000);
+  meta.originalHash = await sha256(new Blob([new Uint8Array(original)]));
+  zip["manifest.json"] = strToU8(JSON.stringify(manifest));
+  const decode = vi.spyOn(Image.prototype, "decode");
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  await expect(
+    restoreWorkspace(new File([zipSync(zip)], "huge-header.zip")),
+  ).rejects.toThrow("素材原本");
+  expect(decode).toHaveBeenCalledTimes(1); // normalized version only
+  expect(await read("workflows")).toHaveLength(0);
+  expect(await read("libraryVersions")).toHaveLength(0);
+});
+it("T15: missing retry ancestry stops before any new save or run is published", async () => {
+  const f = await fixture();
+  const runner = new Runner(f.registry, runRepository, f.resolver);
+  const first = await runner.run(f.snapshot, { signal: signal() });
+  const repository = { ...runRepository, list: async () => [] };
+  await expect(
+    new Runner(f.registry, repository, f.resolver).run(f.snapshot, {
+      signal: signal(),
+      retryOf: first.id,
+    }),
+  ).rejects.toMatchObject({ code: "RETRY_MISSING" });
+  expect(await listFiles()).toHaveLength(2);
+  expect(await read("libraryReceipts")).toHaveLength(1);
+  expect(await runRepository.list()).toHaveLength(1);
+});
+it("T16: quota exception in restore callback rolls back all rows and preserves existing data", async () => {
+  const f = await fixture();
+  await saveWorkspace(f.graph, { x: 0, y: 0, zoom: 1 }, null);
+  const archive = new File(
+    [await backupWorkspace(f.graph.workflowId)],
+    "quota.zip",
+  );
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  const keep = newWorkspace();
+  await saveWorkspace(keep, { x: 0, y: 0, zoom: 1 }, null);
+  const add = IDBObjectStore.prototype.add;
+  vi.spyOn(IDBObjectStore.prototype, "add").mockImplementation(function (
+    this: IDBObjectStore,
+    ...args
+  ) {
+    if (this.name === "libraryVersions")
+      throw new DOMException("full", "QuotaExceededError");
+    return add.apply(this, args);
+  });
+  await expect(restoreWorkspace(archive)).rejects.toMatchObject({
+    name: "QuotaExceededError",
+  });
+  expect((await loadWorkspace(keep.workflowId)).document.workflowId).toBe(
+    keep.workflowId,
+  );
+  expect(await read("workflows")).toHaveLength(1);
+  expect(await read("libraryVersions")).toHaveLength(0);
+  expect(await read("libraryFiles")).toHaveLength(0);
+  expect(await read("migrations")).toHaveLength(0);
+});
+it("T15: cancellation after the library commit retains the receipt and retry reuses it", async () => {
+  const f = await fixture();
+  const abort = new AbortController();
+  const add = IDBObjectStore.prototype.add;
+  const spy = vi
+    .spyOn(IDBObjectStore.prototype, "add")
+    .mockImplementation(function (this: IDBObjectStore, ...args) {
+      const request = add.apply(this, args);
+      if (this.name === "libraryReceipts")
+        this.transaction.addEventListener("complete", () => abort.abort(), {
+          once: true,
+        });
+      return request;
+    });
+  const context = {
+    signal: abort.signal,
+    snapshot: f.snapshot,
+    nodeId: "b",
+    inputs: { image: f.snapshot.sources.a },
+    resolver: f.resolver,
+    outputs: [],
+    saveIdentity: {
+      rootRunId: "root",
+      runId: "original-run",
+      attemptId: "original-attempt",
+    },
+  };
+  await expect(saveLibraryOutput(f.graph.nodes[1], context)).rejects.toThrow();
+  spy.mockRestore();
+  expect(await listFiles()).toHaveLength(2);
+  const receipts = await read<
+    Array<{
+      reference: unknown;
+      runId: string;
+      nodeId: string;
+      attemptId: string;
+    }>
+  >("libraryReceipts");
+  expect(receipts).toHaveLength(1);
+  expect(receipts[0]).toMatchObject({
+    runId: "original-run",
+    nodeId: "b",
+    attemptId: "original-attempt",
+  });
+  const retry = await saveLibraryOutput(f.graph.nodes[1], {
+    ...context,
+    signal: signal(),
+    saveIdentity: {
+      rootRunId: "root",
+      runId: "retry-run",
+      attemptId: "retry-attempt",
+    },
+  });
+  expect(retry.out.type).toBe("image");
+  if (retry.out.type !== "image") throw new Error("image expected");
+  expect(retry.out.reference).toEqual(receipts[0].reference);
+  expect(await listFiles()).toHaveLength(2);
+  expect(await read("libraryReceipts")).toHaveLength(1);
+});
+it("T16: backup refuses more than 40MiB or 100 folders without changing existing data", async () => {
+  const f = await fixture();
+  await saveWorkspace(f.graph, { x: 0, y: 0, zoom: 1 }, null);
+  const v = await versionFor((await listFiles())[0]);
+  const original = new Blob([new Uint8Array(20 * 1024 * 1024)], {
+    type: "image/png",
+  });
+  await write(["libraryVersions"], (tx) => {
+    tx.objectStore("libraryVersions").put({ ...v, original });
+    tx.objectStore("libraryVersions").add({
+      ...v,
+      id: "retained-version",
+      original,
+    });
+  });
+  await expect(backupWorkspace(f.graph.workflowId)).rejects.toThrow("40MiB");
+  expect(await read("libraryVersions")).toHaveLength(2);
+  expect(await read("workflows")).toHaveLength(1);
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  const graph = newWorkspace();
+  await saveWorkspace(graph, { x: 0, y: 0, zoom: 1 }, null);
+  await write(["libraryFolders"], (tx) => {
+    for (let i = 0; i < 101; i++)
+      tx.objectStore("libraryFolders").add({
+        id: `folder-${i}`,
+        name: `Folder ${i}`,
+        parentId: null,
+      });
+  });
+  await expect(backupWorkspace(graph.workflowId)).rejects.toThrow();
+  expect(await listFolders()).toHaveLength(101);
+  expect(await read("workflows")).toHaveLength(1);
+});
+it("T16: aborted v1 migration preserves the old version and data, then upgrades safely", async () => {
+  const old = await new Promise<IDBDatabase>((resolve, reject) => {
+    const r = indexedDB.open("axfluxo-workspace", 1);
+    r.onupgradeneeded = () =>
+      r.result
+        .createObjectStore("workflows", { keyPath: "id" })
+        .add({ id: "keep", value: "original" });
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+  old.close();
+  const open = indexedDB.open;
+  const spy = vi.spyOn(indexedDB, "open").mockImplementation(function (
+    this: IDBFactory,
+    ...args
+  ) {
+    const request = open.apply(this, args);
+    if (args[1] === 2)
+      queueMicrotask(() =>
+        request.addEventListener("upgradeneeded", () =>
+          request.transaction!.abort(),
+        ),
+      );
+    return request;
+  });
+  await expect(openWorkspaceDB()).rejects.toMatchObject({ name: "AbortError" });
+  spy.mockRestore();
+  const retained = await new Promise<IDBDatabase>((resolve, reject) => {
+    const r = indexedDB.open("axfluxo-workspace", 1);
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+  expect(retained.version).toBe(1);
+  expect(retained.objectStoreNames.contains("libraryVersions")).toBe(false);
+  retained.close();
+  expect(await read("workflows", "keep")).toEqual({
+    id: "keep",
+    value: "original",
+  });
+  const migrated = await openWorkspaceDB();
+  expect(migrated.version).toBe(2);
+  migrated.close();
+});
+it("T16: an older tab blocks migration without deleting data and closing it permits retry", async () => {
+  const old = await new Promise<IDBDatabase>((resolve, reject) => {
+    const r = indexedDB.open("axfluxo-workspace", 1);
+    r.onupgradeneeded = () =>
+      r.result
+        .createObjectStore("workflows", { keyPath: "id" })
+        .add({ id: "keep", value: "old-tab" });
+    r.onsuccess = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+  });
+  await expect(openWorkspaceDB()).rejects.toThrow("ブロック");
+  expect(old.version).toBe(1);
+  old.close();
+  expect(await read("workflows", "keep")).toEqual({
+    id: "keep",
+    value: "old-tab",
+  });
+  const db = await openWorkspaceDB();
+  expect(db.version).toBe(2);
+  db.close();
 });

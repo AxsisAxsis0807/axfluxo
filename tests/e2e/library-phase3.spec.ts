@@ -349,3 +349,60 @@ test("T14/T15/T16: select library image, real branched crop/resize/adjust, save,
   ).toBe(true);
   expect(errors).toEqual([]);
 });
+test.describe("landscape touch library", () => {
+  test.use({ hasTouch: true });
+  test("T13: landscape touch library retains long filenames and pagination without horizontal overflow", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto("./");
+    const panel = await openLibrary(page);
+    const files = await page.evaluate(() => {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 8;
+      const ctx = canvas.getContext("2d")!;
+      return Array.from({ length: 13 }, (_, i) => {
+        ctx.fillStyle = `rgb(${i * 17},20,30)`;
+        ctx.fillRect(0, 0, 8, 8);
+        return {
+          name: `${String(i).padStart(2, "0")}_${"A".repeat(190)}.png`,
+          data: canvas.toDataURL("image/png").split(",")[1],
+        };
+      });
+    });
+    await panel
+      .getByLabel("ライブラリーに画像を取り込む", { exact: true })
+      .setInputFiles(
+        files.map((f) => ({
+          name: f.name,
+          mimeType: "image/png",
+          buffer: Buffer.from(f.data, "base64"),
+        })),
+      );
+    await expect(panel.getByRole("status")).toContainText("13/13");
+    await expect(panel.locator("li")).toHaveCount(12);
+    await panel.getByRole("button", { name: "次の素材", exact: true }).tap();
+    await expect(panel.locator("li")).toHaveCount(1);
+    const geometry = await panel.evaluate((el) => {
+      const b = el.getBoundingClientRect();
+      return {
+        x: b.x,
+        y: b.y,
+        right: b.right,
+        bottom: b.bottom,
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      };
+    });
+    expect(geometry.x).toBeGreaterThanOrEqual(0);
+    expect(geometry.y).toBeGreaterThanOrEqual(0);
+    expect(geometry.right).toBeLessThanOrEqual(844);
+    expect(geometry.bottom).toBeLessThanOrEqual(390);
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
+    await panel
+      .getByRole("button", { name: "ライブラリーを閉じる", exact: true })
+      .tap();
+    await page.reload();
+    expect(await rows(page, "libraryFiles")).toHaveLength(13);
+  });
+});

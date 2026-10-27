@@ -2,6 +2,7 @@ import { z } from "zod";
 import { canonical } from "../workflow/cache";
 import { openWorkspaceDB } from "../workspace/db";
 import { sha256, imageMime, decodeImage } from "../assets";
+import { imageHeaderDimensions } from "../image-header";
 import { validateImage } from "../workflow/asset-resolver";
 import {
   libraryFileSchema,
@@ -128,14 +129,27 @@ export async function prepareLibraryRestore(
     )
       throw new Error("素材の原本hashまたはMIMEが不正です");
     await validateImage({ ...meta, blob }, meta.hash);
-    const decoded = await decodeImage(originalBlob);
+    const dimensions = imageHeaderDimensions(original, meta.originalMime);
     if (
-      !decoded.naturalWidth ||
-      !decoded.naturalHeight ||
-      decoded.naturalWidth * decoded.naturalHeight > 24_000_000 ||
-      Math.max(decoded.naturalWidth, decoded.naturalHeight) > 8192
+      !dimensions ||
+      !dimensions.width ||
+      !dimensions.height ||
+      dimensions.width * dimensions.height > 24_000_000 ||
+      Math.max(dimensions.width, dimensions.height) > 8192
     )
-      throw new Error("素材原本が過大です");
+      throw new Error("素材原本が過大または不正です");
+    const decoded = await decodeImage(originalBlob);
+    try {
+      if (
+        !decoded.naturalWidth ||
+        !decoded.naturalHeight ||
+        decoded.naturalWidth * decoded.naturalHeight > 24_000_000 ||
+        Math.max(decoded.naturalWidth, decoded.naturalHeight) > 8192
+      )
+        throw new Error("素材原本が過大です");
+    } finally {
+      decoded.src = "";
+    }
     versions.push({ ...meta, blob, original: originalBlob });
   }
   return { metadata, versions };
@@ -154,26 +168,35 @@ export function scheduleLibraryRestore(
     for (const row of rows) {
       const r = tx.objectStore(name).get(row.id);
       r.onsuccess = () => {
-        if (!r.result) {
-          tx.objectStore(name).add(row);
-          return;
+        try {
+          if (!r.result) {
+            tx.objectStore(name).add(row);
+            return;
+          }
+          if (name === "libraryVersions") {
+            const old = r.result as LibraryVersion,
+              v = row as LibraryVersion;
+            const { blob: oldBlob, original: oldOriginal, ...oldMeta } = old;
+            const { blob, original, ...meta } = v;
+            const oldMetadata = versionMetadataSchema.safeParse(oldMeta);
+            if (
+              !oldMetadata.success ||
+              canonical(oldMetadata.data) !== canonical(meta) ||
+              oldBlob.size !== blob.size ||
+              oldBlob.type !== blob.type ||
+              oldOriginal.size !== original.size ||
+              oldOriginal.type !== original.type
+            )
+              fail(new Error("既存versionと衝突しています"));
+          } else if (canonical(r.result) !== canonical(row))
+            fail(
+              new Error(
+                "既存の素材・フォルダと衝突しています。別端末で復元してください",
+              ),
+            );
+        } catch (error) {
+          fail(error);
         }
-        if (name === "libraryVersions") {
-          const old = r.result as LibraryVersion,
-            v = row as LibraryVersion;
-          if (
-            old.hash !== v.hash ||
-            old.originalHash !== v.originalHash ||
-            old.fileId !== v.fileId ||
-            old.libraryId !== v.libraryId
-          )
-            fail(new Error("既存versionと衝突しています"));
-        } else if (canonical(r.result) !== canonical(row))
-          fail(
-            new Error(
-              "既存の素材・フォルダと衝突しています。別端末で復元してください",
-            ),
-          );
       };
     }
 }

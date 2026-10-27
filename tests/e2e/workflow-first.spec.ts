@@ -484,3 +484,27 @@ test("two simultaneous editor sessions detect draft CAS and save an independent 
   await apply(page);
   await expect(page.locator(".react-flow__node")).toHaveCount(3);
 });
+test("duplicate settings remain tappable while the original has a rendered thumbnail", async ({
+  page,
+}) => {
+  await page.goto("./");
+  const panel = await add(page, "サムネイル付き原本");
+  await edit(page, panel);
+  await page.getByLabel("図形を追加", { exact: true }).click();
+  await apply(page);
+  await panel
+    .getByRole("button", { name: "出力画像を更新", exact: true })
+    .click();
+  const original = page.locator(".react-flow__node").first();
+  await expect(original.getByAltText("出力サムネイル")).toBeVisible();
+  await panel.getByRole("button", { name: "複製", exact: true }).click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(2);
+  await panel.getByLabel("ノード設定を閉じる", { exact: true }).click();
+  const duplicate = page.locator(".react-flow__node").last();
+  await duplicate
+    .getByRole("button", { name: "画像編集の設定", exact: true })
+    .click();
+  await expect(panel.getByLabel("ノード名", { exact: true })).toHaveValue(
+    "サムネイル付き原本",
+  );
+});

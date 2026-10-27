@@ -1349,6 +1349,9 @@ export default function WorkflowWorkspace({
                               revisions: pair.revision ? [pair.revision] : [],
                             },
                           );
+                          // Raise the overlapping copy above the selected original,
+                          // whose thumbnail can otherwise cover its settings button.
+                          setSelected(pair.node.id);
                         })
                       }
                     >
