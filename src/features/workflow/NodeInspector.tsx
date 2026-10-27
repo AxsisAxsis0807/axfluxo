@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import LibraryPanel from "../library/LibraryPanel";
+import { listFolders } from "../../services/library/repository";
+import type { LibraryFolder } from "../../domain/library";
 import {
   definitions,
+  type Port,
   type WorkflowNode,
   type WorkflowDocument,
 } from "../../domain/workflow/schema";
@@ -78,7 +82,7 @@ export default function NodeInspector({
   assetChoices,
 }: {
   node: WorkflowNode;
-  nodeDefinitions?: Record<string, { label: string }>;
+  nodeDefinitions?: Record<string, { label: string; ports?: Port[] }>;
   allNodes?: { id: string; type: string }[];
   assetChoices?: { id: string; name: string }[];
   document: WorkflowDocument;
@@ -91,6 +95,14 @@ export default function NodeInspector({
   onDuplicate: () => void;
   onDisconnect: (id: string) => void;
 }) {
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [folders, setFolders] = useState<LibraryFolder[]>([]);
+  useEffect(() => {
+    if (node.type === "save")
+      void listFolders()
+        .then(setFolders)
+        .catch(() => {});
+  }, [node.type]);
   const panel = useRef<HTMLElement>(null);
   useEffect(() => {
     const focus = window.document.activeElement as HTMLElement;
@@ -116,10 +128,30 @@ export default function NodeInspector({
           閉じる
         </button>
       </header>
-      <p>配置・設定確認用。実行は今後対応します。</p>
+      <p>
+        画像は素材入力から接続し、実行パネルで加工・保存できます。投稿は未対応です。
+      </p>
+      {node.type === "source" && (
+        <>
+          <button onClick={() => setLibraryOpen(true)}>
+            ライブラリーから画像を選ぶ
+          </button>
+          {"libraryRef" in config && config.libraryRef && (
+            <p>選択済み version: {config.libraryRef.versionId}</p>
+          )}
+          {libraryOpen && (
+            <LibraryPanel
+              onClose={() => setLibraryOpen(false)}
+              onSelect={(ref) => {
+                if (onChange({ libraryRef: ref })) setLibraryOpen(false);
+              }}
+            />
+          )}
+        </>
+      )}
       {node.type === "source" && (
         <label>
-          素材ID（任意）
+          既存の素材から選ぶ（互換入力）
           {assetChoices ? (
             <select
               aria-label="入力素材を選択"
@@ -168,8 +200,8 @@ export default function NodeInspector({
                 })
               }
             >
-              <option value="resize">リサイズ（今後対応）</option>
-              <option value="crop">クロップ（今後対応）</option>
+              <option value="resize">リサイズ</option>
+              <option value="crop">クロップ</option>
             </select>
           </label>
           <label>
@@ -194,8 +226,27 @@ export default function NodeInspector({
           <ConfigField
             value={"name" in config ? config.name : ""}
             onDraftChange={onDraftChange}
-            onChange={(name) => onChange({ name })}
+            onChange={(name) => onChange({ ...config, name })}
           />
+        </label>
+      )}
+      {node.type === "save" && (
+        <label>
+          保存先フォルダ
+          <select
+            aria-label="保存先フォルダ"
+            value={"folderId" in config ? (config.folderId ?? "") : ""}
+            onChange={(e) =>
+              onChange({ ...config, folderId: e.target.value || null })
+            }
+          >
+            <option value="">ルート</option>
+            {folders.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.name}
+              </option>
+            ))}
+          </select>
         </label>
       )}
       {node.type === "post" && "mode" in config && (
@@ -214,16 +265,21 @@ export default function NodeInspector({
       )}
       <h3>端子を選択して接続</h3>
       <p>出力を選び、接続先の入力を選択してください。</p>
-      {definitions[node.type].ports.map((p) => (
-        <button
-          key={p.id}
-          className="wf-port-button"
-          aria-pressed={pending?.nodeId === node.id && pending.portId === p.id}
-          onClick={() => onPort(node, p.id)}
-        >
-          {p.direction === "output" ? "出力 →" : "入力 ←"} {p.label} ({p.type})
-        </button>
-      ))}
+      {(nodeDefinitions[node.type].ports ?? definitions[node.type].ports).map(
+        (p) => (
+          <button
+            key={p.id}
+            className="wf-port-button"
+            aria-pressed={
+              pending?.nodeId === node.id && pending.portId === p.id
+            }
+            onClick={() => onPort(node, p.id)}
+          >
+            {p.direction === "output" ? "出力 →" : "入力 ←"} {p.label} ({p.type}
+            )
+          </button>
+        ),
+      )}
       <h3>接続一覧</h3>
       {doc.edges
         .filter((e) => e.sourceNodeId === node.id || e.targetNodeId === node.id)

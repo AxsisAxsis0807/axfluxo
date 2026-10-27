@@ -48,7 +48,17 @@ export default function NodePalette({
               }}
             >
               {label(t)}{" "}
-              <small>{t === "image-edit" ? "個別描画" : "設定のみ"}</small>
+              <small>
+                {!onAddImageEdit
+                  ? "設定のみ"
+                  : t === "source"
+                    ? "画像をライブラリーから選択"
+                    : t === "image-edit"
+                      ? "個別描画"
+                      : t === "post"
+                        ? "未対応"
+                        : "接続して実行"}
+              </small>
             </button>
           ))}
         {!types.some((t) => label(t).includes(query)) && (

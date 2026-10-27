@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  exportLibrary,
+  parseLibraryMetadata,
+  prepareLibraryRestore,
+  scheduleLibraryRestore,
+} from "../library/backup";
 import { strFromU8, strToU8, zipSync } from "fflate";
 import fonts from "../../../public/fonts/manifest.json";
 import { LIMITS } from "../../config/limits";
@@ -45,7 +51,8 @@ const assetMetadata = z
 const manifestSchema = z
   .object({
     identifier: z.literal("axfluxo-workspace"),
-    formatVersion: z.literal(1),
+    formatVersion: z.union([z.literal(1), z.literal(2)]),
+    library: z.unknown().optional(),
     renderVersion: z.literal(1),
     fonts: z.unknown(),
     assets: z.array(assetMetadata).max(500),
@@ -156,10 +163,12 @@ export async function backupWorkspace(id: string): Promise<Blob> {
       thumbnailHash: await sha256(artifact.thumbnail),
     });
   }
+  const library = await exportLibrary(entries);
   const payload = { workflow, viewport, editors, revisions, outputs },
     manifest = {
       identifier: "axfluxo-workspace",
-      formatVersion: 1,
+      formatVersion: 2,
+      library,
       renderVersion: 1,
       fonts,
       assets: assetMeta,
@@ -179,19 +188,34 @@ export async function backupWorkspace(id: string): Promise<Blob> {
     type: "application/zip",
   });
 }
-export async function restoreWorkspace(file: File): Promise<string> {
+export async function restoreWorkspace(
+  file: File,
+  signal?: AbortSignal,
+): Promise<string> {
+  signal?.throwIfAborted();
   if (file.size > LIMITS.archiveBytes)
     throw new Error("ZIPは200MiB以下にしてください");
+  const restoreKey = `backup:${await sha256(file)}`;
   const entries = unzipWithPolicy(
     new Uint8Array(await file.arrayBuffer()),
-    /^(manifest\.json|workspace\.json|assets\/[0-9a-f-]+\.(png|original)|artifacts\/[0-9a-f-]+\.(png|thumb\.png))$/i,
+    /^(manifest\.json|workspace\.json|assets\/[0-9a-f-]+\.(png|original)|artifacts\/[0-9a-f-]+\.(png|thumb\.png)|library\/[\w-]+\.(image|original))$/i,
   );
   const manifest = manifestSchema.parse(parseJSON(entries["manifest.json"])),
     payload = payloadSchema.parse(parseJSON(entries["workspace.json"]));
   parseWorkspace(payload.workflow);
+  if (manifest.formatVersion === 1 && manifest.library !== undefined)
+    throw new Error("旧形式に素材拡張は含められません");
+  const library =
+    manifest.formatVersion === 2
+      ? parseLibraryMetadata(manifest.library)
+      : { files: [], folders: [], versions: [] };
   const expectedEntries = new Set([
     "manifest.json",
     "workspace.json",
+    ...library.versions.flatMap((v) => [
+      `library/${v.id}.image`,
+      `library/${v.id}.original`,
+    ]),
     ...manifest.assets.flatMap((a) => [
       `assets/${a.id}.png`,
       `assets/${a.id}.original`,
@@ -449,6 +473,27 @@ export async function restoreWorkspace(file: File): Promise<string> {
     },
   );
 
+  const preparedLibrary = await prepareLibraryRestore(library, entries, signal);
+  for (const n of workflow.nodes)
+    if (
+      n.type === "source" &&
+      "libraryRef" in n.config &&
+      n.config.libraryRef
+    ) {
+      const ref = n.config.libraryRef;
+      if (
+        !library.versions.some(
+          (v) =>
+            v.id === ref.versionId &&
+            v.fileId === ref.fileId &&
+            v.libraryId === ref.libraryId &&
+            v.hash === ref.hash,
+        )
+      )
+        throw new Error("Workflowの素材version参照が欠損しています");
+    }
+  signal?.throwIfAborted();
+  let restoredId = workflow.workflowId;
   // All parsing, decoding, hashes and remapping have finished before publication.
   await write(
     [
@@ -459,32 +504,69 @@ export async function restoreWorkspace(file: File): Promise<string> {
       "assets",
       "artifacts",
       "recovery",
+      "migrations",
+      "libraryFiles",
+      "libraryVersions",
+      "libraryFolders",
+      "libraryReferences",
     ],
-    (tx) => {
-      for (const asset of assets) tx.objectStore("assets").add(asset);
-      for (const editor of editors)
-        tx.objectStore("editorDocuments").add(editor);
-      for (const revision of revisions)
-        tx.objectStore("editorRevisions").add(revision);
-      for (const artifact of artifacts)
-        tx.objectStore("artifacts").add(artifact);
-      for (const pointer of outputPointers)
-        tx.objectStore("preferences").add(pointer);
-      tx.objectStore("workflows").add({
-        id: workflow.workflowId,
-        document: workflow,
-      });
-      tx.objectStore("preferences").add({
-        id: workflow.workflowId,
-        viewport: payload.viewport,
-      });
-      tx.objectStore("recovery").add({
-        id: `${workflow.workflowId}:0`,
-        workflowId: workflow.workflowId,
-        document: workflow,
-        viewport: payload.viewport,
-      });
+    (tx, fail) => {
+      const abort = () => fail(new Error("復元を中断しました"));
+      signal?.addEventListener("abort", abort, { once: true });
+      const detach = () => signal?.removeEventListener("abort", abort);
+      tx.addEventListener("complete", detach);
+      tx.addEventListener("abort", detach);
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      const check = tx.objectStore("migrations").get(restoreKey);
+      check.onsuccess = () => {
+        if (check.result) {
+          restoredId = check.result.workflowId;
+          return;
+        }
+        scheduleLibraryRestore(tx, preparedLibrary, fail);
+        tx.objectStore("migrations").add({
+          id: restoreKey,
+          workflowId: workflow.workflowId,
+        });
+        for (const n of workflow.nodes)
+          if (
+            n.type === "source" &&
+            "libraryRef" in n.config &&
+            n.config.libraryRef
+          )
+            tx.objectStore("libraryReferences").put({
+              id: `workflow:${workflow.workflowId}:${n.config.libraryRef.versionId}`,
+              owner: workflow.workflowId,
+              reference: n.config.libraryRef,
+            });
+        for (const asset of assets) tx.objectStore("assets").add(asset);
+        for (const editor of editors)
+          tx.objectStore("editorDocuments").add(editor);
+        for (const revision of revisions)
+          tx.objectStore("editorRevisions").add(revision);
+        for (const artifact of artifacts)
+          tx.objectStore("artifacts").add(artifact);
+        for (const pointer of outputPointers)
+          tx.objectStore("preferences").add(pointer);
+        tx.objectStore("workflows").add({
+          id: workflow.workflowId,
+          document: workflow,
+        });
+        tx.objectStore("preferences").add({
+          id: workflow.workflowId,
+          viewport: payload.viewport,
+        });
+        tx.objectStore("recovery").add({
+          id: `${workflow.workflowId}:0`,
+          workflowId: workflow.workflowId,
+          document: workflow,
+          viewport: payload.viewport,
+        });
+      };
     },
   );
-  return workflow.workflowId;
+  return restoredId;
 }

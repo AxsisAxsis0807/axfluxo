@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { libraryReferenceSchema } from "../library";
 import { WORKFLOW_LIMITS } from "../../config/workflow-limits";
 const id = z
   .string()
@@ -59,7 +60,16 @@ export const definitions: Record<NodeType, { label: string; ports: Port[] }> = {
   },
 };
 const configs = {
-  source: z.object({ assetId: id.optional() }).strict(),
+  source: z
+    .object({
+      assetId: id.optional(),
+      libraryRef: libraryReferenceSchema.optional(),
+    })
+    .strict()
+    .refine(
+      (c) => !(c.assetId && c.libraryRef),
+      "入力は一つだけ選択してください",
+    ),
   image: z
     .object({
       operation: z.enum(["resize", "crop"]),
@@ -80,7 +90,9 @@ const configs = {
         ),
     })
     .strict(),
-  save: z.object({ name: z.string().max(200) }).strict(),
+  save: z
+    .object({ name: z.string().max(200), folderId: id.nullable().optional() })
+    .strict(),
   post: z.object({ mode: z.enum(["draft", "direct"]) }).strict(),
 };
 export const defaults = {

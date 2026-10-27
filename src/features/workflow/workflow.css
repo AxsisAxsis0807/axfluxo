@@ -220,3 +220,52 @@
   align-items: center;
   white-space: nowrap;
 }
+
+.library-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #0008;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+}
+.library-panel {
+  width: min(840px, 100%);
+  max-height: 92dvh;
+  overflow: auto;
+  background: var(--paper, #fffdf8);
+  color: #262626;
+  border-radius: 14px;
+  padding: 20px;
+  padding-bottom: max(20px, env(safe-area-inset-bottom));
+}
+.library-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.library-panel label {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0;
+}
+.library-panel button,
+.library-panel input,
+.library-panel select {
+  min-height: 44px;
+  max-width: 100%;
+}
+.library-panel ul {
+  padding: 0;
+  list-style: none;
+}
+.library-panel li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #ddd;
+}

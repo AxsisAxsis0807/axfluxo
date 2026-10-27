@@ -46,7 +46,7 @@ async function image(page: Page, mime: "image/jpeg" | "image/png") {
 async function snapshot(page: Page) {
   return page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("axfluxo-workspace", 1);
+      const request = indexedDB.open("axfluxo-workspace", 2);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });

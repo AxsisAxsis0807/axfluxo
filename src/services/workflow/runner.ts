@@ -1,3 +1,5 @@
+import { imageValue } from "./asset-resolver";
+import { pinReferences } from "../library/repository";
 import { parseWorkspace } from "../../domain/workspace/schema";
 import { parseWorkflow } from "../../domain/workflow/connections";
 import {
@@ -68,7 +70,8 @@ export function validateGraph(
         );
     if (
       node.type === "source" &&
-      !("assetId" in node.config && node.config.assetId)
+      !("assetId" in node.config && node.config.assetId) &&
+      !("libraryRef" in node.config && node.config.libraryRef)
     )
       throw new ExecutionError(
         "ASSET_REQUIRED",
@@ -132,7 +135,17 @@ export async function prepareSnapshot(
   };
   for (const node of graph.nodes) {
     signal.throwIfAborted();
-    if (node.type === "source" && "assetId" in node.config)
+    if (
+      node.type === "source" &&
+      "libraryRef" in node.config &&
+      node.config.libraryRef
+    ) {
+      const ref = node.config.libraryRef;
+      snapshot.sources[node.id] = imageValue(
+        ref,
+        await resolver.resolve(ref, signal),
+      );
+    } else if (node.type === "source" && "assetId" in node.config)
       snapshot.sources[node.id] = await resolver.pin(
         node.config.assetId!,
         graph.schemaVersion === 1 ? "legacy" : "workspace",
@@ -210,6 +223,33 @@ export class Runner {
       ),
       retryOf: options.retryOf,
     };
+    let rootRunId = run.id;
+    if (options.retryOf) {
+      const seen = new Set<string>();
+      let id: string | undefined = options.retryOf;
+      while (id) {
+        if (seen.has(id))
+          throw new ExecutionError(
+            "RETRY_INVALID",
+            "再実行履歴が循環しています",
+          );
+        seen.add(id);
+        const previous = (
+          await this.repository.list(fixed.graph.workflowId, 100)
+        ).find((r) => r.id === id);
+        if (!previous)
+          throw new ExecutionError(
+            "RETRY_MISSING",
+            "再実行元の履歴が見つかりません",
+          );
+        rootRunId = previous.id;
+        id = previous.retryOf;
+      }
+    }
+    const refs = Object.values(fixed.sources).flatMap((v) =>
+      v.reference.scope === "library" ? [v.reference] : [],
+    );
+    if (refs.length) await pinReferences(`run:${run.id}`, refs);
     const emit = () => {
       try {
         options.onChange?.(structuredClone(run));
@@ -276,10 +316,13 @@ export class Runner {
           inputs: freeze(structuredClone(inputs)),
           resolver: this.resolver,
           outputs: [],
+          saveIdentity: { rootRunId, runId: run.id, attemptId: attempt.id },
         };
         try {
           const key = await cacheKey(node, inputs, fixed);
-          const cached = await this.repository.cached(key);
+          const cached = def.pure
+            ? await this.repository.cached(key)
+            : undefined;
           let results = cached?.outputs;
           if (results) {
             try {
@@ -316,7 +359,7 @@ export class Runner {
             {
               run,
               attempt,
-              cache: { id: key, outputs },
+              cache: def.pure ? { id: key, outputs } : undefined,
               outputs: context.outputs,
             },
             options.signal,

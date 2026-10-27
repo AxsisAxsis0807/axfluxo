@@ -19,7 +19,8 @@ import {
   withRunnerLock,
 } from "../../services/workflow/run-repository";
 import { createAssetResolver } from "../../services/workflow/asset-resolver";
-const registry = createRegistry(),
+import { saveLibraryOutput } from "../../services/library/repository";
+const registry = createRegistry(saveLibraryOutput),
   resolver = createAssetResolver();
 const labels = {
   queued: "待機",

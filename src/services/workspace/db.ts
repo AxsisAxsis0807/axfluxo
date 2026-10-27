@@ -7,15 +7,21 @@ export const stores = [
   "artifacts",
   "recovery",
   "migrations",
+  "libraryFiles",
+  "libraryVersions",
+  "libraryFolders",
+  "libraryReferences",
+  "libraryReceipts",
 ] as const;
 export type Store = (typeof stores)[number];
 export function openWorkspaceDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open("axfluxo-workspace", 1);
+    const r = indexedDB.open("axfluxo-workspace", 2);
     let settled = false;
     r.onupgradeneeded = () => {
       for (const name of stores)
-        r.result.createObjectStore(name, { keyPath: "id" });
+        if (!r.result.objectStoreNames.contains(name))
+          r.result.createObjectStore(name, { keyPath: "id" });
     };
     r.onerror = () => reject(r.error ?? new Error("保存DBを開けません"));
     r.onblocked = () => {

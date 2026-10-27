@@ -169,7 +169,7 @@ test("duplicate and delete Undo retain independent editor documents", async ({
   const layers = await page.evaluate(
     () =>
       new Promise<number[]>((resolve, reject) => {
-        const r = indexedDB.open("axfluxo-workspace", 1);
+        const r = indexedDB.open("axfluxo-workspace", 2);
         r.onerror = () => reject(r.error);
         r.onsuccess = () => {
           const db = r.result,
@@ -324,7 +324,7 @@ test("input change copies before replacing only the frozen input layer", async (
   const before = await page.evaluate(
     () =>
       new Promise<unknown>((resolve, reject) => {
-        const r = indexedDB.open("axfluxo-workspace", 1);
+        const r = indexedDB.open("axfluxo-workspace", 2);
         r.onerror = () => reject(r.error);
         r.onsuccess = () => {
           const db = r.result,
@@ -368,7 +368,7 @@ test("input change copies before replacing only the frozen input layer", async (
           document: { pages: { layers: { kind: string; text?: string }[] }[] };
         }[]
       >((resolve, reject) => {
-        const r = indexedDB.open("axfluxo-workspace", 1);
+        const r = indexedDB.open("axfluxo-workspace", 2);
         r.onerror = () => reject(r.error);
         r.onsuccess = () => {
           const db = r.result,
