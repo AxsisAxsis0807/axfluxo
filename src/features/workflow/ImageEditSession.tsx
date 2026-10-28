@@ -36,6 +36,7 @@ export default function ImageEditSession({
   initialPageId,
   nodeName,
   onApply,
+  onReturnDraft,
   onBackup,
   onSaveCopy,
   onReload,
@@ -48,6 +49,7 @@ export default function ImageEditSession({
     expected: number,
     pageId: string,
   ) => Promise<void>;
+  onReturnDraft: () => Promise<void>;
   onBackup: () => Promise<void>;
   onSaveCopy: (record: EditorRecord) => Promise<void>;
   onReload: () => Promise<void>;
@@ -253,6 +255,18 @@ export default function ImageEditSession({
       if (mounted.current) setBusy(false);
     }
   };
+  const returnDraft = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await save();
+      await onReturnDraft();
+    } catch (e) {
+      report(e);
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  };
   const addFile = async (file: File, replace = false) => {
     if (formPending.current) {
       report(new Error("変数フォームを確定または取り消してください"));
@@ -416,12 +430,18 @@ export default function ImageEditSession({
           <button disabled={busy || exporting} onClick={() => void apply()}>
             保存してWorkflowへ戻る
           </button>
+          <button
+            disabled={busy || exporting}
+            onClick={() => void returnDraft()}
+          >
+            適用せず作業版を保存して戻る
+          </button>
           <button disabled={busy} onClick={() => setExportOpen(true)}>
             画像を書き出す
           </button>
         </header>
         <p className="session-note">
-          作業版を自動保存しています。戻る操作で適用版を確定し、出力画像はWorkflowで個別に更新します。Undo履歴はこのセッション内のみです。
+          作業版は自動保存されます。「保存してWorkflowへ戻る」で編集を確定します。「適用せず」は作業版だけを保存し、前の確定結果を維持します。出力画像はWorkflowの「出力画像を更新」または実行で生成します。書き出しは端末への画像保存です。Undo履歴はこのセッション内のみです。
         </p>
         {(error || saveError || applyConflict) && (
           <div role="alert" className="wf-notice">

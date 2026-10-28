@@ -96,6 +96,7 @@ export default function WorkflowWorkspace({
   active?: boolean;
 }) {
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [editorRefresh, setEditorRefresh] = useState(0);
   const [history, setHistory] = useState<History>(),
     [viewport, setViewport] = useState<Viewport>(defaultViewport),
     [status, setStatus] = useState<Status>("保存済み"),
@@ -981,6 +982,14 @@ export default function WorkflowWorkspace({
                 <RunPanel
                   key={doc.workflowId}
                   workflowId={doc.workflowId}
+                  editorTargetId={
+                    doc.nodes.find(
+                      (n) =>
+                        n.id === selected &&
+                        n.type === "image-edit" &&
+                        n.config.inputMode === "connected",
+                    )?.id
+                  }
                   active={active && !session}
                   disabled={!!generating || operation || pendingConfig}
                   snapshot={async () => {
@@ -1237,7 +1246,15 @@ export default function WorkflowWorkspace({
                         ?.sourceNodeId ??
                       "参照なし"}
                   </p>
-                  <EditorSummary node={node} />
+                  <p className="session-note">
+                    素材ライブラリーの画像は「素材入力」ノードで選び、元画像へ接続してください。
+                    加工後の入力が未生成なら、設定を閉じて実行パネルの「選択中の画像編集の上流を実行」を選んでください。
+                    画像編集で確定した版だけが後続ノードへ渡ります。作業版の保存と端末への書き出しは別操作です。
+                  </p>
+                  <EditorSummary
+                    key={`${node.id}:${editorRefresh}`}
+                    node={node}
+                  />
                   <p>{nodeStatus[node.id]}</p>
                   <button
                     disabled={operation || !!generating}
@@ -1542,6 +1559,26 @@ export default function WorkflowWorkspace({
           initialPageId={session.node.config.outputPageId}
           nodeName={session.node.config.name}
           onApply={backFromSession}
+          onReturnDraft={async () => {
+            const open = session;
+            if (generation.current !== open.generation)
+              throw new Error("編集対象が変わりました");
+            await barrier();
+            if (generation.current !== open.generation)
+              throw new Error("編集対象が変わりました");
+            setEditorRefresh((value) => value + 1);
+            setSession(undefined);
+            setSelected(open.node.id);
+            setInspector(open.node.id);
+            await refresh();
+            requestAnimationFrame(() => {
+              window.document
+                .querySelector<HTMLElement>(
+                  `[data-editor-opener="${open.node.id}"]`,
+                )
+                ?.focus();
+            });
+          }}
           onBackup={backup}
           onReload={async () => {
             const fresh = await loadWorkspace(

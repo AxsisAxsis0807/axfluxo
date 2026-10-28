@@ -19,6 +19,7 @@ import {
   withRunnerLock,
 } from "../../services/workflow/run-repository";
 import { createAssetResolver } from "../../services/workflow/asset-resolver";
+import { editorUpstreamGraph } from "../../services/workflow/editor-input";
 import { saveLibraryOutput } from "../../services/library/repository";
 const registry = createRegistry(saveLibraryOutput),
   resolver = createAssetResolver();
@@ -40,11 +41,13 @@ export default function RunPanel({
   snapshot,
   disabled,
   active,
+  editorTargetId,
 }: {
   workflowId: string;
   snapshot: () => Promise<Graph>;
   disabled: boolean;
   active: boolean;
+  editorTargetId?: string;
 }) {
   const [runs, setRuns] = useState<Run[]>([]),
     [run, setRun] = useState<Run>(),
@@ -79,7 +82,7 @@ export default function RunPanel({
   useEffect(() => {
     if (!active) controller.current?.abort();
   }, [active]);
-  const start = async (previous?: Run) => {
+  const start = async (previous?: Run, targetId?: string) => {
     if (controller.current) return;
     const abort = new AbortController();
     controller.current = abort;
@@ -92,7 +95,9 @@ export default function RunPanel({
         const fixed = previous
           ? { ...structuredClone(previous.snapshot), ...currentVersions }
           : await prepareSnapshot(
-              await snapshot(),
+              await snapshot().then((graph) =>
+                targetId ? editorUpstreamGraph(graph, targetId) : graph,
+              ),
               registry,
               resolver,
               currentVersions,
@@ -138,6 +143,14 @@ export default function RunPanel({
         >
           Workflowを実行
         </button>
+        {editorTargetId && (
+          <button
+            disabled={busy || disabled || !active}
+            onClick={() => void start(undefined, editorTargetId)}
+          >
+            選択中の画像編集の上流を実行
+          </button>
+        )}
         <button disabled={!busy} onClick={() => controller.current?.abort()}>
           実行を中断
         </button>
@@ -153,6 +166,11 @@ export default function RunPanel({
           </select>
         </label>
       </div>
+      {editorTargetId && (
+        <p>
+          上流実行は選択中の画像編集の元画像までを生成します。成功後、画像エディターを開いて入力を確認・編集してください。
+        </p>
+      )}
       {error && <p role="alert">{error}</p>}
       {run && (
         <>

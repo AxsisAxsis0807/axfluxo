@@ -38,6 +38,14 @@ export async function resolveInput(
   if (!upstream) throw new Error("入力が接続されていません");
   if (
     upstream.type === "source" &&
+    "libraryRef" in upstream.config &&
+    upstream.config.libraryRef
+  ) {
+    const { pinEditorInput } = await import("../workflow/editor-input");
+    return pinEditorInput(upstream.config.libraryRef, signal);
+  }
+  if (
+    upstream.type === "source" &&
     "assetId" in upstream.config &&
     upstream.config.assetId
   ) {
@@ -60,7 +68,9 @@ export async function resolveInput(
       signal,
     );
     if (reference) return reference;
-    throw new Error("上流入力は未生成です。Workflowを実行してください");
+    throw new Error(
+      "上流入力は未生成です。実行パネルの「選択中の画像編集の上流を実行」を選んでください",
+    );
   }
   const artifact = await currentOutput(doc.workflowId, upstream.id);
   if (

@@ -418,3 +418,245 @@ it("T11: ambiguous old run timestamps never choose an arbitrary UUID's editor ou
     ),
   ).toEqual({ assetId: asset.id, hash: asset.hash });
 });
+
+it("Phase 4: library source opens Studio without running, pins one UUID copy and preserves exact version", async () => {
+  const { asset } = await fixture();
+  const { pinEditorInput } =
+    await import("../src/services/workflow/editor-input");
+  const { newImageEdit } = await import("../src/services/workspace/repository");
+  const { resolveInput, initializeInput, replaceInput, inputChanged } =
+    await import("../src/services/workspace/input");
+  const reference: LibraryReference = {
+    scope: "library",
+    libraryId: "local",
+    fileId: `file-${crypto.randomUUID()}`,
+    versionId: `version-${crypto.randomUUID()}`,
+    kind: "image",
+    hash: asset.hash,
+  };
+  await write(["libraryVersions"], (tx) => {
+    tx.objectStore("libraryVersions").add({
+      ...asset,
+      id: reference.versionId,
+      fileId: reference.fileId,
+      libraryId: reference.libraryId,
+    });
+  });
+  const source = newNode("source");
+  source.config = { libraryRef: reference };
+  const pair = newImageEdit();
+  pair.node.config.inputMode = "connected";
+  const graph = {
+    ...newWorkspace(),
+    nodes: [source, pair.node],
+    edges: [
+      {
+        id: crypto.randomUUID(),
+        sourceNodeId: source.id,
+        sourcePortId: "image",
+        targetNodeId: pair.node.id,
+        targetPortId: "in",
+      },
+    ],
+  };
+  const signal = new AbortController().signal;
+  const before = (await read<Asset[]>("assets")).length;
+  const pinned = await resolveInput(graph, pair.node, signal);
+  expect(pinned?.assetId).toMatch(/^[a-f0-9-]{36}$/);
+  expect(pinned?.hash).toBe(asset.hash);
+  expect(await resolveInput(graph, pair.node, signal)).toEqual(pinned);
+  expect((await read<Asset[]>("assets")).length).toBe(before + 1);
+  const draft = await initializeInput(pair.editor, pinned, "connected");
+  draft.document.pages[0].layers.push(
+    (await import("../src/domain/document")).newText(),
+  );
+  const newer = { ...reference, versionId: `version-${crypto.randomUUID()}` };
+  await write(["libraryVersions"], (tx) => {
+    tx.objectStore("libraryVersions").add({
+      ...asset,
+      id: newer.versionId,
+      fileId: newer.fileId,
+      libraryId: newer.libraryId,
+    });
+  });
+  const next = await pinEditorInput(newer, signal);
+  expect(next).not.toEqual(pinned); // same bytes, distinct version identity
+  expect(inputChanged(draft, next)).toBe(true);
+  const replaced = await replaceInput(draft, next, "connected", false);
+  expect(replaced.document.pages[0].layers[1]).toEqual(
+    draft.document.pages[0].layers[1],
+  );
+  expect(draft.input?.reference).toEqual(pinned);
+  expect(await read("libraryVersions", reference.versionId)).toMatchObject({
+    hash: asset.hash,
+  });
+  await expect(
+    pinEditorInput({ ...reference, versionId: "missing-version" }, signal),
+  ).rejects.toThrow(/見つかりません/);
+  const aborted = new AbortController();
+  aborted.abort();
+  await expect(pinEditorInput(newer, aborted.signal)).rejects.toThrow();
+  // Corrupt destination is rejected rather than overwritten.
+  await write(["assets"], (tx) => {
+    tx.objectStore("assets").put({
+      ...asset,
+      id: pinned!.assetId,
+      hash: "0".repeat(64),
+    });
+  });
+  await expect(pinEditorInput(reference, signal)).rejects.toThrow(/破損/);
+  expect((await read<Asset>("assets", pinned!.assetId)).hash).toBe(
+    "0".repeat(64),
+  );
+});
+
+it("Phase 4: newest successful save library result can become a fixed Studio input", async () => {
+  const { asset } = await fixture();
+  const { Runner, prepareSnapshot } =
+    await import("../src/services/workflow/runner");
+  const { createRegistry } = await import("../src/services/workflow/registry");
+  const { runRepository } =
+    await import("../src/services/workflow/run-repository");
+  const { imageValue } =
+    await import("../src/services/workflow/asset-resolver");
+  const { executionEditorInput } =
+    await import("../src/services/workflow/editor-input");
+  const ref: LibraryReference = {
+    scope: "library",
+    kind: "image",
+    libraryId: "local",
+    fileId: crypto.randomUUID(),
+    versionId: crypto.randomUUID(),
+    hash: asset.hash,
+  };
+  await write(["libraryVersions"], (tx) => {
+    tx.objectStore("libraryVersions").add({
+      ...asset,
+      id: ref.versionId,
+      fileId: ref.fileId,
+      libraryId: ref.libraryId,
+    });
+  });
+  const source = newNode("source"),
+    save = newNode("save");
+  source.config = { libraryRef: ref };
+  const graph = {
+    ...newWorkspace(),
+    nodes: [source, save],
+    edges: [
+      {
+        id: crypto.randomUUID(),
+        sourceNodeId: source.id,
+        sourcePortId: "image",
+        targetNodeId: save.id,
+        targetPortId: "image",
+      },
+    ],
+  };
+  const signal = new AbortController().signal,
+    resolver = createAssetResolver();
+  const registry = createRegistry(async () => ({
+    out: imageValue(ref, { ...asset, mime: "image/png" }),
+  }));
+  const snapshot = await prepareSnapshot(
+    graph,
+    registry,
+    resolver,
+    { rendererVersion: "phase4", fontVersion: "test" },
+    signal,
+  );
+  const run = await new Runner(registry, runRepository, resolver).run(
+    snapshot,
+    { signal },
+  );
+  expect(run.state).toBe("succeeded");
+  const input = await executionEditorInput(graph, save.id, "out", signal);
+  expect(input?.hash).toBe(asset.hash);
+  expect((await read<Asset>("assets", input!.assetId)).blob.size).toBe(
+    asset.blob.size,
+  );
+});
+
+it("Phase 4: cancellation during fixed-input publication rolls back the copy", async () => {
+  const { asset } = await fixture();
+  const { pinEditorInput } =
+    await import("../src/services/workflow/editor-input");
+  const reference: LibraryReference = {
+    scope: "library",
+    libraryId: "local",
+    fileId: crypto.randomUUID(),
+    versionId: crypto.randomUUID(),
+    kind: "image",
+    hash: asset.hash,
+  };
+  await write(["libraryVersions"], (tx) => {
+    tx.objectStore("libraryVersions").add({
+      ...asset,
+      id: reference.versionId,
+      fileId: reference.fileId,
+      libraryId: reference.libraryId,
+    });
+  });
+  const before = (await read<Asset[]>("assets")).length;
+  const controller = new AbortController();
+  const original = IDBObjectStore.prototype.add;
+  const hook = vi
+    .spyOn(IDBObjectStore.prototype, "add")
+    .mockImplementation(function (this: IDBObjectStore, value, key) {
+      const request = original.call(this, value, key);
+      if (this.name === "assets") controller.abort();
+      return request;
+    });
+  try {
+    await expect(
+      pinEditorInput(reference, controller.signal),
+    ).rejects.toThrow();
+  } finally {
+    hook.mockRestore();
+  }
+  expect((await read<Asset[]>("assets")).length).toBe(before);
+  expect(await read("libraryVersions", reference.versionId)).toMatchObject({
+    hash: asset.hash,
+  });
+});
+
+it("Phase 4: upstream preparation excludes the unapplied editor, descendants and unrelated side effects without changing the graph", async () => {
+  const { editorUpstreamGraph } =
+    await import("../src/services/workflow/editor-input");
+  const { newImageEdit } = await import("../src/services/workspace/repository");
+  const source = newNode("source"),
+    resize = newNode("image"),
+    editor = newImageEdit().node,
+    save = newNode("save"),
+    unrelated = newNode("post");
+  editor.config.inputMode = "connected";
+  const graph = {
+    ...newWorkspace(),
+    nodes: [source, resize, editor, save, unrelated],
+    edges: [
+      [source.id, "image", resize.id, "in"],
+      [resize.id, "out", editor.id, "in"],
+      [editor.id, "out", save.id, "image"],
+    ].map(([sourceNodeId, sourcePortId, targetNodeId, targetPortId]) => ({
+      id: crypto.randomUUID(),
+      sourceNodeId,
+      sourcePortId,
+      targetNodeId,
+      targetPortId,
+    })),
+  };
+  const before = structuredClone(graph);
+  const upstream = editorUpstreamGraph(graph, editor.id);
+  expect(upstream.nodes.map((node) => node.id)).toEqual([source.id, resize.id]);
+  expect(upstream.edges).toEqual([graph.edges[0]]);
+  expect(upstream.workflowId).toBe(graph.workflowId);
+  expect(graphIdentity(upstream, resize.id)).toBe(
+    graphIdentity(graph, resize.id),
+  );
+  upstream.nodes[0].position.x++;
+  expect(graph).toEqual(before);
+  expect(() => editorUpstreamGraph(graph, source.id)).toThrow(/接続入力/);
+  expect(() => editorUpstreamGraph({ ...graph, edges: [] }, editor.id)).toThrow(
+    /接続/,
+  );
+});

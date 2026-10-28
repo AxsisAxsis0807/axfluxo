@@ -62,9 +62,14 @@ export async function renderImageEdit(
     canvas.height = Math.max(1, Math.round(page.height * scale));
     let thumbnail: Blob;
     try {
-      canvas
-        .getContext("2d")!
-        .drawImage(await decodeImage(blob), 0, 0, canvas.width, canvas.height);
+      const image = await decodeImage(blob);
+      try {
+        canvas
+          .getContext("2d")!
+          .drawImage(image, 0, 0, canvas.width, canvas.height);
+      } finally {
+        image.src = "";
+      }
       thumbnail = await new Promise<Blob>((resolve, reject) =>
         canvas.toBlob(
           (b) => (b ? resolve(b) : reject(new Error("サムネイル生成失敗"))),
