@@ -80,11 +80,15 @@ export async function validateImage(
     throw new ExecutionError("ASSET_HASH", "画像参照のhashが一致しません");
   if (decode) {
     const image = await decodeImage(output.blob);
-    if (
-      image.naturalWidth !== output.width ||
-      image.naturalHeight !== output.height
-    )
-      throw new ExecutionError("IMAGE_DECODE", "画像を正しく復号できません");
+    try {
+      if (
+        image.naturalWidth !== output.width ||
+        image.naturalHeight !== output.height
+      )
+        throw new ExecutionError("IMAGE_DECODE", "画像を正しく復号できません");
+    } finally {
+      image.src = "";
+    }
   }
 }
 export function createAssetResolver(
