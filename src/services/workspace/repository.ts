@@ -255,6 +255,31 @@ function validateGraph(
           r.result ? finished() : fail(new Error("入力素材が不足しています"));
       });
     }
+    if (
+      node.type === "source" &&
+      "libraryRef" in node.config &&
+      node.config.libraryRef
+    ) {
+      const ref = node.config.libraryRef;
+      checks.push(() => {
+        const r = tx.objectStore("libraryVersions").get(ref.versionId);
+        r.onsuccess = () => {
+          if (
+            !r.result ||
+            r.result.fileId !== ref.fileId ||
+            r.result.libraryId !== ref.libraryId ||
+            r.result.hash !== ref.hash
+          )
+            return fail(new Error("素材versionが欠損しています"));
+          tx.objectStore("libraryReferences").put({
+            id: `workflow:${d.workflowId}:${ref.versionId}`,
+            owner: d.workflowId,
+            reference: ref,
+          });
+          finished();
+        };
+      });
+    }
     if (node.type !== "image-edit") continue;
     checks.push(() => {
       const r = tx
@@ -344,6 +369,8 @@ export async function saveWorkspace(
       "editorDocuments",
       "editorRevisions",
       "assets",
+      "libraryVersions",
+      "libraryReferences",
     ],
     (tx, fail) => {
       guard(
@@ -455,6 +482,8 @@ export async function applyEditor(
       "editorDocuments",
       "editorRevisions",
       "assets",
+      "libraryVersions",
+      "libraryReferences",
     ],
     (tx, fail) => {
       guard(

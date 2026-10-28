@@ -224,7 +224,7 @@ try {
                 edges: [],
               },
             },
-            r = indexedDB.open("axfluxo-workspace", 1);
+            r = indexedDB.open("axfluxo-workspace", 2);
           r.onupgradeneeded = () => {
             for (const name of [
               "workflows",
@@ -264,7 +264,7 @@ try {
     const rows = await rollback.evaluate(
       () =>
         new Promise((resolve, reject) => {
-          const r = indexedDB.open("axfluxo-workspace", 1);
+          const r = indexedDB.open("axfluxo-workspace", 2);
           r.onerror = () => reject(r.error);
           r.onsuccess = () => {
             const db = r.result,

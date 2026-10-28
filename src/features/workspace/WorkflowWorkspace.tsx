@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactFlowInstance } from "@xyflow/react";
 import WorkflowCanvas, { type FlowNode } from "../workflow/WorkflowCanvas";
+import LibraryPanel from "../library/LibraryPanel";
 import RunPanel from "../workflow/RunPanel";
 import ExecutionInspector from "../workflow/ExecutionInspector";
 import {
@@ -94,6 +95,7 @@ export default function WorkflowWorkspace({
   onLegacy: () => void;
   active?: boolean;
 }) {
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [history, setHistory] = useState<History>(),
     [viewport, setViewport] = useState<Viewport>(defaultViewport),
     [status, setStatus] = useState<Status>("保存済み"),
@@ -860,6 +862,12 @@ export default function WorkflowWorkspace({
               >
                 自動整列
               </button>
+              <button disabled={operation} onClick={() => setLibraryOpen(true)}>
+                画像を取り込む・素材ライブラリー
+              </button>
+              {libraryOpen && (
+                <LibraryPanel onClose={() => setLibraryOpen(false)} />
+              )}
               <NodePalette
                 onAdd={addLegacyNode}
                 onAddImageEdit={() => void action(addEditor)}
@@ -1341,6 +1349,9 @@ export default function WorkflowWorkspace({
                               revisions: pair.revision ? [pair.revision] : [],
                             },
                           );
+                          // Raise the overlapping copy above the selected original,
+                          // whose thumbnail can otherwise cover its settings button.
+                          setSelected(pair.node.id);
                         })
                       }
                     >

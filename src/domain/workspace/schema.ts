@@ -69,6 +69,13 @@ export const workspaceDefinitions: Record<
 > = {
   ...definitions,
   ...executionDefinitions,
+  save: {
+    ...definitions.save,
+    ports: [
+      ...definitions.save.ports,
+      { id: "out", direction: "output", type: "image", label: "保存素材" },
+    ],
+  },
   "image-edit": {
     label: "画像編集",
     ports: [

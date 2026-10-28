@@ -15,7 +15,7 @@ const inputImage = (context: NodeContext) => {
     throw new ExecutionError("INPUT_TYPE", "画像入力が必要です");
   return value;
 };
-export function createRegistry(): Registry {
+export function createRegistry(save?: NodeDefinition["execute"]): Registry {
   const registry = new Map<string, NodeDefinition>();
   const add = (
     type: string,
@@ -154,6 +154,13 @@ export function createRegistry(): Registry {
       };
     },
   );
+  if (save)
+    registry.set("save@1", {
+      pure: false,
+      ports: workspaceDefinitions.save.ports,
+      required: ["image"],
+      execute: save,
+    });
   return registry;
 }
 export function definition(

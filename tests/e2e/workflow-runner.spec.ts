@@ -83,7 +83,7 @@ async function seed(page: Page, mode: "images" | "edit" = "images") {
   await page.evaluate(
     async ({ graph, assetId, pair, revisionId }) => {
       const db = await new Promise<IDBDatabase>((resolve) => {
-        const request = indexedDB.open("axfluxo-workspace", 1);
+        const request = indexedDB.open("axfluxo-workspace", 2);
         request.onsuccess = () => resolve(request.result);
       });
       const rows = await new Promise<{ id: string }[]>((resolve) => {
@@ -274,7 +274,7 @@ test("T07/T11: real image DAG shares original, processes dimensions/color, prese
         canvas.width = canvas.height = 0;
       }
       const workspace = await new Promise<IDBDatabase>((resolve) => {
-        const r = indexedDB.open("axfluxo-workspace", 1);
+        const r = indexedDB.open("axfluxo-workspace", 2);
         r.onsuccess = () => resolve(r.result);
       });
       const original = await new Promise<{ hash: string; original: Blob }>(
@@ -368,7 +368,7 @@ test("image-edit run matches the existing applied-revision output renderer", asy
   await expect(panel).toContainText("出力生成済み");
   const artifacts = await page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve) => {
-      const r = indexedDB.open("axfluxo-workspace", 1);
+      const r = indexedDB.open("axfluxo-workspace", 2);
       r.onsuccess = () => resolve(r.result);
     });
     const values = await new Promise<{ hash: string }[]>((resolve) => {

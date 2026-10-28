@@ -41,7 +41,10 @@ try {
       page.evaluate(async () => {
         const rows = async (name, store) => {
           const db = await new Promise((resolve) => {
-            const r = indexedDB.open(name, 1);
+            const r = indexedDB.open(
+              name,
+              name === "axfluxo-workspace" ? 2 : 1,
+            );
             r.onsuccess = () => resolve(r.result);
           });
           const result = await new Promise((resolve) => {

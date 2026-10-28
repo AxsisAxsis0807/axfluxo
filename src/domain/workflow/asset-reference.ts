@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { libraryReferenceSchema } from "../library";
 import { assetRefSchema } from "../workspace/schema";
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const key = z
@@ -30,16 +31,7 @@ export const referenceSchema = z.discriminatedUnion("scope", [
       kind: z.literal("image"),
     })
     .strict(),
-  z
-    .object({
-      scope: z.literal("library"),
-      libraryId: key,
-      fileId: key,
-      versionId: key,
-      kind: z.enum(["image", "file", "audio", "video"]),
-      hash,
-    })
-    .strict(),
+  libraryReferenceSchema,
 ]);
 
 /** Descriptors carry metadata outside the graph. Phase 2 edits images only. */
@@ -51,7 +43,7 @@ export type LibraryDescriptor = Readonly<{
   dimensions?: Readonly<{ width: number; height: number }>;
   metadata: Readonly<Record<string, string | number | boolean>>;
 }>;
-/** Contract for a future committed save operation; no Phase 2 handler exists. */
+/** Committed save result contract; Phase 3 supplies the library handler. */
 export type SaveResult =
   | {
       reference: Extract<

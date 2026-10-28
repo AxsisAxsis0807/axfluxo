@@ -112,10 +112,11 @@ export type NodeContext = {
   inputs: Record<string, Value>;
   resolver: Resolver;
   outputs: Output[];
+  saveIdentity?: { rootRunId: string; runId: string; attemptId: string };
 };
 export type NodeDefinition = {
   validate?: (node: Graph["nodes"][number]) => void;
-  pure: true;
+  pure: boolean;
   required: string[] | ((node: Graph["nodes"][number]) => string[]);
   ports: {
     id: string;

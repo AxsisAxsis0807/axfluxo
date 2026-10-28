@@ -7,6 +7,7 @@ import {
   type LibraryReference,
   type RunRepository,
 } from "../../domain/workflow/execution";
+import { lookupLibrary } from "../library/repository";
 import { LIMITS } from "../../config/limits";
 import { get, type Asset } from "../storage";
 import { read } from "../workspace/db";
@@ -88,7 +89,7 @@ export async function validateImage(
 }
 export function createAssetResolver(
   repository: RunRepository = runRepository,
-  library?: LibraryLookup,
+  library: LibraryLookup = lookupLibrary,
 ): Resolver {
   const resolve: Resolver["resolve"] = async (raw, signal) => {
     signal.throwIfAborted();
