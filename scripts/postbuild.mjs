@@ -30,5 +30,10 @@ await writeFile("out/.nojekyll", "");
 
 // The new diagnostic route also has RSC files in this directory. Give static
 // hosts an index without changing the existing root/export URL conventions.
-await mkdir("out/developer/video", { recursive: true });
-await copyFile("out/developer/video.html", "out/developer/video/index.html");
+for (const route of ["video", "library"]) {
+  await mkdir(`out/developer/${route}`, { recursive: true });
+  await copyFile(
+    `out/developer/${route}.html`,
+    `out/developer/${route}/index.html`,
+  );
+}

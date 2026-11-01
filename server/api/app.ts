@@ -18,8 +18,12 @@ export interface ApiConfig {
   allowedOrigins: readonly string[];
   admissionEnabled: () => boolean;
   unitsPerFrame?: number;
+  cloud?: (
+    request: Request,
+    owner: string,
+  ) => Promise<{ status: number; body: unknown }>;
 }
-async function jsonBody(request: Request) {
+export async function jsonBody(request: Request) {
   if (
     request.headers.get("content-type")?.split(";")[0].trim() !==
     "application/json"
@@ -128,6 +132,10 @@ export function createVideoApi(
         request.headers.get("authorization"),
       );
       const path = new URL(request.url).pathname;
+      if (path.startsWith("/cloud/") && config.cloud) {
+        const result = await config.cloud(request, identity.ownerId);
+        return respond(result.status, result.body);
+      }
       const batchMatch = /^\/render-batches\/([a-fA-F0-9-]+)$/.exec(path);
       const jobMatch = /^\/render-jobs\/([a-fA-F0-9-]+)\/(retry|cancel)$/.exec(
         path,

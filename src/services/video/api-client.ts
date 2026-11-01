@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cloudErrorCodes } from "../../domain/cloud-library/media";
 import {
   batchViewSchema,
   createBatchSchema,
@@ -180,12 +181,24 @@ export function createVideoApiClient(options: {
               : response.status === 503 || response.status === 429
                 ? "held"
                 : "failed";
+        let safeCode: string | undefined;
+        try {
+          const parsed = z
+            .strictObject({
+              error: z.strictObject({ code: z.enum(cloudErrorCodes) }),
+            })
+            .safeParse(await response.json());
+          if (parsed.success) safeCode = parsed.data.error.code;
+        } catch {
+          /* Raw errors stay private. */
+        }
         // Raw backend bodies can contain secrets if a proxy misbehaves; never expose them to UI/logs.
         return {
           ok: false,
           state,
           code:
-            response.status === 409 ? "CONFLICT" : `HTTP_${response.status}`,
+            safeCode ??
+            (response.status === 409 ? "CONFLICT" : `HTTP_${response.status}`),
         };
       }
       const value = schema.safeParse(await response.json());
@@ -221,6 +234,7 @@ export function createVideoApiClient(options: {
     }
   }
   return {
+    request,
     me: () => request("/v1/developer/me", developerMeSchema),
     createBatch: (snapshot: FnfSnapshot, key: string) => {
       const parsed = createBatchSchema.safeParse({ snapshot });

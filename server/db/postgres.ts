@@ -3,6 +3,7 @@ import type { Database } from "./database";
 /** A dedicated non-superuser login inherits axfluxo_video_api. No service-role/browser key. */
 export function postgresDatabase(
   config: PoolConfig,
+  role: "axfluxo_video_api" | "axfluxo_video_probe" = "axfluxo_video_api",
 ): Database & { close(): Promise<void> } {
   const pool = new Pool({
     ...config,
@@ -19,7 +20,11 @@ export function postgresDatabase(
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-        await client.query("SET LOCAL ROLE axfluxo_video_api");
+        await client.query(
+          role === "axfluxo_video_probe"
+            ? "SET LOCAL ROLE axfluxo_video_probe"
+            : "SET LOCAL ROLE axfluxo_video_api",
+        );
         const result = await work({
           query: (text, values) => client.query(text, values),
         });

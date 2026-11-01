@@ -9,9 +9,13 @@
     "start": "node ../work/video-server/api.mjs",
     "test": "vitest run --root .. server/tests",
     "dev": "tsx api/main.ts",
-    "build": "esbuild api/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/api.mjs"
+    "build": "esbuild api/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/api.mjs",
+    "build:probe": "esbuild worker/probe/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/probe.mjs",
+    "probe": "node ../work/video-server/probe.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1161.0",
+    "@aws-sdk/s3-request-presigner": "3.1161.0",
     "jose": "6.2.14",
     "pg": "8.23.1",
     "zod": "4.6.7"

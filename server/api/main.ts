@@ -4,6 +4,8 @@ import { Readable } from "node:stream";
 import { postgresDatabase } from "../db/postgres";
 import { createVideoApi } from "./app";
 import { supabaseVerifier } from "./auth";
+import { cloudRouter } from "./assets/router";
+import { cloudConfiguration } from "../storage/config";
 import { serverConfig } from "./config";
 function start() {
   const config = serverConfig(process.env);
@@ -14,6 +16,7 @@ function start() {
   const handler = createVideoApi({
     ...config,
     db,
+    cloud: cloudRouter({ db, ...cloudConfiguration(process.env) }),
     verify: supabaseVerifier(config.issuer, config.audience),
   });
   const server = createServer(async (incoming, outgoing) => {

@@ -1,8 +1,9 @@
 import { PGlite } from "@electric-sql/pglite";
 import { Pool } from "pg";
 import { postgresDatabase } from "../db/postgres";
-import type { Sql } from "../db/database";
+import type { Database, Sql } from "../db/database";
 export interface TestEngine extends Sql {
+  asRole(role: "axfluxo_video_api" | "axfluxo_video_probe"): Database;
   exec(text: string): Promise<unknown>;
   transaction<T>(work: (sql: Sql) => Promise<T>): Promise<T>;
   close(): Promise<void>;
@@ -19,6 +20,17 @@ export function testEngine(directory: string): TestEngine {
         db.transaction((tx) =>
           work({ query: (text, values) => tx.query(text, values) }),
         ),
+      asRole: (role) => ({
+        transaction: (work) =>
+          db.transaction(async (tx) => {
+            await tx.query(
+              role === "axfluxo_video_probe"
+                ? "SET LOCAL ROLE axfluxo_video_probe"
+                : "SET LOCAL ROLE axfluxo_video_api",
+            );
+            return work({ query: (text, values) => tx.query(text, values) });
+          }),
+      }),
       close: () => db.close(),
     };
   }
@@ -32,12 +44,15 @@ export function testEngine(directory: string): TestEngine {
     throw new Error("Only a dedicated loopback test database is allowed");
   const pool = new Pool({ connectionString, max: 8 });
   const runtime = postgresDatabase({ connectionString });
+  const probe = postgresDatabase({ connectionString }, "axfluxo_video_probe");
   return {
+    asRole: (role) => (role === "axfluxo_video_probe" ? probe : runtime),
     query: (text, values) => pool.query(text, values),
     exec: (text) => pool.query(text),
     transaction: (work) => runtime.transaction(work),
     close: async () => {
       await runtime.close();
+      await probe.close();
       await pool.end();
     },
   };
