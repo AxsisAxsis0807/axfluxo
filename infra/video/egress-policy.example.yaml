@@ -1,0 +1,36 @@
+# REVIEW ONLY. Cilium policy for an EXISTING runtime; never applied by this repo.
+# Replace both exact FQDNs using the approved DB and R2 configuration.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: axfluxo-video-render-egress
+spec:
+  endpointSelector:
+    matchLabels:
+      app: axfluxo-video-render
+  ingress: []
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s:k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+          rules:
+            dns:
+              - matchName: db.example.invalid
+              - matchName: account.r2.cloudflarestorage.com
+    - toFQDNs:
+        - matchName: db.example.invalid
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    - toFQDNs:
+        - matchName: account.r2.cloudflarestorage.com
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

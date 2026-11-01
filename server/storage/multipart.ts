@@ -1,5 +1,12 @@
 export type StoredPart = { number: number; size: number; etag: string };
 export interface MultipartStorage {
+  putRender?(
+    key: string,
+    path: string,
+    size: number,
+    mime: string,
+    sha256: string,
+  ): Promise<void>;
   putDerived?(
     key: string,
     path: string,

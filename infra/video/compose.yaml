@@ -1,0 +1,30 @@
+# Review-only local/runtime template. Do not use up/deploy against production.
+services:
+  render:
+    image: axfluxo-video-render:v4
+    user: "1000:1000"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 2
+    mem_limit: 4g
+    memswap_limit: 4g
+    pids_limit: 128
+    stop_grace_period: 25h
+    restart: "no" # OOM/disk faults require operator inspection; no restart loop.
+    environment:
+      VIDEO_RENDER_ENABLED: "false"
+      VIDEO_RENDER_DISK: /work
+      VIDEO_RENDER_MAX_WORK_BYTES: "21474836480"
+      VIDEO_RENDER_MIN_FREE_BYTES: "536870912"
+      # Supply DB/R2 secrets server-side via the existing approved secret injector.
+    volumes:
+      - type: bind
+        source: ${VIDEO_RENDER_HOST_DISK:?existing seekable disk required}
+        target: /work
+    tmpfs: [/tmp:size=64m, noexec, nosuid, nodev]
+    networks: [isolated]
+networks:
+  isolated:
+    internal: true # Fail closed: no Internet route. See README before enabling egress.

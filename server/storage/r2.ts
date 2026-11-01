@@ -49,6 +49,85 @@ export function r2Storage(config: {
     );
   };
   return {
+    async putRender(key, path, size, mime, sha256) {
+      if (
+        !/^render-(staging|outputs)\/[a-f0-9-]+\/[a-f0-9-]+\/[a-f0-9-]+\.mp4$/.test(
+          key,
+        )
+      )
+        throw new Error("Invalid render key");
+      if (size <= 5 * 1024 ** 3) {
+        await client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: createReadStream(path),
+            ContentLength: size,
+            ContentType: mime,
+            IfNoneMatch: "*",
+            Metadata: { sha256 },
+          }),
+        );
+        return;
+      }
+      const partSize = Math.max(
+        16 * 1024 ** 2,
+        Math.ceil(size / 10000 / 1024 ** 2) * 1024 ** 2,
+      );
+      if (partSize > 5 * 1024 ** 3 || size > 5 * 1024 ** 4)
+        throw new Error("Render object too large");
+      const upload = await client.send(
+        new CreateMultipartUploadCommand({
+          Bucket: bucket,
+          Key: key,
+          ContentType: mime,
+          Metadata: { sha256 },
+        }),
+      );
+      if (!upload.UploadId) throw new Error("Storage unavailable");
+      try {
+        const parts = [];
+        for (
+          let start = 0, number = 1;
+          start < size;
+          start += partSize, number++
+        ) {
+          const length = Math.min(partSize, size - start);
+          const p = await client.send(
+            new UploadPartCommand({
+              Bucket: bucket,
+              Key: key,
+              UploadId: upload.UploadId,
+              PartNumber: number,
+              ContentLength: length,
+              Body: createReadStream(path, { start, end: start + length - 1 }),
+            }),
+          );
+          if (!p.ETag) throw new Error("Storage unavailable");
+          parts.push({ PartNumber: number, ETag: p.ETag });
+        }
+        await client.send(
+          new CompleteMultipartUploadCommand({
+            Bucket: bucket,
+            Key: key,
+            UploadId: upload.UploadId,
+            MultipartUpload: { Parts: parts },
+            IfNoneMatch: "*",
+          }),
+        );
+      } catch (error) {
+        await client
+          .send(
+            new AbortMultipartUploadCommand({
+              Bucket: bucket,
+              Key: key,
+              UploadId: upload.UploadId,
+            }),
+          )
+          .catch(() => undefined);
+        throw error;
+      }
+    },
     async putDerived(key, path, size, mime, sha256) {
       if (!key.startsWith("derivatives/"))
         throw new Error("Immutable original");

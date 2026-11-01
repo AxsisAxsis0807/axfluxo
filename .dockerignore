@@ -1,0 +1,15 @@
+**
+!package.json
+!package-lock.json
+!server/
+!server/**
+!src/
+!src/domain/
+!src/domain/**
+!src/config/
+!src/config/**
+!infra/
+!infra/video/
+!infra/video/Dockerfile
+server/node_modules
+server/tests

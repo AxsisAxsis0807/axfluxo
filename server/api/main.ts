@@ -6,6 +6,7 @@ import { createVideoApi } from "./app";
 import { supabaseVerifier } from "./auth";
 import { cloudRouter } from "./assets/router";
 import { cloudConfiguration } from "../storage/config";
+import { renderRouter } from "./render";
 import { serverConfig } from "./config";
 function start() {
   const config = serverConfig(process.env);
@@ -13,10 +14,17 @@ function start() {
     connectionString: config.databaseUrl,
     ssl: config.production ? { rejectUnauthorized: true } : undefined,
   });
+  const cloud = cloudConfiguration(process.env);
   const handler = createVideoApi({
     ...config,
     db,
-    cloud: cloudRouter({ db, ...cloudConfiguration(process.env) }),
+    cloud: cloudRouter({ db, ...cloud }),
+    render: renderRouter({
+      db,
+      storage: cloud.storage,
+      enabled: config.admissionEnabled,
+      unitsPerFrame: config.unitsPerFrame,
+    }),
     verify: supabaseVerifier(config.issuer, config.audience),
   });
   const server = createServer(async (incoming, outgoing) => {

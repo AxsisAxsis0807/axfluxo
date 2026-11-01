@@ -18,6 +18,10 @@ export interface ApiConfig {
   allowedOrigins: readonly string[];
   admissionEnabled: () => boolean;
   unitsPerFrame?: number;
+  render?: (
+    request: Request,
+    owner: string,
+  ) => Promise<{ status: number; body: unknown }>;
   cloud?: (
     request: Request,
     owner: string,
@@ -134,6 +138,15 @@ export function createVideoApi(
       const path = new URL(request.url).pathname;
       if (path.startsWith("/cloud/") && config.cloud) {
         const result = await config.cloud(request, identity.ownerId);
+        return respond(result.status, result.body);
+      }
+      if (
+        config.render &&
+        (path === "/render-all-versions" ||
+          /^\/render-jobs\/[^/]+\/progress$/.test(path) ||
+          path.startsWith("/render-outputs/"))
+      ) {
+        const result = await config.render(request, identity.ownerId);
         return respond(result.status, result.body);
       }
       const batchMatch = /^\/render-batches\/([a-fA-F0-9-]+)$/.exec(path);
