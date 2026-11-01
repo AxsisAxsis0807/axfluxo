@@ -1,4 +1,10 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import {
+  readdir,
+  readFile,
+  writeFile,
+  copyFile,
+  mkdir,
+} from "node:fs/promises";
 import { join } from "node:path";
 const base = process.env.NEXT_PUBLIC_BASE_PATH || "";
 if (base && !/^\/[A-Za-z0-9_-]+$/.test(base))
@@ -21,3 +27,8 @@ async function walk(dir) {
 }
 await walk("out");
 await writeFile("out/.nojekyll", "");
+
+// The new diagnostic route also has RSC files in this directory. Give static
+// hosts an index without changing the existing root/export URL conventions.
+await mkdir("out/developer/video", { recursive: true });
+await copyFile("out/developer/video.html", "out/developer/video/index.html");

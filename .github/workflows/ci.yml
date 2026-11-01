@@ -24,7 +24,8 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:video:browser
       - run: |
           npm start > /tmp/axfluxo-server.log 2>&1 &
           for attempt in $(seq 1 30); do

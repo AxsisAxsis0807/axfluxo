@@ -1,0 +1,25 @@
+{
+  "name": "axfluxo-video-server",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "start": "node ../work/video-server/api.mjs",
+    "test": "vitest run --root .. server/tests",
+    "dev": "tsx api/main.ts",
+    "build": "esbuild api/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/api.mjs"
+  },
+  "dependencies": {
+    "jose": "6.2.14",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.14",
+    "@types/pg": "8.23.1",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15"
+  }
+}
