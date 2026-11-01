@@ -40,11 +40,15 @@ export function VideoPreview({
   document,
   onDocumentChange,
   resolve,
+  overlay,
+  onTimeChange,
 }: {
   mode: "all-versions" | "fnf";
   document: AllVersionsDocument;
   onDocumentChange: (document: AllVersionsDocument) => void;
   resolve: PreviewResolver;
+  overlay?: import("react").ReactNode;
+  onTimeChange?: (us: number) => void;
 }) {
   const video = useRef<HTMLVideoElement>(null),
     controller = useRef<PlaybackController | null>(null),
@@ -60,6 +64,9 @@ export function VideoPreview({
     [waveform, setWaveform] = useState<Waveform | undefined>(),
     [retry, setRetry] = useState(0),
     [ranges, setRanges] = useState<PreviewRange[]>([]);
+  useEffect(() => {
+    onTimeChange?.(current);
+  }, [current, onTimeChange]);
   const duration = document.clips.reduce(
       (n, c) => n + c.interval.endUs - c.interval.startUs,
       0,
@@ -303,6 +310,7 @@ export function VideoPreview({
     <section aria-label="共通動画preview">
       <div
         style={{
+          position: "relative",
           aspectRatio: mode === "all-versions" ? "16 / 9" : "9 / 16",
           maxHeight: "60dvh",
           maxWidth: "100%",
@@ -330,6 +338,18 @@ export function VideoPreview({
             else setError("PLAYBACK_FAILED");
           }}
         />
+        {overlay && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              overflow: "hidden",
+            }}
+          >
+            {overlay}
+          </div>
+        )}
       </div>
       {error && <p role="alert">{previewMessages[error]}</p>}
       <p>1frame操作は出力60fps基準です。元映像のPTS間隔は保持されます。</p>

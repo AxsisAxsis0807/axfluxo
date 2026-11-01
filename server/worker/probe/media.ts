@@ -40,6 +40,11 @@ export async function probeMedia(
     header.toString("ascii", 8, 12) === "WAVE"
   )
     mime = "audio/wav";
+  else if (
+    header.toString("ascii", 0, 3) === "ID3" ||
+    (header[0] === 255 && (header[1] & 224) === 224)
+  )
+    mime = "audio/mpeg";
   else if (header.toString("ascii", 4, 8) === "ftyp")
     mime =
       header.toString("ascii", 8, 12) === "qt  "
@@ -48,6 +53,7 @@ export async function probeMedia(
   else if (header.subarray(0, 4).equals(Buffer.from([26, 69, 223, 163])))
     mime = "video/webm";
   else if (header.toString("ascii", 0, 4) === "OggS") mime = "audio/ogg";
+  if (mime === "video/mp4" && declared === "audio/mp4") mime = "audio/mp4";
   if (!mime) throw new ApiError(422, "CORRUPT_MEDIA");
   if (mime !== declared) throw new ApiError(422, "MIME_MISMATCH");
   const text = await new Promise<string>((resolve, reject) => {
@@ -119,6 +125,8 @@ export async function probeMedia(
       : mime.startsWith("audio/")
         ? "audio"
         : "video";
+  if (mime === "audio/mpeg" && audio?.codec_name !== "mp3")
+    throw new ApiError(422, "MIME_MISMATCH");
   if (
     !streams.length ||
     (kind !== "audio" && !video) ||
@@ -132,6 +140,7 @@ export async function probeMedia(
     "vp9",
     "av1",
     "aac",
+    "mp3",
     "opus",
     "vorbis",
     "pcm_s16le",

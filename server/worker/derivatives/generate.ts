@@ -94,7 +94,9 @@ export async function generateMedia(
 ) {
   const original = await inspect(source),
     video = original.streams.find((s) => s.codec_type === "video");
-  if (!video) throw new Error("PREVIEW_FAILED");
+  const audioOnly = !video;
+  if (audioOnly && !original.streams.some((s) => s.codec_type === "audio"))
+    throw new Error("PREVIEW_FAILED");
   const proxy = join(dir, "proxy.mp4"),
     thumbnail = join(dir, "thumbnail.jpg"),
     wave = join(dir, "waveform.json");
@@ -104,8 +106,16 @@ export async function generateMedia(
       "-start_at_zero",
       "-i",
       source,
+      ...(audioOnly
+        ? [
+            "-f",
+            "lavfi",
+            "-i",
+            `color=c=black:s=160x90:r=1:d=${reference.durationUs / 1e6}`,
+          ]
+        : []),
       "-map",
-      "0:v:0",
+      audioOnly ? "1:v:0" : "0:v:0",
       "-map",
       "0:a:0?",
       "-map_metadata",
@@ -148,7 +158,7 @@ export async function generateMedia(
   const output = await inspect(proxy),
     v = output.streams.find((s) => s.codec_type === "video")!;
   const sourceFirstPtsUs = decimalUs(
-      original.format.start_time ?? video.start_time ?? "0",
+      original.format.start_time ?? video?.start_time ?? "0",
     ),
     proxyFirstPtsUs = decimalUs(
       output.format.start_time ?? v.start_time ?? "0",
@@ -244,7 +254,7 @@ export async function generateMedia(
       })),
     }),
   );
-  const [num, den] = (video.avg_frame_rate ?? "60/1").split("/").map(Number);
+  const [num, den] = (video?.avg_frame_rate ?? "60/1").split("/").map(Number);
   return {
     files: [
       { kind: "proxy", path: proxy, mime: "video/mp4" },
@@ -259,12 +269,14 @@ export async function generateMedia(
       width: v.width!,
       height: v.height!,
       rotationDegrees:
-        video.side_data_list?.find((s) => s.rotation !== undefined)?.rotation ??
-        0,
+        video?.side_data_list?.find((s) => s.rotation !== undefined)
+          ?.rotation ?? 0,
       mapping: {
         sourceFirstPtsUs,
         proxyFirstPtsUs,
-        sourceTimeBase: video.time_base,
+        sourceTimeBase:
+          video?.time_base ??
+          original.streams.find((s) => s.codec_type === "audio")!.time_base,
         proxyTimeBase: v.time_base,
       },
       rate: { numerator: num || 60, denominator: den || 1 },

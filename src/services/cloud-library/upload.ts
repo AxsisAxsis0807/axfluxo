@@ -86,7 +86,10 @@ export function removeResume(storage: ResumeStorage, record: ResumeRecord) {
   storage.removeItem(prefix + record.ownerId + ":" + record.key);
 }
 export function value<T>(result: ApiResult<T>): T {
-  if (!result.ok) throw new UploadError(result.state === "auth-expired" ? "AUTH_EXPIRED" : result.code);
+  if (!result.ok)
+    throw new UploadError(
+      result.state === "auth-expired" ? "AUTH_EXPIRED" : result.code,
+    );
   return result.data;
 }
 /** Explicit selection only. Never accepts a legacy LibraryRef or edits any existing DB. */
@@ -117,7 +120,24 @@ export async function uploadFile(options: {
       folderId: options.folderId,
       name: file.name,
       size: file.size,
-      mime: file.type,
+      mime: ["audio/x-m4a", "audio/m4a"].includes(file.type)
+        ? "audio/mp4"
+        : ["audio/x-wav", "audio/wave", "audio/vnd.wave"].includes(file.type)
+          ? "audio/wav"
+          : file.type === "audio/mp3"
+            ? "audio/mpeg"
+            : file.type ||
+              (/\.mp3$/i.test(file.name)
+                ? "audio/mpeg"
+                : /\.m4a$/i.test(file.name)
+                  ? "audio/mp4"
+                  : /\.wav$/i.test(file.name)
+                    ? "audio/wav"
+                    : /\.mp4$/i.test(file.name)
+                      ? "video/mp4"
+                      : /\.mov$/i.test(file.name)
+                        ? "video/quicktime"
+                        : file.type),
       sha256: full.sha256,
     }),
   };

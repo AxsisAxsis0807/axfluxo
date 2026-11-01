@@ -27,8 +27,10 @@ type Folder = {
 };
 export default function CloudLibrary({
   client: injected,
+  onSelect,
 }: {
   client?: CloudClient;
+  onSelect?: (asset: CloudAsset) => void;
 }) {
   const api = useMemo(() => {
     if (injected) return injected;
@@ -322,6 +324,11 @@ export default function CloudLibrary({
           <ul>
             {items.map((a) => (
               <li key={a.id}>
+                {onSelect && !a.deleted && (
+                  <button style={{ minHeight: 44 }} onClick={() => onSelect(a)}>
+                    使用：{a.name}
+                  </button>
+                )}
                 <span>
                   {a.name}（{a.mime}・{a.size} bytes）
                 </span>
@@ -407,7 +414,7 @@ export default function CloudLibrary({
             ref={fileInput}
             aria-label="クラウドへ転送する素材"
             type="file"
-            accept="video/mp4,video/quicktime,video/webm,audio/wav,audio/ogg,image/png,image/jpeg,image/webp"
+            accept="video/mp4,video/quicktime,video/webm,audio/wav,audio/mpeg,audio/mp4,audio/ogg,image/png,image/jpeg,image/webp"
             disabled={busy}
             onChange={(e) => {
               const file = e.target.files?.[0];

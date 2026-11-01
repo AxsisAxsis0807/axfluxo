@@ -39,6 +39,8 @@ export const mimeSchema = z.enum([
   "video/quicktime",
   "video/webm",
   "audio/wav",
+  "audio/mpeg",
+  "audio/mp4",
   "audio/ogg",
   "image/png",
   "image/jpeg",

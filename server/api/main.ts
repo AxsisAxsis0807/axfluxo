@@ -6,6 +6,7 @@ import { createVideoApi } from "./app";
 import { supabaseVerifier } from "./auth";
 import { cloudRouter } from "./assets/router";
 import { cloudConfiguration } from "../storage/config";
+import { projectsRouter } from "./projects/router";
 import { renderRouter } from "./render";
 import { serverConfig } from "./config";
 function start() {
@@ -19,6 +20,11 @@ function start() {
     ...config,
     db,
     cloud: cloudRouter({ db, ...cloud }),
+    projects: projectsRouter({
+      db,
+      enabled: config.admissionEnabled,
+      unitsPerFrame: config.unitsPerFrame,
+    }),
     render: renderRouter({
       db,
       storage: cloud.storage,

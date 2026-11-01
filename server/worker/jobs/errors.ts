@@ -9,6 +9,8 @@ export const renderCodes = [
   "RESOURCE_LIMIT",
   "QUOTA_EXCEEDED",
   "DEVELOPER_REVOKED",
+  "FONT_UNAVAILABLE",
+  "FONT_GLYPH_UNSUPPORTED",
   "INPUT_MISSING",
   "INPUT_CORRUPT",
   "INPUT_UNSUPPORTED",
@@ -27,6 +29,7 @@ export class RenderError extends Error {
 export function codeOf(error: unknown): RenderCode {
   if (error instanceof RenderError) return error.code;
   const code = (error as { code?: string })?.code;
+  if (renderCodes.includes(code as RenderCode)) return code as RenderCode;
   if (code === "ENOSPC" || code === "EDQUOT") return "DISK_FULL";
   if (code === "ENOMEM") return "OUT_OF_MEMORY";
   if (
@@ -58,6 +61,7 @@ export const heldCode = (code: RenderCode) =>
   [
     "STORAGE_REJECTED",
     "WORKER_LOST",
+    "FONT_UNAVAILABLE",
     "DISK_FULL",
     "OUT_OF_MEMORY",
     "RESOURCE_LIMIT",

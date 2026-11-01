@@ -20,6 +20,7 @@ export function renderPlan(
   index: number,
   mode: RenderMode = "fnf",
   segmentFrames = 1800,
+  projectMode = false,
 ) {
   const snapshot = fnfSnapshotSchema.parse(input);
   if (
@@ -63,7 +64,11 @@ export function renderPlan(
         outputStartFrame: p.outputStartFrame + n,
       });
   });
-  if (!pieces.length || end <= start || segments.length > 100000)
+  if (
+    !pieces.length ||
+    end <= start ||
+    (!projectMode && segments.length > 100000)
+  )
     throw new RenderError("RESOURCE_LIMIT");
   const dimensions =
     mode === "all-versions"

@@ -1,3 +1,7 @@
+import {
+  allVersionsProjectSchema,
+  type AllVersionsProject,
+} from "../../../src/domain/video/all-versions";
 import type { Database, Sql, Row } from "../../db/database";
 import {
   fnfSnapshotSchema,
@@ -7,6 +11,7 @@ import { digest } from "../../api/jobs";
 import { RenderError, heldCode, retryDelay, type RenderCode } from "./errors";
 import type { RenderMode } from "../render/plan";
 export type Claim = {
+  project?: AllVersionsProject;
   owner: string;
   job: string;
   batch: string;
@@ -168,15 +173,16 @@ export async function claim(
       await terminate(sql, owner, job, "failed", "INPUT_CORRUPT");
       return null;
     }
-    const mode =
-      (
-        await sql.query(
-          "SELECT mode FROM axfluxo_video.render_batch_options WHERE owner_id=$1 AND batch_id=$2",
-          [owner, row.batch_id],
-        )
-      ).rows[0]?.mode === "all-versions"
-        ? "all-versions"
-        : "fnf";
+    const option = (
+      await sql.query(
+        "SELECT mode,to_jsonb(o)->'project' AS project FROM axfluxo_video.render_batch_options o WHERE owner_id=$1 AND batch_id=$2",
+        [owner, row.batch_id],
+      )
+    ).rows[0];
+    const project = option?.project
+      ? allVersionsProjectSchema.parse(option.project)
+      : undefined;
+    const mode = option?.mode === "all-versions" ? "all-versions" : "fnf";
     const token = String(
       (
         await sql.query(
@@ -206,6 +212,7 @@ export async function claim(
       snapshot: parsed.data,
       rangeIndex: Number(row.range_index),
       mode,
+      ...(project ? { project } : {}),
     };
   });
 }

@@ -18,6 +18,10 @@ export interface ApiConfig {
   allowedOrigins: readonly string[];
   admissionEnabled: () => boolean;
   unitsPerFrame?: number;
+  projects?: (
+    request: Request,
+    owner: string,
+  ) => Promise<{ status: number; body: unknown }>;
   render?: (
     request: Request,
     owner: string,
@@ -120,14 +124,20 @@ export function createVideoApi(
           !["GET", "POST"].includes(method) ||
           requestedHeaders.some(
             (v) =>
-              !["authorization", "content-type", "idempotency-key"].includes(v),
+              ![
+                "authorization",
+                "content-type",
+                "idempotency-key",
+                "if-match",
+                "x-project-owner",
+              ].includes(v),
           )
         )
           throw new ApiError(403, "ORIGIN_NOT_ALLOWED");
         headers.set("access-control-allow-methods", "GET, POST, OPTIONS");
         headers.set(
           "access-control-allow-headers",
-          "Authorization, Content-Type, Idempotency-Key",
+          "Authorization, Content-Type, Idempotency-Key, If-Match, X-Project-Owner",
         );
         headers.delete("content-type");
         return new Response(null, { status: 204, headers });
@@ -147,6 +157,10 @@ export function createVideoApi(
           path.startsWith("/render-outputs/"))
       ) {
         const result = await config.render(request, identity.ownerId);
+        return respond(result.status, result.body);
+      }
+      if (config.projects && path.startsWith("/projects/")) {
+        const result = await config.projects(request, identity.ownerId);
         return respond(result.status, result.body);
       }
       const batchMatch = /^\/render-batches\/([a-fA-F0-9-]+)$/.exec(path);

@@ -22,7 +22,8 @@ export async function previewAccess(
       )
     ).rows[0];
     if (!version) throw new ApiError(404, "SOURCE_MISSING");
-    if (version.kind !== "video") throw new ApiError(422, "PREVIEW_FAILED");
+    if (!["video", "audio"].includes(String(version.kind)))
+      throw new ApiError(422, "PREVIEW_FAILED");
     let job = (
       await sql.query(
         "SELECT * FROM axfluxo_video.media_preview_jobs WHERE owner_id=$1 AND version_id=$2",

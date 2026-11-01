@@ -136,7 +136,7 @@ export function canCopyAudio(plan: RenderPlan, inputs: Input[]) {
     ) <= 21
   );
 }
-function audioFilter(p: Piece, input: Input, i: number) {
+function audioFilter(p: Piece, input: Input, i: number, preserveMono = false) {
   const a = input.info.streams.find((t) => t.codec_type === "audio");
   const samples = p.frames * 800,
     label = `a${i}`;
@@ -149,7 +149,7 @@ function audioFilter(p: Piece, input: Input, i: number) {
     Math.round(((first - p.sourceStartUs) * 48000) / 1e6),
   );
   // Trim against common format origin; preserve audio/video lead, insert silence only where absent.
-  return `[${i + 1}:a:0]asetpts=PTS-(${seconds(origin)})/TB,atrim=start=${seconds(p.sourceStartUs)}:end=${seconds(Math.min(p.sourceEndUs, p.sourceStartUs + (p.frames * 1e6) / 60))},asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo${delay ? `,adelay=${delay}S:all=1` : ""},apad=whole_len=${samples},atrim=end_sample=${samples}[${label}]`;
+  return `[${i + 1}:a:0]asetpts=PTS-(${seconds(origin)})/TB,atrim=start=${seconds(p.sourceStartUs)}:end=${seconds(Math.min(p.sourceEndUs, p.sourceStartUs + (p.frames * 1e6) / 60))},asetpts=PTS-STARTPTS${preserveMono && a.channels === 1 ? ",pan=stereo|c0=c0|c1=c0" : ""},aformat=sample_rates=48000:channel_layouts=stereo${delay ? `,adelay=${delay}S:all=1` : ""},apad=whole_len=${samples},atrim=end_sample=${samples}[${label}]`;
 }
 export async function assemble(
   plan: RenderPlan,
@@ -157,6 +157,7 @@ export async function assemble(
   segments: string[],
   directory: string,
   signal?: AbortSignal,
+  preciseMovieTime = false,
 ) {
   const list = join(directory, "segments.txt"),
     video = join(directory, "joined.mp4"),
@@ -218,7 +219,7 @@ export async function assemble(
     return { path: output, audioMode: "copy" as const };
   }
   const filters = plan.pieces.map((p, i) =>
-    audioFilter(p, inputs[p.clipIndex], i),
+    audioFilter(p, inputs[p.clipIndex], i, preciseMovieTime),
   );
   filters.push(
     `${plan.pieces.map((_, i) => `[a${i}]`).join("")}concat=n=${plan.pieces.length}:v=0:a=1[aout]`,
@@ -262,6 +263,7 @@ export async function assemble(
       "-1",
       "-movflags",
       "+faststart",
+      ...(preciseMovieTime ? ["-movie_timescale", "240000"] : []),
       "-y",
       output,
     ],

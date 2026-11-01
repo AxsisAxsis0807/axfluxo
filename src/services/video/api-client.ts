@@ -1,3 +1,4 @@
+import { projectCodes } from "../../domain/video/all-versions";
 import { z } from "zod";
 import { previewCodeSchema } from "../../domain/video/preview";
 import { cloudErrorCodes } from "../../domain/cloud-library/media";
@@ -37,7 +38,11 @@ export const videoStateMessage: Record<VideoState, string> = {
 export type ApiResult<T> =
   | { ok: true; state: VideoState; data: T }
   | { ok: false; state: VideoState; code: string };
-type Session = { access_token: string; expires_at?: number };
+type Session = {
+  access_token: string;
+  expires_at?: number;
+  user?: { id: string };
+};
 export interface VideoSessionSource {
   getSession(): Promise<{ data: { session: Session | null }; error: unknown }>;
   refreshSession(): Promise<{
@@ -145,6 +150,8 @@ export function createVideoApiClient(options: {
     method = "GET",
     body?: unknown,
     key?: string,
+    ifMatch?: string,
+    projectOwner?: string,
   ): Promise<ApiResult<T>> {
     try {
       if (method === "POST" && (!key || !/^[a-zA-Z0-9._:-]{8,128}$/.test(key)))
@@ -156,6 +163,8 @@ export function createVideoApiClient(options: {
           method,
           headers: {
             Authorization: `Bearer ${accessToken}`,
+            ...(ifMatch ? { "If-Match": ifMatch } : {}),
+            ...(projectOwner ? { "X-Project-Owner": projectOwner } : {}),
             ...(serialized === undefined
               ? {}
               : {
@@ -189,6 +198,7 @@ export function createVideoApiClient(options: {
               error: z.strictObject({
                 code: z.enum([
                   ...cloudErrorCodes,
+                  ...projectCodes,
                   ...previewCodeSchema.options,
                 ]),
               }),

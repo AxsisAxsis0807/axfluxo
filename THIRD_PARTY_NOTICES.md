@@ -25,3 +25,8 @@
 
 - @noble/hashes 2.4.0 — MIT (`public/licenses/noble-hashes-LICENSE.txt`)。browserの分割SHA-256/part整合用MD5。原本の認証・重複判定はserverで実bytesのSHA-256を使用。
 - @aws-sdk/client-s3 / @aws-sdk/s3-request-presigner 3.1161.0 — Apache-2.0。serverのみ。ライセンス全文は各npm packageに含まれます。
+
+## All Versions server graphics (V5)
+
+- Aleo variable font, Google Fonts `ofl/aleo/Aleo[wght].ttf`: SIL Open Font License 1.1. Unmodified font SHA-256 `62b6cb49b7b087b341f0307ea3bc871a9690d8947691206ab025d149b8f6ed6f`; license: `public/licenses/Aleo-OFL.txt` and the bundled server asset directory. Used by the server to rasterize preview/export text; no external font service request at runtime.
+- `@napi-rs/canvas` 1.1.0 and platform package: MIT. Server only. License: `public/licenses/napi-rs-canvas-LICENSE.txt`. Existing browser renderer/dependencies are unchanged.

@@ -10,6 +10,11 @@ import {
   type Claim,
 } from "../jobs/queue";
 import { codeOf, RenderError } from "../jobs/errors";
+import {
+  projectPlan,
+  prepareGraphics,
+  encodeProjectSegment,
+} from "../templates/all-versions/render";
 import { renderPlan, RENDER_VERSION } from "./plan";
 import { probe } from "./process";
 import { encodeSegment, assemble, type Input } from "./encode";
@@ -84,12 +89,9 @@ export async function executeRender(
       });
   }, 15000);
   try {
-    const plan = renderPlan(
-      c.snapshot,
-      c.rangeIndex,
-      c.mode,
-      limits.segmentFrames,
-    );
+    const plan = c.project
+      ? projectPlan(c.project, c.snapshot, limits.segmentFrames)
+      : renderPlan(c.snapshot, c.rangeIndex, c.mode, limits.segmentFrames);
     // Encoder build changes invalidate checkpoints. Bounded textual ffmpeg version is part of plan.
     const { execFile } = await import("node:child_process");
     const version = await new Promise<string>((resolve, reject) =>
@@ -120,15 +122,16 @@ export async function executeRender(
       if (!plan.pieces.some((p) => p.clipIndex === i)) continue;
       const clip = plan.snapshot.document.clips[i],
         r = clip.source;
-      if (r.kind !== "video") throw new RenderError("INPUT_UNSUPPORTED");
+      if (r.kind !== "video" && !(c.project && r.kind === "audio"))
+        throw new RenderError("INPUT_UNSUPPORTED");
       const row = await fenced(
         db,
         c,
         async (sql) =>
           (
             await sql.query(
-              "SELECT v.* FROM axfluxo_video.media_versions v JOIN axfluxo_video.resource_versions r ON r.owner_id=v.owner_id AND r.version_id=v.id::text AND r.file_id=v.asset_id::text AND r.hash=v.hash WHERE v.owner_id=$1 AND v.id::text=$2 AND v.hash=$3 AND r.library_id=$4 AND r.file_id=$5 AND r.kind='video'",
-              [c.owner, r.versionId, r.hash, r.libraryId, r.fileId],
+              "SELECT v.* FROM axfluxo_video.media_versions v JOIN axfluxo_video.resource_versions r ON r.owner_id=v.owner_id AND r.version_id=v.id::text AND r.file_id=v.asset_id::text AND r.hash=v.hash WHERE v.owner_id=$1 AND v.id::text=$2 AND v.hash=$3 AND r.library_id=$4 AND r.file_id=$5 AND r.kind=$6",
+              [c.owner, r.versionId, r.hash, r.libraryId, r.fileId, r.kind],
             )
           ).rows[0],
       );
@@ -145,11 +148,40 @@ export async function executeRender(
       );
       const info = await probe(path, stop.signal);
       if (
-        !info.streams.some((t) => t.codec_type === "video") ||
+        !info.streams.some(
+          (t) => t.codec_type === (c.project ? "audio" : "video"),
+        ) ||
         Math.abs(decimalUs(info.format.duration) - clip.sourceDurationUs) > 1
       )
         throw new RenderError("INPUT_CORRUPT");
       inputs[i] = { path, info };
+    }
+    let graphics: Awaited<ReturnType<typeof prepareGraphics>> | undefined;
+    if (c.project) {
+      const ref = c.project.cover!;
+      const cover = await fenced(
+        db,
+        c,
+        async (sql) =>
+          (
+            await sql.query(
+              "SELECT * FROM axfluxo_video.media_versions WHERE owner_id=$1 AND id::text=$2 AND asset_id::text=$3 AND hash=$4 AND kind='image'",
+              [c.owner, ref.versionId, ref.fileId, ref.hash],
+            )
+          ).rows[0],
+      );
+      if (!cover) throw new RenderError("INPUT_MISSING");
+      await disk(Number(cover.size));
+      const path = join(dir, "cover");
+      await download(
+        storage,
+        String(cover.object_key),
+        path,
+        Number(cover.size),
+        ref.hash,
+        stop.signal,
+      );
+      graphics = await prepareGraphics(c.project, path, dir);
     }
     const paths: string[] = [];
     for (const s of plan.segments) {
@@ -194,7 +226,18 @@ export async function executeRender(
           throw new RenderError("CHECKPOINT_CORRUPT");
         }
       } else {
-        await encodeSegment(inputs[s.clipIndex], s, plan, path, stop.signal);
+        if (c.project && graphics)
+          await encodeProjectSegment(
+            c.project,
+            s,
+            plan,
+            graphics,
+            dir,
+            path,
+            stop.signal,
+          );
+        else
+          await encodeSegment(inputs[s.clipIndex], s, plan, path, stop.signal);
         const v = await validateVideo(
           path,
           { ...plan, frames: s.frames },
@@ -225,7 +268,14 @@ export async function executeRender(
       0,
     );
     await disk(segmentBytes * 2 + Math.ceil((plan.frames / 60) * 50000));
-    const result = await assemble(plan, inputs, paths, dir, stop.signal);
+    const result = await assemble(
+      plan,
+      inputs,
+      paths,
+      dir,
+      stop.signal,
+      !!c.project,
+    );
     const validation = await validateVideo(
       result.path,
       { ...plan, audio: true },
@@ -255,7 +305,17 @@ export async function executeRender(
       db,
       c,
       object,
-      { ...validation, audioMode: result.audioMode, renderer: RENDER_VERSION },
+      {
+        ...validation,
+        audioMode: result.audioMode,
+        renderer: RENDER_VERSION,
+        ...(c.project
+          ? {
+              templateRenderer: c.project.design.rendererVersion,
+              fontHash: c.project.design.fontHash,
+            }
+          : {}),
+      },
       plan.frames,
     );
     return { state: "succeeded" as const, output };
