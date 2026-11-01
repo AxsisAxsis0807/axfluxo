@@ -20,3 +20,8 @@
 - Lora: public/fonts/lora-LICENSE.txt
 
 `public/fonts/manifest.json` はfamily、weight、配布ファイル、SHA-256の対応を記録します。フォントは@fontsourceパッケージから取得したものです。アイコン・依存パッケージの配布ライセンス全文は`public/licenses/` と各npmパッケージのLICENSEにも保持されています。第三者のカバーアート、音楽アプリの画面、ユーザー添付画像は標準素材として同梱していません。
+
+動画/クラウド素材の追加依存:
+
+- @noble/hashes 2.4.0 — MIT (`public/licenses/noble-hashes-LICENSE.txt`)。browserの分割SHA-256/part整合用MD5。原本の認証・重複判定はserverで実bytesのSHA-256を使用。
+- @aws-sdk/client-s3 / @aws-sdk/s3-request-presigner 3.1161.0 — Apache-2.0。serverのみ。ライセンス全文は各npm packageに含まれます。

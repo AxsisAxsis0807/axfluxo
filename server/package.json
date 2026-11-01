@@ -11,7 +11,9 @@
     "dev": "tsx api/main.ts",
     "build": "esbuild api/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/api.mjs",
     "build:probe": "esbuild worker/probe/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/probe.mjs",
-    "probe": "node ../work/video-server/probe.mjs"
+    "probe": "node ../work/video-server/probe.mjs",
+    "build:derivatives": "esbuild worker/derivatives/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/derivatives.mjs",
+    "derivatives": "node ../work/video-server/derivatives.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1161.0",

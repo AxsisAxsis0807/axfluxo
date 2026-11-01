@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { previewInfoSchema } from "../../domain/video/preview";
 import {
   folderPageSchema,
   folderSchema,
@@ -20,6 +21,12 @@ export function cloudClient(auth: AuthenticatedApi) {
   ) => auth.request(path, schema, "POST", body, key);
   const id = z.strictObject({ id: z.uuid() });
   return {
+    preview: (version: string) =>
+      post(
+        `/cloud/versions/${encodeURIComponent(version)}/preview`,
+        previewInfoSchema,
+        {},
+      ),
     me: auth.me,
     folders: (parentId: string | null, cursor?: string) =>
       auth.request(

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { previewCodeSchema } from "../../domain/video/preview";
 import { cloudErrorCodes } from "../../domain/cloud-library/media";
 import {
   batchViewSchema,
@@ -185,7 +186,12 @@ export function createVideoApiClient(options: {
         try {
           const parsed = z
             .strictObject({
-              error: z.strictObject({ code: z.enum(cloudErrorCodes) }),
+              error: z.strictObject({
+                code: z.enum([
+                  ...cloudErrorCodes,
+                  ...previewCodeSchema.options,
+                ]),
+              }),
             })
             .safeParse(await response.json());
           if (parsed.success) safeCode = parsed.data.error.code;

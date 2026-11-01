@@ -17,6 +17,10 @@ export function cloudConfiguration(env: Record<string, string | undefined>) {
           secretAccessKey: fields[3]!,
         })
       : null,
+    previewUnitsPerSecond: env.CLOUD_PREVIEW_UNITS_PER_SECOND
+      ? Number(env.CLOUD_PREVIEW_UNITS_PER_SECOND)
+      : undefined,
+    previewEnabled: () => env.CLOUD_PREVIEW_ENABLED === "true",
     uploadsEnabled: () => env.CLOUD_UPLOADS_ENABLED === "true",
   };
 }

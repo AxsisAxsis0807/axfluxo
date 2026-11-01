@@ -365,6 +365,14 @@ export default function CloudLibrary({
                 >
                   {a.deleted ? "復元" : "ゴミ箱へ"}：{a.name}
                 </button>
+                {a.kind === "video" &&
+                  process.env.NEXT_PUBLIC_VIDEO_PREVIEW_ENABLED === "true" && (
+                    <Link
+                      href={`/developer/preview/?version=${encodeURIComponent(a.versionId)}`}
+                    >
+                      動画preview・非破壊trim：{a.name}
+                    </Link>
+                  )}
                 <button
                   disabled={busy}
                   onClick={() =>

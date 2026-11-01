@@ -86,7 +86,7 @@ export function removeResume(storage: ResumeStorage, record: ResumeRecord) {
   storage.removeItem(prefix + record.ownerId + ":" + record.key);
 }
 export function value<T>(result: ApiResult<T>): T {
-  if (!result.ok) throw new UploadError(result.code);
+  if (!result.ok) throw new UploadError(result.state === "auth-expired" ? "AUTH_EXPIRED" : result.code);
   return result.data;
 }
 /** Explicit selection only. Never accepts a legacy LibraryRef or edits any existing DB. */

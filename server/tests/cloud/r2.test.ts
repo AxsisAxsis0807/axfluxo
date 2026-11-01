@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { it, expect } from "vitest";
 import { r2Storage } from "../../storage/r2";
 import { cloudConfiguration } from "../../storage/config";
@@ -30,6 +31,20 @@ it("signs only explicit R2 operations with bound Content-MD5 and short private a
   expect(Object.keys(store)).not.toContain("deleteObject");
 });
 it("defaults new uploads disabled and never guesses credentials or creates a bucket", () => {
+  const lifecycle = JSON.parse(
+    readFileSync(
+      new URL("../../storage/policies/r2-lifecycle.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  expect(lifecycle.Rules).toEqual([
+    {
+      ID: "abort-incomplete-originals-only",
+      Status: "Enabled",
+      Filter: { Prefix: "originals/" },
+      AbortIncompleteMultipartUpload: { DaysAfterInitiation: 7 },
+    },
+  ]);
   const config = cloudConfiguration({});
   expect(config.storage).toBeNull();
   expect(config.uploadsEnabled()).toBe(false);

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { previewAccess } from "./preview";
 import {
   displayNameSchema,
   uploadStartSchema,
@@ -21,6 +22,8 @@ export function cloudRouter(config: {
   db: Database;
   storage: MultipartStorage | null;
   uploadsEnabled: () => boolean;
+  previewEnabled?: () => boolean;
+  previewUnitsPerSecond?: number;
 }) {
   const uploads = config.storage
     ? new UploadService(config.db, config.storage, config.uploadsEnabled)
@@ -113,6 +116,23 @@ export function cloudRouter(config: {
         status: 200,
         body: await scoped(config.db, owner, (sql) =>
           editAsset(sql, owner, id, edit),
+        ),
+      };
+    }
+    const previewMatch = /^\/cloud\/versions\/([^/]+)\/preview$/.exec(path);
+    if (request.method === "POST" && previewMatch) {
+      z.strictObject({}).parse(await jsonBody(request));
+      return {
+        status: 200,
+        body: await previewAccess(
+          {
+            db: config.db,
+            storage: config.storage,
+            enabled: config.previewEnabled ?? (() => false),
+            unitsPerSecond: config.previewUnitsPerSecond,
+          },
+          owner,
+          z.uuid().parse(previewMatch[1]),
         ),
       };
     }

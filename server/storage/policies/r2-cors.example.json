@@ -1,0 +1,16 @@
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["https://editor.example.com"],
+      "AllowedMethods": ["PUT", "GET", "HEAD"],
+      "AllowedHeaders": ["Content-MD5", "Content-Type", "Range"],
+      "ExposeHeaders": [
+        "ETag",
+        "Content-Range",
+        "Content-Length",
+        "Accept-Ranges"
+      ],
+      "MaxAgeSeconds": 300
+    }
+  ]
+}

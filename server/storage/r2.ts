@@ -1,5 +1,7 @@
+import { createReadStream } from "node:fs";
 import {
   S3Client,
+  PutObjectCommand,
   CreateMultipartUploadCommand,
   ListMultipartUploadsCommand,
   UploadPartCommand,
@@ -47,6 +49,21 @@ export function r2Storage(config: {
     );
   };
   return {
+    async putDerived(key, path, size, mime, sha256) {
+      if (!key.startsWith("derivatives/"))
+        throw new Error("Immutable original");
+      await client.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: createReadStream(path),
+          ContentLength: size,
+          ContentType: mime,
+          IfNoneMatch: "*",
+          Metadata: { sha256 },
+        }),
+      );
+    },
     async findUploads(key) {
       const ids: string[] = [];
       let KeyMarker: string | undefined, UploadIdMarker: string | undefined;
