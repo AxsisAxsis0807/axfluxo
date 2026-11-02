@@ -1,3 +1,4 @@
+import { fnfCodes } from "../../domain/video/fnf-showcase";
 import { projectCodes } from "../../domain/video/all-versions";
 import { z } from "zod";
 import { previewCodeSchema } from "../../domain/video/preview";
@@ -199,6 +200,7 @@ export function createVideoApiClient(options: {
                 code: z.enum([
                   ...cloudErrorCodes,
                   ...projectCodes,
+                  ...fnfCodes,
                   ...previewCodeSchema.options,
                 ]),
               }),

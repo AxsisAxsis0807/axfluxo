@@ -18,6 +18,10 @@ export interface ApiConfig {
   allowedOrigins: readonly string[];
   admissionEnabled: () => boolean;
   unitsPerFrame?: number;
+  fnf?: (
+    request: Request,
+    owner: string,
+  ) => Promise<{ status: number; body: unknown }>;
   projects?: (
     request: Request,
     owner: string,
@@ -161,6 +165,13 @@ export function createVideoApi(
       }
       if (config.projects && path.startsWith("/projects/")) {
         const result = await config.projects(request, identity.ownerId);
+        return respond(result.status, result.body);
+      }
+      if (
+        config.fnf &&
+        (path.startsWith("/fnf-showcase/") || path.startsWith("/preferences/"))
+      ) {
+        const result = await config.fnf(request, identity.ownerId);
         return respond(result.status, result.body);
       }
       const batchMatch = /^\/render-batches\/([a-fA-F0-9-]+)$/.exec(path);

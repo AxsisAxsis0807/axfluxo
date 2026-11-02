@@ -42,6 +42,11 @@ export function VideoPreview({
   resolve,
   overlay,
   onTimeChange,
+  fnfRanges,
+  onFnfRangesChange,
+  fnfAddDurationUs,
+  mediaFrame,
+  videoStyle,
 }: {
   mode: "all-versions" | "fnf";
   document: AllVersionsDocument;
@@ -49,6 +54,11 @@ export function VideoPreview({
   resolve: PreviewResolver;
   overlay?: import("react").ReactNode;
   onTimeChange?: (us: number) => void;
+  fnfRanges?: PreviewRange[];
+  onFnfRangesChange?: (ranges: PreviewRange[]) => void;
+  fnfAddDurationUs?: number;
+  mediaFrame?: (video: import("react").ReactNode) => import("react").ReactNode;
+  videoStyle?: import("react").CSSProperties;
 }) {
   const video = useRef<HTMLVideoElement>(null),
     controller = useRef<PlaybackController | null>(null),
@@ -63,7 +73,13 @@ export function VideoPreview({
     [info, setInfo] = useState<PreviewInfo | null>(null),
     [waveform, setWaveform] = useState<Waveform | undefined>(),
     [retry, setRetry] = useState(0),
-    [ranges, setRanges] = useState<PreviewRange[]>([]);
+    [localRanges, setLocalRanges] = useState<PreviewRange[]>([]);
+  const ranges = fnfRanges ?? localRanges;
+  const setRanges = (next: import("react").SetStateAction<PreviewRange[]>) => {
+    const value = typeof next === "function" ? next(ranges) : next;
+    if (onFnfRangesChange) onFnfRangesChange(value);
+    else setLocalRanges(value);
+  };
   useEffect(() => {
     onTimeChange?.(current);
   }, [current, onTimeChange]);
@@ -306,11 +322,37 @@ export function VideoPreview({
     mode === "fnf"
       ? ranges.map((r, i) => ({ ...r, label: `range ${i + 1}` }))
       : layout;
+  const mediaNode = (
+    <video
+      ref={video}
+      aria-label="動画preview"
+      playsInline
+      preload="metadata"
+      crossOrigin="anonymous"
+      poster={info?.thumbnail}
+      style={{
+        width: "100%",
+        height: "100%",
+        objectFit: "contain",
+        ...videoStyle,
+      }}
+      onLoadedData={() => {
+        failureCount.current = 0;
+      }}
+      onPlay={() => setPlaying(true)}
+      onPause={() => setPlaying(false)}
+      onError={() => {
+        if (failureCount.current++ === 0) void refresh();
+        else setError("PLAYBACK_FAILED");
+      }}
+    />
+  );
   return (
     <section aria-label="共通動画preview">
       <div
         style={{
           position: "relative",
+          overflow: "hidden",
           aspectRatio: mode === "all-versions" ? "16 / 9" : "9 / 16",
           maxHeight: "60dvh",
           maxWidth: "100%",
@@ -320,24 +362,7 @@ export function VideoPreview({
           margin: "auto",
         }}
       >
-        <video
-          ref={video}
-          aria-label="動画preview"
-          playsInline
-          preload="metadata"
-          crossOrigin="anonymous"
-          poster={info?.thumbnail}
-          style={{ width: "100%", height: "100%", objectFit: "contain" }}
-          onLoadedData={() => {
-            failureCount.current = 0;
-          }}
-          onPlay={() => setPlaying(true)}
-          onPause={() => setPlaying(false)}
-          onError={() => {
-            if (failureCount.current++ === 0) void refresh();
-            else setError("PLAYBACK_FAILED");
-          }}
-        />
+        {mediaFrame ? mediaFrame(mediaNode) : mediaNode}
         {overlay && (
           <div
             style={{
@@ -494,16 +519,22 @@ export function VideoPreview({
           <button
             style={{ minHeight: 44 }}
             onClick={() => {
-              const startUs = Math.min(
-                current,
-                Math.max(0, duration - frameTimeUs(1)),
-              );
+              if (fnfAddDurationUs && current >= duration) {
+                invalid();
+                return;
+              }
+              const startUs = fnfAddDurationUs
+                ? current
+                : Math.min(current, Math.max(0, duration - frameTimeUs(1)));
               setRanges((old) => [
                 ...old,
                 {
                   id: crypto.randomUUID(),
                   startUs,
-                  endUs: Math.min(duration, startUs + 1_000_000),
+                  endUs: Math.min(
+                    duration,
+                    startUs + (fnfAddDurationUs ?? 1_000_000),
+                  ),
                   name: "",
                 },
               ]);

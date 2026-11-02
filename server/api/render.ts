@@ -93,7 +93,7 @@ export function renderRouter(config: {
       }
       const row = (
         await sql.query(
-          "SELECT o.object_key,o.hash,o.size FROM axfluxo_video.render_artifacts a JOIN axfluxo_video.render_objects o ON o.owner_id=a.owner_id AND o.id=a.object_id JOIN axfluxo_video.render_outputs r ON r.owner_id=a.owner_id AND r.id=a.output_id JOIN axfluxo_video.render_jobs j ON j.owner_id=r.owner_id AND j.id=r.job_id WHERE a.owner_id=$1 AND a.output_id=$2 AND o.ready AND j.state='succeeded'",
+          "SELECT o.object_key,o.hash,o.size,CASE WHEN b.snapshot->>'kind'='fnf-showcase-snapshot' THEN b.snapshot->'names'->>j.range_index ELSE 'output.mp4' END AS filename FROM axfluxo_video.render_artifacts a JOIN axfluxo_video.render_objects o ON o.owner_id=a.owner_id AND o.id=a.object_id JOIN axfluxo_video.render_outputs r ON r.owner_id=a.owner_id AND r.id=a.output_id JOIN axfluxo_video.render_jobs j ON j.owner_id=r.owner_id AND j.id=r.job_id JOIN axfluxo_video.render_batches b ON b.owner_id=j.owner_id AND b.id=j.batch_id WHERE a.owner_id=$1 AND a.output_id=$2 AND o.ready AND j.state='succeeded'",
           [owner, id],
         )
       ).rows[0];
@@ -107,7 +107,7 @@ export function renderRouter(config: {
       signed = await config.storage.access(
         String(result.body.object_key),
         "video/mp4",
-        "output.mp4",
+        String(result.body.filename ?? "output.mp4"),
       );
     } catch {
       throw new ApiError(503, "STORAGE_UNAVAILABLE");

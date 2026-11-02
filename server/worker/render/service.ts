@@ -15,6 +15,12 @@ import {
   prepareGraphics,
   encodeProjectSegment,
 } from "../templates/all-versions/render";
+import {
+  isFnfShowcase,
+  FNF_RENDERER,
+  FNF_FONT_HASH,
+} from "../../../src/domain/video/fnf-showcase";
+import { prepareFnf, encodeFnfSegment } from "../templates/fnf-showcase/render";
 import { renderPlan, RENDER_VERSION } from "./plan";
 import { probe } from "./process";
 import { encodeSegment, assemble, type Input } from "./encode";
@@ -89,6 +95,7 @@ export async function executeRender(
       });
   }, 15000);
   try {
+    const showcase = isFnfShowcase(c.snapshot) ? c.snapshot : undefined;
     const plan = c.project
       ? projectPlan(c.project, c.snapshot, limits.segmentFrames)
       : renderPlan(c.snapshot, c.rangeIndex, c.mode, limits.segmentFrames);
@@ -114,6 +121,7 @@ export async function executeRender(
       plan: plan.hash,
       version: RENDER_VERSION,
       encoder: version,
+      ...(showcase ? { showcase } : {}),
     });
     await progress(db, c, 0, plan.frames);
     const inputs: Input[] = [];
@@ -183,6 +191,9 @@ export async function executeRender(
       );
       graphics = await prepareGraphics(c.project, path, dir);
     }
+    const fnfGraphics = showcase
+      ? await prepareFnf(showcase.preferences, dir)
+      : undefined;
     const paths: string[] = [];
     for (const s of plan.segments) {
       stop.signal.throwIfAborted();
@@ -236,6 +247,16 @@ export async function executeRender(
             path,
             stop.signal,
           );
+        else if (showcase && fnfGraphics)
+          await encodeFnfSegment(
+            inputs[s.clipIndex],
+            s,
+            plan,
+            showcase.preferences,
+            fnfGraphics,
+            path,
+            stop.signal,
+          );
         else
           await encodeSegment(inputs[s.clipIndex], s, plan, path, stop.signal);
         const v = await validateVideo(
@@ -274,7 +295,7 @@ export async function executeRender(
       paths,
       dir,
       stop.signal,
-      !!c.project,
+      !!c.project || !!showcase,
     );
     const validation = await validateVideo(
       result.path,
@@ -309,6 +330,9 @@ export async function executeRender(
         ...validation,
         audioMode: result.audioMode,
         renderer: RENDER_VERSION,
+        ...(showcase
+          ? { templateRenderer: FNF_RENDERER, fontHash: FNF_FONT_HASH }
+          : {}),
         ...(c.project
           ? {
               templateRenderer: c.project.design.rendererVersion,

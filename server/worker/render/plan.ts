@@ -1,8 +1,6 @@
 import { concatenateFrames, toFrame } from "../../../src/domain/video/time";
-import {
-  fnfSnapshotSchema,
-  type FnfSnapshot,
-} from "../../../src/domain/video/schema";
+import { type FnfSnapshot } from "../../../src/domain/video/schema";
+import { executionSnapshot } from "../../contracts/snapshot";
 import { digest } from "../../api/jobs";
 import { RenderError } from "../jobs/errors";
 export const RENDER_VERSION = "axfluxo-render-v4.1";
@@ -22,7 +20,7 @@ export function renderPlan(
   segmentFrames = 1800,
   projectMode = false,
 ) {
-  const snapshot = fnfSnapshotSchema.parse(input);
+  const snapshot = executionSnapshot(input);
   if (
     !Number.isSafeInteger(segmentFrames) ||
     segmentFrames < 1 ||

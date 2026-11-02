@@ -6,6 +6,7 @@ import { createVideoApi } from "./app";
 import { supabaseVerifier } from "./auth";
 import { cloudRouter } from "./assets/router";
 import { cloudConfiguration } from "../storage/config";
+import { fnfRouter } from "./preferences/router";
 import { projectsRouter } from "./projects/router";
 import { renderRouter } from "./render";
 import { serverConfig } from "./config";
@@ -20,6 +21,12 @@ function start() {
     ...config,
     db,
     cloud: cloudRouter({ db, ...cloud }),
+    fnf: fnfRouter({
+      db,
+      enabled: () =>
+        config.admissionEnabled() && process.env.VIDEO_FNF_ACCEPTING === "true",
+      unitsPerFrame: config.unitsPerFrame,
+    }),
     projects: projectsRouter({
       db,
       enabled: config.admissionEnabled,

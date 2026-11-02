@@ -8,10 +8,10 @@ RUN --mount=type=secret,id=proxy_ca,required=true NODE_EXTRA_CA_CERTS=/run/secre
 COPY server server
 COPY src/domain src/domain
 COPY src/config src/config
-RUN npm run build:render --workspace=axfluxo-video-server && npm prune --omit=dev --workspace=axfluxo-video-server --include-workspace-root=false --ignore-scripts && mkdir -p /runtime/assets && cp work/video-server/render.mjs /runtime/ && cp server/worker/templates/all-versions/assets/* /runtime/assets/ && chmod 644 /runtime/assets/* && mv node_modules /runtime/
+RUN npm run build:render --workspace=axfluxo-video-server && npm prune --omit=dev --workspace=axfluxo-video-server --include-workspace-root=false --ignore-scripts && mkdir -p /runtime/assets && cp work/video-server/render.mjs /runtime/ && cp server/worker/templates/all-versions/assets/* /runtime/assets/ && cp server/worker/templates/fnf-showcase/assets/NotoSansJP.ttf /runtime/assets/ && cp server/worker/templates/fnf-showcase/assets/OFL.txt /runtime/assets/NotoSansJP-OFL.txt && chmod 644 /runtime/assets/* && mv node_modules /runtime/
 FROM node:24.19.0-bookworm-slim
 WORKDIR /app
-ENV NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 VIDEO_RENDER_DISK=/work VIDEO_RENDER_ENABLED=false VIDEO_ALEO_FONT=/app/assets/Aleo.ttf
+ENV NODE_ENV=production NODE_OPTIONS=--max-old-space-size=512 VIDEO_RENDER_DISK=/work VIDEO_RENDER_ENABLED=false VIDEO_ALEO_FONT=/app/assets/Aleo.ttf VIDEO_FNF_FONT=/app/assets/NotoSansJP.ttf
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["node", "/app/render.mjs"]
 COPY --from=build /runtime/ ./

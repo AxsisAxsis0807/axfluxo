@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { open } from "node:fs/promises";
+import { sourceGeometry } from "../validation/geometry";
 import { LIMITS } from "../../../src/config/limits";
 import { ApiError } from "../../api/errors";
 export type MediaProbe = {
@@ -9,6 +10,8 @@ export type MediaProbe = {
   height?: number;
   durationUs?: number;
   codecs: string[];
+  displayWidth?: number;
+  displayHeight?: number;
 };
 export async function probeMedia(
   path: string,
@@ -109,6 +112,8 @@ export async function probeMedia(
       width?: number;
       height?: number;
       duration?: string;
+      sample_aspect_ratio?: string;
+      side_data_list?: { rotation?: number }[];
     }[];
     format?: { duration?: string; format_name?: string };
   };
@@ -177,7 +182,18 @@ export async function probeMedia(
     mime,
     kind,
     codecs: streams.map((s) => s.codec_name!),
-    ...(video ? { width: video.width, height: video.height } : {}),
+    ...(video
+      ? {
+          width: video.width,
+          height: video.height,
+          ...(kind === "video"
+            ? {
+                displayWidth: sourceGeometry(video).width,
+                displayHeight: sourceGeometry(video).height,
+              }
+            : {}),
+        }
+      : {}),
     ...(kind !== "image"
       ? { durationUs: Math.round(duration * 1_000_000) }
       : {}),

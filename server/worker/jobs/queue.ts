@@ -3,10 +3,8 @@ import {
   type AllVersionsProject,
 } from "../../../src/domain/video/all-versions";
 import type { Database, Sql, Row } from "../../db/database";
-import {
-  fnfSnapshotSchema,
-  type FnfSnapshot,
-} from "../../../src/domain/video/schema";
+import { type FnfSnapshot } from "../../../src/domain/video/schema";
+import { safeExecutionSnapshot } from "../../contracts/snapshot";
 import { digest } from "../../api/jobs";
 import { RenderError, heldCode, retryDelay, type RenderCode } from "./errors";
 import type { RenderMode } from "../render/plan";
@@ -117,7 +115,7 @@ export async function claim(
       await unlock(sql);
     }
     const found = await sql.query(
-      "SELECT j.* FROM axfluxo_video.render_jobs j LEFT JOIN axfluxo_video.render_executions e ON e.job_id=j.id WHERE j.state IN ('queued','cancel_requested') AND (e.next_at IS NULL OR e.next_at<=clock_timestamp()) ORDER BY j.created_at,j.id LIMIT 1",
+      "SELECT j.* FROM axfluxo_video.render_jobs j LEFT JOIN axfluxo_video.render_executions e ON e.job_id=j.id WHERE j.state IN ('queued','cancel_requested') AND (e.next_at IS NULL OR e.next_at<=clock_timestamp()) ORDER BY j.created_at,j.batch_id,j.range_index,j.attempt,j.id LIMIT 1",
     );
     if (!found.rows.length) return null;
     const row = found.rows[0],
@@ -168,7 +166,7 @@ export async function claim(
         [owner, row.batch_id],
       )
     ).rows[0];
-    const parsed = fnfSnapshotSchema.safeParse(batch.snapshot);
+    const parsed = safeExecutionSnapshot(batch.snapshot);
     if (!parsed.success || digest(parsed.data) !== batch.snapshot_hash) {
       await terminate(sql, owner, job, "failed", "INPUT_CORRUPT");
       return null;

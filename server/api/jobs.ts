@@ -1,8 +1,6 @@
+import { executionSnapshot } from "../contracts/snapshot";
 import { createHash, randomUUID } from "node:crypto";
-import {
-  fnfSnapshotSchema,
-  type FnfSnapshot,
-} from "../../src/domain/video/schema";
+import { type FnfSnapshot } from "../../src/domain/video/schema";
 import { toFrame } from "../../src/domain/video/time";
 import {
   batchViewSchema,
@@ -222,7 +220,7 @@ export async function retryJob(
     "SELECT snapshot FROM axfluxo_video.render_batches WHERE owner_id=$1 AND id=$2",
     [owner, row.batch_id],
   );
-  const snapshot = fnfSnapshotSchema.parse(batch.rows[0].snapshot);
+  const snapshot = executionSnapshot(batch.rows[0].snapshot);
   await checkResources(sql, owner, snapshot);
   const index = Number(row.rangeIndex),
     units = cost(snapshot, index, unitsPerFrame);
