@@ -14,10 +14,12 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "postbuild": "node scripts/postbuild.mjs",
-    "format": "prettier --write src tests scripts *.ts *.mjs *.json docs .github"
+    "format": "prettier --write src tests scripts *.ts *.mjs *.json docs .github",
+    "test:video:browser": "playwright test --config server/playwright.config.ts"
   },
   "dependencies": {
     "@dagrejs/dagre": "3.1.2",
+    "@noble/hashes": "2.4.0",
     "@supabase/supabase-js": "2.118.0",
     "@xyflow/react": "12.12.0",
     "fflate": "0.8.3",
@@ -43,5 +45,8 @@
     "typescript": "6.0.3",
     "vitest": "5.0.5"
   },
-  "type": "module"
+  "type": "module",
+  "workspaces": [
+    "server"
+  ]
 }

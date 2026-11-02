@@ -22,16 +22,36 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
+      - name: Ensure local media probe tools
+        run: |
+          if ! command -v ffprobe >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      - run: npm run build:deletion --workspace server && npm run build:notifications --workspace server
+      - run: npx playwright install --with-deps chromium chrome webkit
+      - run: npm run test:video:browser
       - run: |
-          npm start > /tmp/axfluxo-server.log 2>&1 &
+          node scripts/serve.mjs > /tmp/axfluxo-server.log 2>&1 &
+          static_pid=$!
+          trap 'kill "$static_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 30); do
             if curl --fail http://localhost:3000/ > /dev/null; then break; fi
             sleep 1
           done
           npm run test:e2e
+          kill "$static_pid"
+          wait "$static_pid" || true
+          NEXT_PUBLIC_BASE_PATH=/axfluxo npm run build
+          NEXT_PUBLIC_BASE_PATH=/axfluxo node scripts/serve.mjs > /tmp/axfluxo-base-server.log 2>&1 &
+          static_pid=$!
+          for attempt in $(seq 1 30); do
+            if curl --fail http://localhost:3000/axfluxo/ > /dev/null; then break; fi
+            sleep 1
+          done
+          PLAYWRIGHT_BASE_URL=http://localhost:3000/axfluxo/ npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

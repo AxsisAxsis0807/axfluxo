@@ -140,3 +140,11 @@ saveは通常キャッシュから分離し、同じ再実行系列の結果を�
 保存済み素材が残ることがあり、再実行時はその記録を再利用します。旧v1クライアントへのDBダウングレードはできません。
 [設計・互換性・rollback](docs/adr/006-library-workflow-io.md)と
 [Phase 3検証記録・実機手順](docs/manual-tests/workflow-phase3-results.md)を参照してください。
+
+### 開発者向け動画統合（V0–V7、既定OFF）
+
+動画editor・server workerは既存の画像Studio/Workflowと分離しています。
+V7は完成MP4の個別保存、写真アプリでの明示保存確認、確認後の専用bucket削除、PWA通知を追加します。
+入口は既存Workflowを保持したまま別タブで開きます。既存DB・原本・未確認完成物を期限削除しません。
+本番接続・migration・有効化は未実施です。[設計と停止flag](docs/video/v7.md)、
+[自動検証結果と実機未検証項目](docs/video/v7-verification.md)を参照してください。

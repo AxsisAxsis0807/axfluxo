@@ -1,0 +1,16 @@
+{
+  "Rules": [
+    {
+      "ID": "abort-incomplete-render-staging-only",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "render-staging/" },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    },
+    {
+      "ID": "abort-incomplete-render-outputs-only",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "render-outputs/" },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    }
+  ]
+}
