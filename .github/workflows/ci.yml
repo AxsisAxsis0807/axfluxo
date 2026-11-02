@@ -31,7 +31,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run build:deletion --workspace server && npm run build:notifications --workspace server
-      - run: npx playwright install --with-deps chromium webkit
+      - run: npx playwright install --with-deps chromium chrome webkit
       - run: npm run test:video:browser
       - run: |
           node scripts/serve.mjs > /tmp/axfluxo-server.log 2>&1 &

@@ -12,13 +12,17 @@ export default defineConfig({
       name: "chromium",
       use: {
         browserName: "chromium",
-        // Use the full Chromium/new-headless binary, matching a media-capable browser.
-        // Playwright's separate headless shell cannot decode our H.264 fixture on CI.
-        channel: "chromium",
+        // Branded Chrome includes the proprietary H.264/AAC codecs required by MP4.
+        // The bundled Chromium/CfT binary on CI is not a codec-equivalent substitute.
+        channel: "chrome",
         launchOptions: {
           executablePath:
             process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ||
-            (existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : undefined),
+            [
+              "/usr/bin/google-chrome",
+              "/usr/bin/google-chrome-stable",
+              "/usr/bin/chromium",
+            ].find(existsSync),
           args: ["--no-sandbox", "--disable-dev-shm-usage"],
         },
       },

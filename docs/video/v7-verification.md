@@ -54,8 +54,10 @@ CIと同じ公開Supabase設定でbuildし直し、認証通信は既存mockで�
 
 ## マージ前CI追試（2026-11-03 JST）
 
-初回GitHub CIのWebKit 27.2は8/8成功。Chromiumのheadless shellではH.264 fixtureが
-読めず、readyStateが0のままになり5件失敗した。server側Playwrightはfull Chromiumの
-new-headless (`channel: chromium`)を使うよう修正し、codecを持つ通常browserと合わせる。
-mediaのreadyState/seek/再生や各assertionは省略・緩和しない。
-これは自動試験環境の修正で、実機Safari・R2・Pushの未検証は継続する。
+初回GitHub CIのWebKit 27.2は8/8成功。配布ChromiumではH.264 fixtureを
+読めず、readyStateが0のままになり5件失敗した。headless shellからfull Chromiumへ
+切り替えるだけでは同じ失敗が残ったため、CIでH.264/AAC対応のGoogle Chromeを
+明示的にinstallして動画試験に使用する。ローカルでは指定済みまたはsystem Chromiumも利用可能。
+H.264/AAC能力の前提試験を追加し、codec不足をmedia timelineの不具合と混同しない。
+mediaのreadyState/seek/再生や既存assertionは省略・緩和しない。
+実機Safari・R2・Pushの未検証は継続する。
