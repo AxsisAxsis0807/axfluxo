@@ -1,3 +1,4 @@
+import { outputStorage } from "./outputs";
 import { r2Storage } from "./r2";
 export function cloudConfiguration(env: Record<string, string | undefined>) {
   const fields = [
@@ -8,15 +9,16 @@ export function cloudConfiguration(env: Record<string, string | undefined>) {
   ];
   if (fields.some(Boolean) && !fields.every(Boolean))
     throw new Error("Incomplete server storage configuration");
+  const original = fields.every(Boolean)
+    ? r2Storage({
+        endpoint: fields[0]!,
+        bucket: fields[1]!,
+        accessKeyId: fields[2]!,
+        secretAccessKey: fields[3]!,
+      })
+    : null;
   return {
-    storage: fields.every(Boolean)
-      ? r2Storage({
-          endpoint: fields[0]!,
-          bucket: fields[1]!,
-          accessKeyId: fields[2]!,
-          secretAccessKey: fields[3]!,
-        })
-      : null,
+    storage: outputStorage(env, original),
     previewUnitsPerSecond: env.CLOUD_PREVIEW_UNITS_PER_SECOND
       ? Number(env.CLOUD_PREVIEW_UNITS_PER_SECOND)
       : undefined,

@@ -13,3 +13,8 @@ Composeは初期並列1、CPU2/RAM4GiB/PID128、非root、capなし、readonly�
 オフラインDocker smokeは`server/tests/render/container-smoke.ts`をesbuildで別途bundleし、`/app/smoke.mjs`へreadonly mountして`--entrypoint node ... /app/smoke.mjs`で実行できます。`--network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 --cpus 2 --memory 1g --memory-swap 1g --pids-limit 128`と、UID1000が書ける既存diskの`/work` mountを指定します。cloud/DB接続なしで合成mediaを生成し、segment結合・AAC encode/copy・全frame/decode検証を行います。production ENTRYPOINTを置き換えるのはこのローカル検証時だけです。
 
 `render-lifecycle.example.json`はrender prefixの**未完成multipart partだけ**を7日後に回収する追加review例です。completed object/checkpointのExpiration/Deleteはなく、既存originals用policyを置換しません。未適用です。
+
+V7の[保存・削除・通知](../../docs/video/v7.md)は専用output bucketと専用資格情報を前提にします。
+`output-workers.compose.yaml`は既定OFFのレビュー用で、DB login、bucket、VAPIDを作成しません。
+削除workerに原本bucket権限を与えず、通知workerにobject storage資格情報を与えないでください。
+更新Dockerfileはrender/deletion/notificationsの3entrypointをbundleします。V7でimageの公開・deployはしません。

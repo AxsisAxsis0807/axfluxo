@@ -13,6 +13,10 @@ import {
   retryJob,
 } from "./jobs";
 export interface ApiConfig {
+  outputs?: (
+    request: Request,
+    owner: string,
+  ) => Promise<{ status: number; body: unknown }>;
   db: Database;
   verify: VerifyToken;
   allowedOrigins: readonly string[];
@@ -150,6 +154,15 @@ export function createVideoApi(
         request.headers.get("authorization"),
       );
       const path = new URL(request.url).pathname;
+      if (
+        config.outputs &&
+        (path === "/outputs" ||
+          path.startsWith("/outputs/") ||
+          path.startsWith("/push/"))
+      ) {
+        const result = await config.outputs(request, identity.ownerId);
+        return respond(result.status, result.body);
+      }
       if (path.startsWith("/cloud/") && config.cloud) {
         const result = await config.cloud(request, identity.ownerId);
         return respond(result.status, result.body);

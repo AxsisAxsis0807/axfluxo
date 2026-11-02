@@ -71,7 +71,9 @@ export async function storeObject(
     if (!q.rows.length) throw new RenderError("QUOTA_EXCEEDED");
     return (
       await sql.query(
-        "INSERT INTO axfluxo_video.render_objects(id,owner_id,job_id,object_key,hash,size,kind,segment_index,plan_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
+        storage.renderNamespace
+          ? "INSERT INTO axfluxo_video.render_objects(id,owner_id,job_id,object_key,hash,size,kind,segment_index,plan_hash,storage_namespace) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *"
+          : "INSERT INTO axfluxo_video.render_objects(id,owner_id,job_id,object_key,hash,size,kind,segment_index,plan_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
         [
           id,
           c.owner,
@@ -82,16 +84,19 @@ export async function storeObject(
           p.kind,
           p.index ?? null,
           p.planHash,
+          ...(storage.renderNamespace ? [storage.renderNamespace] : []),
         ],
       )
     ).rows[0];
   });
+  const remote =
+    storage.forRenderObject?.(storage.renderNamespace ?? "legacy") ?? storage;
   try {
     await storage.putRender(key, p.path, p.size, "video/mp4", p.hash);
   } catch (error) {
     // A lost PUT/complete response may already have committed immutable bytes.
     try {
-      if ((await storage.head(key))?.size !== p.size) throw new Error();
+      if ((await remote.head(key))?.size !== p.size) throw new Error();
     } catch {
       throw storageError(error);
     }
@@ -100,7 +105,7 @@ export async function storeObject(
   const h = createHash("sha256");
   let size = 0;
   try {
-    for await (const b of await storage.stream(key, signal)) {
+    for await (const b of await remote.stream(key, signal)) {
       signal?.throwIfAborted();
       size += b.byteLength;
       if (size > p.size) throw new RenderError("VALIDATION_FAILED");

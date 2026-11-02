@@ -1,0 +1,44 @@
+# Review only. Does not provision buckets, run migrations, or enable processing.
+# Build the updated infra/video/Dockerfile image before using either command.
+services:
+  deletion:
+    image: axfluxo-video-render:v7
+    entrypoint: [node, /app/deletion.mjs]
+    user: "1000:1000"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 1
+    mem_limit: 768m
+    memswap_limit: 768m
+    pids_limit: 64
+    stop_grace_period: 31m
+    restart: "no"
+    environment:
+      VIDEO_DELETE_WORKER_ENABLED: "false"
+      # Inject VIDEO_DELETE_DATABASE_URL and OUTPUT-BUCKET-ONLY credentials.
+      # Never inject CLOUD_R2_ACCESS_KEY_ID/SECRET_ACCESS_KEY or original bucket credentials.
+      # CLOUD_R2_BUCKET is only a nonsecret name used to reject unsafe configuration.
+    networks: [isolated]
+  notifications:
+    image: axfluxo-video-render:v7
+    entrypoint: [node, /app/notifications.mjs]
+    user: "1000:1000"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: 1
+    mem_limit: 768m
+    memswap_limit: 768m
+    pids_limit: 64
+    stop_grace_period: 30s
+    restart: "no"
+    environment:
+      VIDEO_PUSH_ENABLED: "false"
+      # Inject only notify DB login + VAPID credentials. No object storage credentials.
+    networks: [isolated]
+networks:
+  isolated:
+    internal: true # Require reviewed DB/output R2/push-provider egress allowlist before enabling.

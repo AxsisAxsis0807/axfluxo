@@ -95,6 +95,21 @@ export async function executeRender(
       });
   }, 15000);
   try {
+    if (storage.renderNamespace === "outputs-v1")
+      await fenced(db, c, async (sql) => {
+        const minimum = Number(
+          process.env.VIDEO_CAPACITY_MIN_FREE_BYTES ?? 67108864,
+        );
+        if (!Number.isSafeInteger(minimum) || minimum < 1)
+          throw new RenderError("QUOTA_EXCEEDED");
+        const room = (
+          await sql.query(
+            "SELECT owner_id FROM axfluxo_video.media_quotas WHERE owner_id=$1 AND NOT blocked AND limit_bytes IS NOT NULL AND limit_bytes-used_bytes-reserved_bytes >= $2::bigint",
+            [c.owner, minimum],
+          )
+        ).rows[0];
+        if (!room) throw new RenderError("QUOTA_EXCEEDED");
+      });
     const showcase = isFnfShowcase(c.snapshot) ? c.snapshot : undefined;
     const plan = c.project
       ? projectPlan(c.project, c.snapshot, limits.segmentFrames)
@@ -215,7 +230,9 @@ export async function executeRender(
         await disk(Number(checkpoint.size));
         try {
           await download(
-            storage,
+            storage.forRenderObject?.(
+              String(checkpoint.storage_namespace ?? "legacy"),
+            ) ?? storage,
             String(checkpoint.object_key),
             path,
             Number(checkpoint.size),

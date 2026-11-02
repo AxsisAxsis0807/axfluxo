@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
+import type { Sql } from "../db/database";
 import type { Database } from "../db/database";
 import type { MultipartStorage } from "../storage/multipart";
 import {
@@ -11,6 +12,7 @@ import { jsonBody } from "./app";
 import { ApiError } from "./errors";
 import { renderCodes } from "../worker/jobs/errors";
 export function renderRouter(config: {
+  accessGuard?: (sql: Sql, owner: string, id: string) => Promise<void>;
   db: Database;
   storage: MultipartStorage | null;
   enabled: () => boolean;
@@ -91,9 +93,10 @@ export function renderRouter(config: {
           },
         };
       }
+      await config.accessGuard?.(sql, owner, id);
       const row = (
         await sql.query(
-          "SELECT o.object_key,o.hash,o.size,CASE WHEN b.snapshot->>'kind'='fnf-showcase-snapshot' THEN b.snapshot->'names'->>j.range_index ELSE 'output.mp4' END AS filename FROM axfluxo_video.render_artifacts a JOIN axfluxo_video.render_objects o ON o.owner_id=a.owner_id AND o.id=a.object_id JOIN axfluxo_video.render_outputs r ON r.owner_id=a.owner_id AND r.id=a.output_id JOIN axfluxo_video.render_jobs j ON j.owner_id=r.owner_id AND j.id=r.job_id JOIN axfluxo_video.render_batches b ON b.owner_id=j.owner_id AND b.id=j.batch_id WHERE a.owner_id=$1 AND a.output_id=$2 AND o.ready AND j.state='succeeded'",
+          "SELECT to_jsonb(o)->>'storage_namespace' AS storage_namespace,o.object_key,o.hash,o.size,CASE WHEN b.snapshot->>'kind'='fnf-showcase-snapshot' THEN b.snapshot->'names'->>j.range_index ELSE 'output.mp4' END AS filename FROM axfluxo_video.render_artifacts a JOIN axfluxo_video.render_objects o ON o.owner_id=a.owner_id AND o.id=a.object_id JOIN axfluxo_video.render_outputs r ON r.owner_id=a.owner_id AND r.id=a.output_id JOIN axfluxo_video.render_jobs j ON j.owner_id=r.owner_id AND j.id=r.job_id JOIN axfluxo_video.render_batches b ON b.owner_id=j.owner_id AND b.id=j.batch_id WHERE a.owner_id=$1 AND a.output_id=$2 AND o.ready AND j.state='succeeded'",
           [owner, id],
         )
       ).rows[0];
@@ -104,7 +107,11 @@ export function renderRouter(config: {
     if (!config.storage) throw new ApiError(503, "STORAGE_UNAVAILABLE");
     let signed;
     try {
-      signed = await config.storage.access(
+      signed = await (
+        config.storage.forRenderObject?.(
+          String(result.body.storage_namespace ?? "legacy"),
+        ) ?? config.storage
+      ).access(
         String(result.body.object_key),
         "video/mp4",
         String(result.body.filename ?? "output.mp4"),

@@ -1,5 +1,7 @@
 export type StoredPart = { number: number; size: number; etag: string };
 export interface MultipartStorage {
+  renderNamespace?: string;
+  forRenderObject?(namespace: string): MultipartStorage;
   putRender?(
     key: string,
     path: string,

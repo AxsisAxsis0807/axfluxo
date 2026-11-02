@@ -150,6 +150,7 @@ export async function createBatch(
   snapshot: FnfSnapshot,
   unitsPerFrame?: number,
 ): Promise<BatchView> {
+  await capacityGuard(sql, owner);
   await checkResources(sql, owner, snapshot);
   const costs = snapshot.ranges.map((_, i) => cost(snapshot, i, unitsPerFrame));
   await reserve(
@@ -221,6 +222,7 @@ export async function retryJob(
     [owner, row.batch_id],
   );
   const snapshot = executionSnapshot(batch.rows[0].snapshot);
+  await capacityGuard(sql, owner);
   await checkResources(sql, owner, snapshot);
   const index = Number(row.rangeIndex),
     units = cost(snapshot, index, unitsPerFrame);
@@ -276,4 +278,23 @@ export async function cancelJob(sql: Sql, owner: string, id: string) {
       retryOf: row.retryOf,
     }),
   };
+}
+
+/** Optional V7 gate: no eviction of unconfirmed outputs to satisfy admission. */
+export async function capacityGuard(sql: Sql, owner: string) {
+  if (
+    process.env.VIDEO_CAPACITY_GUARD_ENABLED !== "true" &&
+    process.env.VIDEO_OUTPUTS_ENABLED !== "true"
+  )
+    return;
+  const minimum = Number(process.env.VIDEO_CAPACITY_MIN_FREE_BYTES ?? 67108864);
+  if (!Number.isSafeInteger(minimum) || minimum < 1)
+    throw new ApiError(503, "CAPACITY_HELD");
+  const row = (
+    await sql.query(
+      "SELECT owner_id FROM axfluxo_video.media_quotas WHERE owner_id=$1 AND NOT blocked AND limit_bytes IS NOT NULL AND limit_bytes-used_bytes-reserved_bytes >= $2::bigint FOR UPDATE",
+      [owner, minimum],
+    )
+  ).rows[0];
+  if (!row) throw new ApiError(503, "CAPACITY_HELD");
 }

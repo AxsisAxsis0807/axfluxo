@@ -9,6 +9,7 @@ import { cloudConfiguration } from "../storage/config";
 import { fnfRouter } from "./preferences/router";
 import { projectsRouter } from "./projects/router";
 import { renderRouter } from "./render";
+import { outputsRouter, outputAvailable } from "./outputs/router";
 import { serverConfig } from "./config";
 function start() {
   const config = serverConfig(process.env);
@@ -20,6 +21,17 @@ function start() {
   const handler = createVideoApi({
     ...config,
     db,
+    outputs:
+      process.env.VIDEO_OUTPUTS_ENABLED === "true"
+        ? outputsRouter({
+            db,
+            storage: cloud.storage,
+            deletionEnabled: () =>
+              process.env.VIDEO_DELETE_ACCEPTING === "true",
+            pushEnabled: () => process.env.VIDEO_PUSH_ENABLED === "true",
+            vapidPublicKey: process.env.VIDEO_VAPID_PUBLIC_KEY,
+          })
+        : undefined,
     cloud: cloudRouter({ db, ...cloud }),
     fnf: fnfRouter({
       db,
@@ -33,6 +45,10 @@ function start() {
       unitsPerFrame: config.unitsPerFrame,
     }),
     render: renderRouter({
+      accessGuard:
+        process.env.VIDEO_OUTPUTS_ENABLED === "true"
+          ? outputAvailable
+          : undefined,
       db,
       storage: cloud.storage,
       enabled: config.admissionEnabled,

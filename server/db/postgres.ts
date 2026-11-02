@@ -6,8 +6,20 @@ export function postgresDatabase(
   role:
     | "axfluxo_video_api"
     | "axfluxo_video_probe"
+    | "axfluxo_video_delete"
+    | "axfluxo_video_notify"
     | "axfluxo_video_render" = "axfluxo_video_api",
 ): Database & { close(): Promise<void> } {
+  if (
+    ![
+      "axfluxo_video_api",
+      "axfluxo_video_probe",
+      "axfluxo_video_render",
+      "axfluxo_video_delete",
+      "axfluxo_video_notify",
+    ].includes(role)
+  )
+    throw Error("Invalid role");
   const pool = new Pool({
     ...config,
     max: 10,
@@ -23,13 +35,7 @@ export function postgresDatabase(
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
-        await client.query(
-          role === "axfluxo_video_render"
-            ? "SET LOCAL ROLE axfluxo_video_render"
-            : role === "axfluxo_video_probe"
-              ? "SET LOCAL ROLE axfluxo_video_probe"
-              : "SET LOCAL ROLE axfluxo_video_api",
-        );
+        await client.query(`SET LOCAL ROLE ${role}`);
         const result = await work({
           query: (text, values) => client.query(text, values),
         });

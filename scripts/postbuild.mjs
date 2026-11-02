@@ -31,6 +31,7 @@ await writeFile("out/.nojekyll", "");
 // The new diagnostic route also has RSC files in this directory. Give static
 // hosts an index without changing the existing root/export URL conventions.
 for (const route of [
+  "studio",
   "video",
   "library",
   "preview",
@@ -43,3 +44,12 @@ for (const route of [
     `out/developer/${route}/index.html`,
   );
 }
+
+const manifest = JSON.parse(
+  await readFile("public/developer.webmanifest", "utf8"),
+);
+manifest.id = `${base}/developer/studio/`;
+manifest.start_url = manifest.id;
+manifest.scope = `${base}/developer/`;
+manifest.icons[0].src = `${base}/developer-icon.svg`;
+await writeFile("out/developer.webmanifest", JSON.stringify(manifest));
