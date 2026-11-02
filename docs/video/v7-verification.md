@@ -51,3 +51,11 @@ CIと同じ公開Supabase設定でbuildし直し、認証通信は既存mockで�
 入口flag ONの追加ローカルbuildでも、未適用の画像編集テキストを入力して別タブを開き、
 元のeditor DOMが接続されたまま・文字が保持され・編集を継続できることをChromiumで確認。
 その後は既定OFFのroot/basePath buildへ戻す。実機のOSタブ破棄を再現した試験ではない。
+
+## マージ前CI追試（2026-11-03 JST）
+
+初回GitHub CIのWebKit 27.2は8/8成功。Chromiumのheadless shellではH.264 fixtureが
+読めず、readyStateが0のままになり5件失敗した。server側Playwrightはfull Chromiumの
+new-headless (`channel: chromium`)を使うよう修正し、codecを持つ通常browserと合わせる。
+mediaのreadyState/seek/再生や各assertionは省略・緩和しない。
+これは自動試験環境の修正で、実機Safari・R2・Pushの未検証は継続する。

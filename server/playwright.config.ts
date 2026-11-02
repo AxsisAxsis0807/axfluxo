@@ -12,6 +12,9 @@ export default defineConfig({
       name: "chromium",
       use: {
         browserName: "chromium",
+        // Use the full Chromium/new-headless binary, matching a media-capable browser.
+        // Playwright's separate headless shell cannot decode our H.264 fixture on CI.
+        channel: "chromium",
         launchOptions: {
           executablePath:
             process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ||
