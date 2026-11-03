@@ -4,20 +4,19 @@ import {
   DeveloperGate,
   DeveloperStudioEntry,
 } from "../../../src/features/developer/DeveloperAccess";
-import OutputLibrary from "../../../src/features/developer/OutputLibrary";
-import AllVersionsEditor from "../../../src/features/all-versions/AllVersionsEditor";
-import FnfShowcaseEditor from "../../../src/features/fnf-showcase/FnfShowcaseEditor";
+import Studio from "../../../src/features/developer/DeveloperStudio";
+import Tool from "../../../src/features/developer/DeveloperTool";
 const path = location.pathname;
 createRoot(document.getElementById("root")!).render(
   path.includes("/developer/") ? (
     <DeveloperGate>
-      {(api) =>
+      {(access) =>
         path.includes("all-versions") ? (
-          <AllVersionsEditor api={api} />
+          <Tool mode="all-versions" ownerId={access.ownerId} />
         ) : path.includes("fnf-showcase") ? (
-          <FnfShowcaseEditor api={api} />
+          <Tool mode="fnf-showcase" ownerId={access.ownerId} />
         ) : (
-          <OutputLibrary api={api} />
+          <Studio />
         )
       }
     </DeveloperGate>

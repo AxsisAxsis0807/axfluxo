@@ -1,4 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+test.beforeEach(async ({ page }) => {
+  await page.route("**/rest/v1/rpc/axfluxo_developer_access", (route) =>
+    route.fulfill({ contentType: "application/json", body: "null" }),
+  );
+});
 const api = "https://nbyigfqkweodzlhwdryz.supabase.co/auth/v1";
 const user = {
   id: "11111111-1111-4111-8111-111111111111",

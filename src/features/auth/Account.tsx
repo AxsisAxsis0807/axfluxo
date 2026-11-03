@@ -201,6 +201,9 @@ export default function Account() {
         ) : user && mode !== "password" ? (
           <>
             <p>{user.email}</p>
+            <p>
+              アカウントID：<code>{user.id}</code>
+            </p>
             <button disabled={busy} onClick={() => void logout()}>
               ログアウト
             </button>
