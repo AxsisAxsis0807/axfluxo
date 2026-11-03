@@ -1,26 +1,21 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import {
-  DeveloperGate,
-  DeveloperStudioEntry,
-} from "../../../src/features/developer/DeveloperAccess";
-import OutputLibrary from "../../../src/features/developer/OutputLibrary";
-import AllVersionsEditor from "../../../src/features/all-versions/AllVersionsEditor";
-import FnfShowcaseEditor from "../../../src/features/fnf-showcase/FnfShowcaseEditor";
+import { DeveloperStudioEntry } from "../../../src/features/developer/DeveloperAccess";
+import LocalDeveloperGate from "../../../src/features/developer/LocalDeveloperGate";
+import Studio from "../../../src/features/developer/DeveloperStudio";
+import Tool from "../../../src/features/developer/DeveloperTool";
 const path = location.pathname;
 createRoot(document.getElementById("root")!).render(
   path.includes("/developer/") ? (
-    <DeveloperGate>
-      {(api) =>
-        path.includes("all-versions") ? (
-          <AllVersionsEditor api={api} />
-        ) : path.includes("fnf-showcase") ? (
-          <FnfShowcaseEditor api={api} />
-        ) : (
-          <OutputLibrary api={api} />
-        )
-      }
-    </DeveloperGate>
+    <LocalDeveloperGate>
+      {path.includes("all-versions") ? (
+        <Tool mode="all-versions" ownerId="device-local" />
+      ) : path.includes("fnf-showcase") ? (
+        <Tool mode="fnf-showcase" ownerId="device-local" />
+      ) : (
+        <Studio />
+      )}
+    </LocalDeveloperGate>
   ) : (
     <aside>
       <span>アカウント</span>

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   readdir,
   readFile,
@@ -53,3 +54,12 @@ manifest.start_url = manifest.id;
 manifest.scope = `${base}/developer/`;
 manifest.icons[0].src = `${base}/developer-icon.svg`;
 await writeFile("out/developer.webmanifest", JSON.stringify(manifest));
+
+// Public provenance, with no runtime credentials or environment dump.
+const sourceCommit =
+  process.env.GITHUB_SHA ||
+  execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+await writeFile(
+  "out/build-info.json",
+  JSON.stringify({ commit: sourceCommit, builtAt: new Date().toISOString() }),
+);

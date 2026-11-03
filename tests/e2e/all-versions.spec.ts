@@ -10,9 +10,9 @@ test("All Versions unauthorized access preserves all five databases and admits n
   await expect(
     page.getByRole("heading", { name: "All Versions", exact: true }),
   ).toHaveCount(0);
-  await expect(page.getByRole("status")).toContainText(
-    /ログイン|設定|開発者権限/,
-  );
+  await expect(
+    page.getByRole("heading", { name: "Developer Studio 簡易ロック" }),
+  ).toBeVisible();
   const names = [
     "axfluxo",
     "axfluxo-workflow",
@@ -38,9 +38,9 @@ test("All Versions unauthorized access preserves all five databases and admits n
     }
   }, names);
   await page.reload();
-  await expect(page.getByRole("status")).toContainText(
-    /ログイン|設定|開発者権限/,
-  );
+  await expect(
+    page.getByRole("heading", { name: "Developer Studio 簡易ロック" }),
+  ).toBeVisible();
   expect(
     await page.evaluate(async (names) => {
       const values = [];

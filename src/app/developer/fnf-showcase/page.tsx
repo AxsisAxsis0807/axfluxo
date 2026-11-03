@@ -1,10 +1,14 @@
 "use client";
 import dynamic from "next/dynamic";
-import { DeveloperGate } from "../../../features/developer/DeveloperAccess";
-const Editor = dynamic(
-  () => import("../../../features/fnf-showcase/FnfShowcaseEditor"),
-  { ssr: false, loading: () => <p>FNF Showcaseを準備しています…</p> },
+import LocalDeveloperGate from "../../../features/developer/LocalDeveloperGate";
+const LocalTool = dynamic(
+  () => import("../../../features/developer/DeveloperTool"),
+  { ssr: false },
 );
 export default function Page() {
-  return <DeveloperGate>{(api) => <Editor api={api} />}</DeveloperGate>;
+  return (
+    <LocalDeveloperGate>
+      <LocalTool mode="fnf-showcase" ownerId="device-local" />
+    </LocalDeveloperGate>
+  );
 }

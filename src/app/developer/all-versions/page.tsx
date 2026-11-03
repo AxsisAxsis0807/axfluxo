@@ -1,10 +1,14 @@
 "use client";
 import dynamic from "next/dynamic";
-import { DeveloperGate } from "../../../features/developer/DeveloperAccess";
-const Editor = dynamic(
-  () => import("../../../features/all-versions/AllVersionsEditor"),
-  { ssr: false, loading: () => <p>All Versionsを準備しています…</p> },
+import LocalDeveloperGate from "../../../features/developer/LocalDeveloperGate";
+const LocalTool = dynamic(
+  () => import("../../../features/developer/DeveloperTool"),
+  { ssr: false },
 );
 export default function Page() {
-  return <DeveloperGate>{(api) => <Editor api={api} />}</DeveloperGate>;
+  return (
+    <LocalDeveloperGate>
+      <LocalTool mode="all-versions" ownerId="device-local" />
+    </LocalDeveloperGate>
+  );
 }

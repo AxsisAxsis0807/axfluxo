@@ -2,49 +2,39 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { authClient } from "../../services/auth";
 import {
-  createVideoApiClient,
-  videoStateMessage,
-} from "../../services/video/api-client";
-import type { AuthenticatedApi } from "../../services/cloud-library/client";
+  verifyDeveloperAccess,
+  type DeveloperEntitlement,
+} from "../../services/developer/access";
 import Account from "../auth/Account";
 
 // Membership is always checked by the API, never inferred from user metadata.
 export function useDeveloperAccess() {
-  const [api, setApi] = useState<AuthenticatedApi | null>(null);
+  const [access, setAccess] = useState<DeveloperEntitlement | null>(null);
   const [message, setMessage] = useState("開発者権限を確認しています…");
   useEffect(() => {
     const client = authClient();
-    const baseUrl = process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN;
-    if (!client || !baseUrl) {
-      setMessage("ログインと開発者APIの設定を確認してください。");
+    if (!client) {
+      setMessage("ログイン設定を確認してください。");
       return;
     }
     let live = true,
       generation = 0;
     let observedUser: string | null | undefined;
-    let candidate: AuthenticatedApi;
-    try {
-      candidate = createVideoApiClient({ session: client.auth, baseUrl });
-    } catch {
-      setMessage("開発者APIの設定を確認してください。");
-      return;
-    }
     const check = async () => {
       const current = ++generation;
       try {
-        const result = await candidate.me();
+        const result = await verifyDeveloperAccess();
         if (!live || current !== generation) return;
-        if (result.ok) {
-          setApi(candidate);
-          setMessage("");
-        } else {
-          setApi(null);
-          setMessage(videoStateMessage[result.state]);
-        }
-      } catch {
+        setAccess(result);
+        setMessage("");
+      } catch (error) {
         if (live && current === generation) {
-          setApi(null);
-          setMessage("権限を確認できません。接続後に再試行してください。");
+          setAccess(null);
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "開発者権限を確認できません。",
+          );
         }
       }
     };
@@ -54,7 +44,8 @@ export function useDeveloperAccess() {
     } = client.auth.onAuthStateChange((_event, session) => {
       generation++;
       const userId = session?.user.id ?? null;
-      if (observedUser !== undefined && observedUser !== userId) setApi(null);
+      if (observedUser !== undefined && observedUser !== userId)
+        setAccess(null);
       observedUser = userId;
       setTimeout(() => {
         if (live) void check();
@@ -66,7 +57,7 @@ export function useDeveloperAccess() {
     void check();
     window.addEventListener("pageshow", visible);
     document.addEventListener("visibilitychange", visible);
-    const timer = window.setInterval(visible, 60_000);
+    const timer = window.setInterval(visible, 45_000);
     return () => {
       live = false;
       generation++;
@@ -76,11 +67,22 @@ export function useDeveloperAccess() {
       document.removeEventListener("visibilitychange", visible);
     };
   }, []);
-  return { api, message };
+  useEffect(() => {
+    if (!access) return;
+    const timer = setTimeout(
+      () => {
+        setAccess(null);
+        setMessage(
+          "開発者権限の再確認が必要です。画面を再読み込みしてください。",
+        );
+      },
+      Math.max(0, Date.parse(access.validUntil) - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [access]);
+  return { access, message };
 }
 export function DeveloperStudioEntry() {
-  const { api } = useDeveloperAccess();
-  if (!api) return null;
   return (
     <a
       href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/developer/studio/`}
@@ -98,9 +100,9 @@ export function DeveloperStudioEntry() {
 export function DeveloperGate({
   children,
 }: {
-  children: (api: AuthenticatedApi) => ReactNode;
+  children: (access: DeveloperEntitlement) => ReactNode;
 }) {
-  const { api, message } = useDeveloperAccess();
+  const { access, message } = useDeveloperAccess();
   return (
     <>
       <Account />
@@ -110,7 +112,7 @@ export function DeveloperGate({
       >
         AxFluxoへ戻る
       </a>
-      {api ? children(api) : <p role="status">{message}</p>}
+      {access ? children(access) : <p role="status">{message}</p>}
     </>
   );
 }

@@ -68,6 +68,51 @@ function mediaReady(
     signal.addEventListener("abort", fail, { once: true });
   });
 }
+async function playForEncode(
+  media: HTMLVideoElement,
+  signal: AbortSignal,
+  status: (message: string) => void,
+) {
+  signal.throwIfAborted();
+  try {
+    await media.play();
+    return;
+  } catch (error) {
+    if (!(error instanceof DOMException) || error.name !== "NotAllowedError")
+      throw error;
+  }
+  signal.throwIfAborted();
+  status("再生を許可して書き出しを続けてください。");
+  await new Promise<void>((resolve, reject) => {
+    const button = document.createElement("button");
+    button.textContent = "再生を許可して書き出しを続ける";
+    button.style.cssText =
+      "position:fixed;bottom:24px;left:16px;right:16px;min-height:44px;z-index:10000";
+    const cleanup = () => {
+      button.remove();
+      signal.removeEventListener("abort", cancelled);
+    };
+    const cancelled = () => {
+      cleanup();
+      reject(signal.reason);
+    };
+    button.onclick = () => {
+      // Invoke play synchronously in the Safari tap; never await a network call here.
+      void media.play().then(
+        () => {
+          cleanup();
+          resolve();
+        },
+        (error) => {
+          cleanup();
+          reject(error);
+        },
+      );
+    };
+    signal.addEventListener("abort", cancelled, { once: true });
+    document.body.append(button);
+  });
+}
 /** Real-time, on-device encoding. No render job or video upload is created. */
 export async function encodeLocal(
   job: LocalEncodeJob,
@@ -91,7 +136,9 @@ export async function encodeLocal(
   const media = document.createElement("video");
   media.crossOrigin = "anonymous";
   media.playsInline = true;
-  media.muted = true;
+  // The element feeds only the recording destination, not the speakers.
+  // Muting it would also mute MediaElementAudioSourceNode and produce silence.
+  media.muted = false;
   media.preload = "auto";
   media.style.cssText =
     "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";
@@ -137,7 +184,7 @@ export async function encodeLocal(
         recorder.start(1000);
         recorder.pause();
       }
-      await media.play();
+      await playForEncode(media, signal, status);
       recorder.resume();
       let last = media.currentTime,
         stalled = performance.now();
@@ -164,7 +211,7 @@ export async function encodeLocal(
           await wait(240_000, signal);
           budget.processing = 0;
           stalled = performance.now();
-          await media.play();
+          await playForEncode(media, signal, status);
           recorder.resume();
         }
         status(
