@@ -96,3 +96,8 @@ rollbackは `VIDEO_ACCEPTING=false` で再起動して新規/再試行受付を�
 serverのみ: jose 6.2.14 (MIT)、pg 8.23.1 (MIT)、既存と同じzod 4.6.7 (MIT)。開発のみ: PGlite 0.5.14 (Apache-2.0)、tsx 4.23.15/esbuild 0.28.2 (MIT)。既存直接依存のversionは変更なし。ライセンスは各packageの配布物に含まれる。
 
 統合試験はPGliteの実PostgreSQLエンジンを使い、本番SQL/middleware/署名検証を実行する。PGliteの単一backend上でPromise.allによる受付競合を確認する。通常のPostgreSQLに対しても同じ試験を実行できる（本番adapterを使用）。空の専用ローカルDBを用意して `AXFLUXO_TEST_POSTGRES_URL=postgres://...@127.0.0.1:.../axfluxo_video_test_<unique> npx vitest run server/tests/api.integration.test.ts` を実行する。loopbackかつ専用DB名以外は拒否し、試験が既存tableを削除することはない。今回PostgreSQL 18.6の複数接続でも実行済み。複数hostの負荷特性・remote JWKS鍵rotation・実cloud接続の検証は別途必要。検証結果は [V1検証記録](../docs/video/v1-verification.md) を参照。
+
+Developer Studioの段階有効化では、`GET /v1/developer/me`成功後だけ編集UIを開きます。
+追加の`GET /v1/developer/services`は同じJWT/membership/owner検証後、schemaとAPI設定・owner quota/budgetをread-onlyで確認します。
+純粋なtransport契約`contracts/developer-services.ts`もbrowserから参照しますが、API/DB実装と秘密はserverのみです。
+[実設定・認可・Phase A〜D・公開前検査](../docs/video/developer-activation.md)を参照してください。

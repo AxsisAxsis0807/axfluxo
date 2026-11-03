@@ -1,5 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- The private server-rasterized overlay must remain a native, unoptimized PNG. */
+import type { DeveloperServices } from "../../../server/contracts/developer-services";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createVideoApiClient,
@@ -59,8 +60,10 @@ const errors: Record<string, string> = {
 };
 export function FnfShowcaseEditor({
   api: injected,
+  services,
 }: {
   api?: AuthenticatedApi;
+  services?: DeveloperServices;
 }) {
   const enabled =
     !!injected || process.env.NEXT_PUBLIC_FNF_SHOWCASE_ENABLED === "true";
@@ -118,7 +121,10 @@ export function FnfShowcaseEditor({
     batchRequest = useRef(0),
     sourceRequest = useRef(0),
     prefSavingRef = useRef(false);
-  const cloud = useMemo(() => (api ? cloudClient(api) : null), [api]),
+  const cloud = useMemo(
+      () => (api && services?.cloudLibrary !== false ? cloudClient(api) : null),
+      [api, services?.cloudLibrary],
+    ),
     client = useMemo(
       () => (api && owner ? fnfClient(api, owner) : null),
       [api, owner],
@@ -149,8 +155,9 @@ export function FnfShowcaseEditor({
     void (async () => {
       const local = await loadFnfPreferences(owner);
       if (live && local && !dirty.current) setPreferences(local);
-      const remote = await client.preferences();
-      if (live && remote.ok) {
+      const remote =
+        services?.fnfPreferences === false ? null : await client.preferences();
+      if (live && remote?.ok) {
         setPrefRevision(remote.data.revision);
         if (!dirty.current && remote.data.revision > 0)
           setPreferences(remote.data.preferences);
@@ -165,7 +172,7 @@ export function FnfShowcaseEditor({
     return () => {
       live = false;
     };
-  }, [client, owner]);
+  }, [client, owner, services?.fnfPreferences]);
   useEffect(() => {
     if (!client) return;
     let live = true;
@@ -199,6 +206,7 @@ export function FnfShowcaseEditor({
         generation = preferenceGeneration.current;
       await saveFnfPreferences(owner, clean);
       setPreferenceStatus("端末に設定保存済み・cloud未保存");
+      if (services?.fnfPreferences === false) return;
       const r = await client.savePreferences(clean, prefRevision);
       if (!active.current) return;
       if (r.ok) setPrefRevision(r.data.revision);
@@ -236,7 +244,10 @@ export function FnfShowcaseEditor({
   }
   const resolve: PreviewResolver = useCallback(
     async (ref) => {
-      if (!cloud) throw new PlaybackError("AUTH_EXPIRED");
+      if (!cloud)
+        throw new PlaybackError(
+          services?.cloudLibrary === false ? "PROXY_NOT_READY" : "AUTH_EXPIRED",
+        );
       const r = await cloud.preview(ref.versionId);
       if (!r.ok)
         throw new PlaybackError(
@@ -248,7 +259,7 @@ export function FnfShowcaseEditor({
         );
       return r.data;
     },
-    [cloud],
+    [cloud, services?.cloudLibrary],
   );
   async function select(asset: CloudAsset) {
     if (!client || asset.kind !== "video") {
@@ -326,7 +337,14 @@ export function FnfShowcaseEditor({
     } else if (!r.ok) setError(r.code);
   }
   async function submit() {
-    if (!client || !session || busyRef.current || !preferencesReady) return;
+    if (
+      !client ||
+      !session ||
+      busyRef.current ||
+      !preferencesReady ||
+      services?.fnfRenderAcceptance === false
+    )
+      return;
     try {
       if (!pending.current) {
         const snapshot = session.snapshot(preferences);
@@ -453,6 +471,11 @@ export function FnfShowcaseEditor({
       <p>
         未送信range・譜面名はこのページのメモリー内だけです。閉じると消えます。受付済みjobは閉じても継続します。
       </p>
+      {services && !services.fnfRenderAcceptance && (
+        <p role="status">
+          書き出しは停止中です。templateとusernameの編集・端末保存を利用できます。動画素材とcloud保存には各サービスの準備が必要です。
+        </p>
+      )}
       {error && <p role="alert">{errors[error] ?? error}</p>}
       <fieldset disabled={locked}>
         <legend>次回用設定（templateとusernameだけ保存）</legend>
@@ -499,7 +522,7 @@ export function FnfShowcaseEditor({
           template・usernameを保存
         </button>
         <button
-          disabled={prefSaving}
+          disabled={prefSaving || services?.fnfPreferences === false}
           onClick={() => void loadCloudPreferences()}
         >
           cloud設定を読み込む（編集中設定を置換）
@@ -530,10 +553,16 @@ export function FnfShowcaseEditor({
           </button>
         </p>
       )}
+      {services?.cloudLibrary === false && (
+        <p role="status">
+          クラウド動画素材は未準備です。動画の選択・upload・previewは利用できません。
+        </p>
+      )}
       <details>
         <summary>素材を選択／upload</summary>
         {cloud && (
           <CloudLibrary
+            uploadsEnabled={services?.uploads}
             client={cloud}
             onSelect={(asset) => void select(asset)}
           />
@@ -621,6 +650,7 @@ export function FnfShowcaseEditor({
             <button
               disabled={
                 !owner ||
+                services?.fnfRenderAcceptance === false ||
                 busy ||
                 !session.ranges.length ||
                 (!pending.current && submitted.current === fingerprint)

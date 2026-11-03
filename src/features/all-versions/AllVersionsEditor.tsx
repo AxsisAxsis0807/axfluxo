@@ -1,5 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Private signed media and server-rasterized PNGs use native images without an optimization service. */
+import type { DeveloperServices } from "../../../server/contracts/developer-services";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { allVersionsDocumentSchema } from "../../domain/video/schema";
 import {
@@ -65,8 +66,10 @@ const messages: Record<string, string> = {
 };
 export function AllVersionsEditor({
   api: injected,
+  services,
 }: {
   api?: AuthenticatedApi;
+  services?: DeveloperServices;
 }) {
   const enabled =
     !!injected || process.env.NEXT_PUBLIC_ALL_VERSIONS_ENABLED === "true";
@@ -82,7 +85,10 @@ export function AllVersionsEditor({
       return null;
     }
   }, [enabled, injected]);
-  const cloud = useMemo(() => (api ? cloudClient(api) : null), [api]);
+  const cloud = useMemo(
+    () => (api && services?.cloudLibrary !== false ? cloudClient(api) : null),
+    [api, services?.cloudLibrary],
+  );
   const [project, setProject] = useState<AllVersionsProject>(() =>
       newProject(),
     ),
@@ -102,8 +108,11 @@ export function AllVersionsEditor({
     [status, setStatus] = useState(""),
     [output, setOutput] = useState("");
   const remote = useMemo(
-    () => (api && owner ? projectsClient(api, owner) : null),
-    [api, owner],
+    () =>
+      api && owner && services?.projects !== false
+        ? projectsClient(api, owner)
+        : null,
+    [api, owner, services?.projects],
   );
   const queue = useRef<ProjectSaveQueue | null>(null),
     docRef = useRef(project),
@@ -120,18 +129,6 @@ export function AllVersionsEditor({
         if (r.ok) setOwner(r.data.ownerId);
         else {
           setError(r.code);
-          if (!navigator.onLine || r.code === "REQUEST_FAILED") {
-            try {
-              const session = await currentVideoSessionSource()?.getSession();
-              const id = session?.data.session?.user?.id;
-              if (live && id) {
-                setOwner(id);
-                setCloudState("offline編集・cloud権限は未確認");
-              }
-            } catch {
-              /* Local editor remains closed if the session owner is unavailable. */
-            }
-          }
         }
       }
     });
@@ -213,7 +210,10 @@ export function AllVersionsEditor({
   }, []);
   const resolve: PreviewResolver = useCallback(
     async (ref) => {
-      if (!cloud) throw new PlaybackError("AUTH_EXPIRED");
+      if (!cloud)
+        throw new PlaybackError(
+          services?.cloudLibrary === false ? "PROXY_NOT_READY" : "AUTH_EXPIRED",
+        );
       const r = await cloud.preview(ref.versionId);
       if (!r.ok)
         throw new PlaybackError(
@@ -225,7 +225,7 @@ export function AllVersionsEditor({
         );
       return r.data;
     },
-    [cloud],
+    [cloud, services?.cloudLibrary],
   );
   async function selected(asset: CloudAsset) {
     try {
@@ -423,6 +423,11 @@ export function AllVersionsEditor({
     <main style={{ maxWidth: 1100, margin: "auto", padding: 16 }}>
       <h1>All Versions Video Maker</h1>
       <p>暫定layoutです。参考画像との一致は未検証です。</p>
+      {services && !services.renderAcceptance && (
+        <p role="status">
+          書き出しは停止中です。編集UIと端末保存を利用できます。クラウド同期・素材選択は各サービスの準備が必要です。
+        </p>
+      )}
       <p>
         project ID：<output>{project.id}</output>
       </p>
@@ -482,13 +487,22 @@ export function AllVersionsEditor({
           </button>
         ))}
       </nav>
+      {step === 0 && services?.cloudLibrary === false && (
+        <p role="status">
+          クラウド素材は未準備です。素材の選択・upload・previewは利用できません。
+        </p>
+      )}
       {step === 0 && cloud && (
         <>
           <p>
             MP3 / WAV / M4A / MP4 /
             MOV。動画は音声を抽出して使います。proxy準備後に「使用」を選択してください。画像はcoverになります。
           </p>
-          <CloudLibrary client={cloud} onSelect={(a) => void selected(a)} />
+          <CloudLibrary
+            uploadsEnabled={services?.uploads}
+            client={cloud}
+            onSelect={(a) => void selected(a)}
+          />
         </>
       )}
       {(step === 1 || step === 4) && project.document && (
@@ -726,7 +740,11 @@ export function AllVersionsEditor({
         <section aria-label="検証済み全長preview">
           <p>生成した全長previewを、そのままMP4の書き出しに使えます。</p>
           <button
-            disabled={issues.length > 0 || !owner}
+            disabled={
+              issues.length > 0 ||
+              !owner ||
+              services?.renderAcceptance === false
+            }
             onClick={() => void exportVideo()}
           >
             全長previewを生成
@@ -767,7 +785,11 @@ export function AllVersionsEditor({
             {versions.length}
           </p>
           <button
-            disabled={!owner || issues.length > 0}
+            disabled={
+              !owner ||
+              issues.length > 0 ||
+              services?.renderAcceptance === false
+            }
             onClick={() => void exportVideo()}
           >
             全長を書き出す

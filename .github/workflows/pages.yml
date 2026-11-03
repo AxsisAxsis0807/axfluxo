@@ -8,6 +8,11 @@ on:
 env:
   NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'https://nbyigfqkweodzlhwdryz.supabase.co' }}
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_EFXWNrd_UcG6To3sI5IlyA_Abuc1Hij' }}
+  NEXT_PUBLIC_DEVELOPER_STUDIO_ENABLED: ${{ vars.NEXT_PUBLIC_DEVELOPER_STUDIO_ENABLED || 'false' }}
+  NEXT_PUBLIC_ALL_VERSIONS_ENABLED: ${{ vars.NEXT_PUBLIC_ALL_VERSIONS_ENABLED || 'false' }}
+  NEXT_PUBLIC_FNF_SHOWCASE_ENABLED: ${{ vars.NEXT_PUBLIC_FNF_SHOWCASE_ENABLED || 'false' }}
+  NEXT_PUBLIC_VIDEO_PREVIEW_ENABLED: ${{ vars.NEXT_PUBLIC_VIDEO_PREVIEW_ENABLED || 'false' }}
+  NEXT_PUBLIC_VIDEO_API_ORIGIN: ${{ vars.NEXT_PUBLIC_VIDEO_API_ORIGIN }}
 permissions:
   contents: read
 concurrency:
@@ -38,11 +43,14 @@ jobs:
             sudo apt-get install -y ffmpeg
           fi
       - run: npm test
-      - run: npm run build
+      - name: Build unchanged OFF regression artifact
+        run: NEXT_PUBLIC_VIDEO_API_ORIGIN= NEXT_PUBLIC_DEVELOPER_STUDIO_ENABLED=false NEXT_PUBLIC_ALL_VERSIONS_ENABLED=false NEXT_PUBLIC_FNF_SHOWCASE_ENABLED=false NEXT_PUBLIC_VIDEO_PREVIEW_ENABLED=false npm run build
       - run: npx playwright install --with-deps chromium
       - name: Test the Pages artifact at its production subpath
         run: |
-          npm start > /tmp/axfluxo-server.log 2>&1 &
+          node scripts/serve.mjs > /tmp/axfluxo-server.log 2>&1 &
+          regression_pid=$!
+          trap 'kill "$regression_pid" 2>/dev/null || true' EXIT
           for attempt in $(seq 1 30); do
             if curl --fail "$PLAYWRIGHT_BASE_URL" > /dev/null; then break; fi
             sleep 1
@@ -53,6 +61,20 @@ jobs:
         with:
           name: pages-playwright-results
           path: test-results/
+      - name: Check real authorization API before enabling the entry
+        run: node scripts/check-developer-api.mjs
+      - name: Build configured Pages artifact
+        run: npm run build
+      - name: Check access on the configured artifact
+        run: |
+          node scripts/serve.mjs > /tmp/axfluxo-configured-server.log 2>&1 &
+          configured_pid=$!
+          trap 'kill "$configured_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail "$PLAYWRIGHT_BASE_URL" > /dev/null; then break; fi
+            sleep 1
+          done
+          npm run test:developer:published
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out
@@ -90,8 +112,15 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Verify live Supabase public authentication settings
         run: node scripts/check-auth.mjs
+      - name: Verify live developer authorization API
+        run: node scripts/check-developer-api.mjs
       - name: Verify the public HTTPS site
-        run: npm run test:e2e
+        run: |
+          if [ "$NEXT_PUBLIC_DEVELOPER_STUDIO_ENABLED" = true ] || [ -n "$NEXT_PUBLIC_VIDEO_API_ORIGIN" ]; then
+            npm run test:developer:published
+          else
+            npm run test:e2e
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

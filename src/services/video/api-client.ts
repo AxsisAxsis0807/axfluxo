@@ -86,6 +86,9 @@ export function createVideoApiClient(options: {
   session: VideoSessionSource;
   fetch?: typeof fetch;
   now?: () => number;
+  onAuthorizationFailure?: (
+    state: "unauthenticated" | "auth-expired" | "forbidden",
+  ) => void;
 }) {
   const url = new URL(options.baseUrl);
   if (
@@ -192,6 +195,8 @@ export function createVideoApiClient(options: {
               : response.status === 503 || response.status === 429
                 ? "held"
                 : "failed";
+        if (state === "auth-expired" || state === "forbidden")
+          options.onAuthorizationFailure?.(state);
         let safeCode: string | undefined;
         try {
           const parsed = z
@@ -239,7 +244,9 @@ export function createVideoApiClient(options: {
         data: value.data,
       };
     } catch (error) {
-      if (error instanceof SessionFailure)
+      if (error instanceof SessionFailure) {
+        if (error.state === "unauthenticated" || error.state === "auth-expired")
+          options.onAuthorizationFailure?.(error.state);
         return {
           ok: false,
           state: error.state,
@@ -248,6 +255,7 @@ export function createVideoApiClient(options: {
               ? "AUTH_REQUIRED"
               : "AUTH_EXPIRED",
         };
+      }
       return { ok: false, state: "failed", code: "REQUEST_FAILED" };
     }
   }

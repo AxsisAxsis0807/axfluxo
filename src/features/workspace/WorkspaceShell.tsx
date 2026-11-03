@@ -1,4 +1,5 @@
 "use client";
+import DeveloperEntry from "../developer/DeveloperEntry";
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { WORKFLOW_FIRST_ENABLED } from "../../config/workflow-limits";
@@ -34,18 +35,16 @@ export default function WorkspaceShell() {
     setWorkflowOpened(true);
     setLegacy(false);
   };
-  if (!WORKFLOW_FIRST_ENABLED) return <LegacyEditor />;
+  if (!WORKFLOW_FIRST_ENABLED)
+    return (
+      <>
+        <DeveloperEntry />
+        <LegacyEditor />
+      </>
+    );
   return (
     <>
-      {process.env.NEXT_PUBLIC_DEVELOPER_STUDIO_ENABLED === "true" && (
-        <a
-          href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/developer/studio/`}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          開発者Studioを別タブで開く
-        </a>
-      )}
+      <DeveloperEntry />
       <div hidden={legacy} inert={legacy ? true : undefined}>
         {workflowOpened && (
           <WorkflowWorkspace active={!legacy} onLegacy={chooseLegacy} />
