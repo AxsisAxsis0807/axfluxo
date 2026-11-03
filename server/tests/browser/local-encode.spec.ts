@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-test("device encoder produces playable video with audio and joins trimmed pieces", async ({
+test("device encoder joins trimmed audio/video or reports an unavailable encoder", async ({
   page,
 }) => {
   const dir = await mkdtemp(join(tmpdir(), "local-encode-")),
@@ -57,7 +57,24 @@ test("device encoder produces playable video with audio and joins trimmed pieces
   );
   await page.goto("https://encode.test/");
   await expect(page.getByRole("checkbox")).toBeChecked();
+  const available = await page.evaluate(
+    () =>
+      typeof MediaRecorder !== "undefined" &&
+      [
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/mp4",
+        "video/webm;codecs=vp8,opus",
+      ].some((type) => MediaRecorder.isTypeSupported(type)),
+  );
   await page.getByRole("button", { name: "端末内で書き出す" }).click();
+  if (!available) {
+    // Linux WebKit may expose no encoder; native Safari has its own codec stack.
+    await expect(page.getByRole("status")).toContainText(
+      "このブラウザーは端末内エンコードに対応していません。",
+    );
+    await expect(page.getByRole("link", { name: /を保存/ })).toHaveCount(0);
+    return;
+  }
   await expect(page.getByRole("status")).toContainText("完了", {
     timeout: 20000,
   });

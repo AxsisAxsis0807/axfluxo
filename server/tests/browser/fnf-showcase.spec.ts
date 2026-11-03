@@ -312,6 +312,7 @@ test("FNF ranges stay transient; equal starts and names are stable; accepted bat
   expect(records).not.toContain("DO_NOT_PERSIST");
   expect(records).not.toContain("creationOrder");
   expect(records).not.toContain("test-token");
+  await page.getByText("サーバーで書き出す", { exact: true }).click();
   await page.getByLabel("上crop(px)", { exact: true }).fill("100");
   await page.getByRole("button", { name: "全rangeを一括受付" }).click();
   await expect(page.getByRole("alert")).toContainText("crop後");
