@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-test("All Versions rollback keeps all five databases and never admits network work", async ({
+test("All Versions unauthorized access preserves all five databases and admits no media work", async ({
   page,
 }) => {
   const calls: string[] = [];
@@ -9,10 +9,10 @@ test("All Versions rollback keeps all five databases and never admits network wo
   await page.goto("developer/all-versions/");
   await expect(
     page.getByRole("heading", { name: "All Versions", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("入口はOFFです。projectと原本は保持されています。"),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText(
+    /ログイン|設定|開発者権限/,
+  );
   const names = [
     "axfluxo",
     "axfluxo-workflow",
@@ -38,9 +38,9 @@ test("All Versions rollback keeps all five databases and never admits network wo
     }
   }, names);
   await page.reload();
-  await expect(
-    page.getByText("入口はOFFです。projectと原本は保持されています。"),
-  ).toBeVisible();
+  await expect(page.getByRole("status")).toContainText(
+    /ログイン|設定|開発者権限/,
+  );
   expect(
     await page.evaluate(async (names) => {
       const values = [];
