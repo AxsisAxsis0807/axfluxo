@@ -7,3 +7,5 @@ work/
 *.tsbuildinfo
 playwright-report/
 test-results/
+
+/public/local-encoding/

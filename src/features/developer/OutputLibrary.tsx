@@ -18,6 +18,7 @@ import {
   sharePrepared,
 } from "../../services/video/output-save";
 import DeveloperPwa from "./DeveloperPwa";
+import { watchOwner } from "../../services/local-encoding/session";
 const signedSchema = z.object({
   url: z.url(),
   expiresAt: z.number(),
@@ -32,7 +33,9 @@ export function OutputLibrary({ api: injected }: { api?: AuthenticatedApi }) {
     if (injected) return injected;
     if (!enabled) return null;
     const session = currentVideoSessionSource(),
-      baseUrl = process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN;
+      baseUrl =
+        process.env.NEXT_PUBLIC_DEVELOPER_AUTH_API_ORIGIN ??
+        process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN;
     if (!session || !baseUrl) return null;
     try {
       return createVideoApiClient({ session, baseUrl });
@@ -40,6 +43,30 @@ export function OutputLibrary({ api: injected }: { api?: AuthenticatedApi }) {
       return null;
     }
   }, [injected, enabled]);
+  const [authorized, setAuthorized] = useState(false),
+    [owner, setOwner] = useState<string | null>(null);
+  useEffect(() => {
+    if (owner && !injected)
+      return watchOwner(owner, () => {
+        setAuthorized(false);
+        setOwner(null);
+      });
+  }, [owner, injected]);
+  useEffect(() => {
+    let live = true;
+    setAuthorized(false);
+    if (api)
+      void api.me().then((r) => {
+        if (live) {
+          setAuthorized(r.ok);
+          setOwner(r.ok ? r.data.ownerId : null);
+          if (!r.ok) setStatus(videoStateMessage[r.state]);
+        }
+      });
+    return () => {
+      live = false;
+    };
+  }, [api]);
   const [items, setItems] = useState<OutputItem[]>([]),
     [cursor, setCursor] = useState<string | null>(null),
     [status, setStatus] = useState(""),
@@ -55,7 +82,7 @@ export function OutputLibrary({ api: injected }: { api?: AuthenticatedApi }) {
     keys = useRef(new Map<string, string>());
   const load = useCallback(
     async (next?: string) => {
-      if (!api) return;
+      if (!api || !authorized) return;
       const result = await api.request(
         `/outputs${next ? `?cursor=${encodeURIComponent(next)}` : ""}`,
         outputsSchema,
@@ -67,7 +94,7 @@ export function OutputLibrary({ api: injected }: { api?: AuthenticatedApi }) {
         setCursor(result.data.nextCursor);
       } else setStatus(videoStateMessage[result.state]);
     },
-    [api],
+    [api, authorized],
   );
   useEffect(() => {
     void load();
@@ -118,6 +145,13 @@ export function OutputLibrary({ api: injected }: { api?: AuthenticatedApi }) {
         ログインと開発者APIの設定を確認してください。既存の編集内容は保持されています。
       </p>
     );
+  if (!authorized)
+    return (
+      <p role="status">
+        {status ||
+          "開発者権限を確認しています。ログインとアクセス権を確認してください。"}
+      </p>
+    );
   return (
     <main
       className="developer-output-library"
@@ -134,7 +168,7 @@ export function OutputLibrary({ api: injected }: { api?: AuthenticatedApi }) {
           target="_blank"
           rel="noopener noreferrer"
         >
-          All Versions
+          All Versions Video Maker
         </a>
         {" / "}
         <a

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import DeveloperStudioLink from "../developer/DeveloperStudioLink";
 import { WORKFLOW_FIRST_ENABLED } from "../../config/workflow-limits";
 const LegacyEditor = dynamic(() => import("../editor/Editor"), {
   ssr: false,
@@ -38,13 +39,7 @@ export default function WorkspaceShell() {
   return (
     <>
       {process.env.NEXT_PUBLIC_DEVELOPER_STUDIO_ENABLED === "true" && (
-        <a
-          href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/developer/studio/`}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          開発者Studioを別タブで開く
-        </a>
+        <DeveloperStudioLink />
       )}
       <div hidden={legacy} inert={legacy ? true : undefined}>
         {workflowOpened && (

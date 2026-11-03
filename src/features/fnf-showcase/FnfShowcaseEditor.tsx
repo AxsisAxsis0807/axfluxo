@@ -32,6 +32,16 @@ import { TimeField } from "../video-common/TimeField";
 import { PlaybackError } from "../../services/video/playback";
 import type { CloudAsset } from "../../domain/cloud-library/media";
 import { z } from "zod";
+import { watchOwner } from "../../services/local-encoding/session";
+import { LocalEncodingPanel } from "../local-encoding/LocalEncodingPanel";
+import {
+  importMedia,
+  localPreview,
+  releaseMedia,
+} from "../../services/local-encoding/media";
+import { localOverlay } from "../../services/local-encoding/graphics";
+import { cacheCloudSource } from "../../services/local-encoding/cloud-source";
+const serverEncodingAvailable = false;
 const templateLabels = {
   presetWidth: "固定preset幅(px)",
   presetHeight: "固定preset高さ(px)",
@@ -63,11 +73,15 @@ export function FnfShowcaseEditor({
   api?: AuthenticatedApi;
 }) {
   const enabled =
-    !!injected || process.env.NEXT_PUBLIC_FNF_SHOWCASE_ENABLED === "true";
+    !!injected ||
+    process.env.NEXT_PUBLIC_FNF_SHOWCASE_ENABLED === "true" ||
+    process.env.NEXT_PUBLIC_DEVELOPER_STUDIO_ENABLED === "true";
   const api = useMemo(() => {
     if (injected) return injected;
     if (!enabled) return null;
-    const baseUrl = process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN,
+    const baseUrl =
+        process.env.NEXT_PUBLIC_DEVELOPER_AUTH_API_ORIGIN ??
+        process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN,
       session = currentVideoSessionSource();
     if (!baseUrl || !session) return null;
     try {
@@ -118,11 +132,20 @@ export function FnfShowcaseEditor({
     batchRequest = useRef(0),
     sourceRequest = useRef(0),
     prefSavingRef = useRef(false);
-  const cloud = useMemo(() => (api ? cloudClient(api) : null), [api]),
+  const cloud = useMemo(
+      () =>
+        api && (injected || process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN)
+          ? cloudClient(api)
+          : null,
+      [api, injected],
+    ),
     client = useMemo(
       () => (api && owner ? fnfClient(api, owner) : null),
       [api, owner],
     );
+  useEffect(() => {
+    if (owner && !injected) return watchOwner(owner, () => setOwner(null));
+  }, [owner, injected]);
   useEffect(() => {
     active.current = true;
     return () => {
@@ -130,6 +153,7 @@ export function FnfShowcaseEditor({
     };
   }, []);
   useEffect(() => {
+    setOwner(null);
     if (!api) return;
     let live = true;
     void api.me().then((r) => {
@@ -143,18 +167,12 @@ export function FnfShowcaseEditor({
     };
   }, [api]);
   useEffect(() => {
-    if (!client || !owner) return;
+    if (!owner) return;
     let live = true;
     setPreferencesReady(false);
     void (async () => {
       const local = await loadFnfPreferences(owner);
       if (live && local && !dirty.current) setPreferences(local);
-      const remote = await client.preferences();
-      if (live && remote.ok) {
-        setPrefRevision(remote.data.revision);
-        if (!dirty.current && remote.data.revision > 0)
-          setPreferences(remote.data.preferences);
-      }
     })()
       .catch(() => {
         if (live) setPreferenceStatus("端末設定を読み込めませんでした。");
@@ -165,23 +183,36 @@ export function FnfShowcaseEditor({
     return () => {
       live = false;
     };
-  }, [client, owner]);
+  }, [owner]);
   useEffect(() => {
-    if (!client) return;
-    let live = true;
+    if (!owner) return;
+    let live = true,
+      url = "";
     setPng("");
     const valid = fnfPreferencesSchema.safeParse(preferences);
     if (valid.success)
-      void client.overlay(valid.data).then((r) => {
-        if (live) {
-          if (r.ok) setPng(`data:image/png;base64,${r.data.png}`);
-          else setError(r.code);
-        }
-      });
+      void localOverlay(valid.data)
+        .then((blob) => {
+          if (live) {
+            url = URL.createObjectURL(blob);
+            setPng(url);
+          }
+        })
+        .catch((e) => {
+          if (live) setError(e.message);
+        });
     return () => {
       live = false;
+      if (url) URL.revokeObjectURL(url);
     };
-  }, [client, preferences]);
+  }, [owner, preferences]);
+  useEffect(
+    () => () => {
+      if (owner) releaseMedia(owner);
+    },
+    [owner],
+  );
+
   const change = (next: FnfPreferences) => {
     if (busyRef.current || pending.current) return;
     dirty.current = true;
@@ -191,7 +222,7 @@ export function FnfShowcaseEditor({
     setError("");
   };
   async function savePreferences() {
-    if (!client || !owner || prefSavingRef.current) return;
+    if (!owner || prefSavingRef.current) return;
     prefSavingRef.current = true;
     setPrefSaving(true);
     try {
@@ -199,6 +230,11 @@ export function FnfShowcaseEditor({
         generation = preferenceGeneration.current;
       await saveFnfPreferences(owner, clean);
       setPreferenceStatus("端末に設定保存済み・cloud未保存");
+      if (!client || (!injected && !process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN)) {
+        setPreferenceStatus("端末に設定保存済み");
+        dirty.current = false;
+        return;
+      }
       const r = await client.savePreferences(clean, prefRevision);
       if (!active.current) return;
       if (r.ok) setPrefRevision(r.data.revision);
@@ -236,6 +272,7 @@ export function FnfShowcaseEditor({
   }
   const resolve: PreviewResolver = useCallback(
     async (ref) => {
+      if (ref.libraryId === "local" && owner) return localPreview(owner, ref);
       if (!cloud) throw new PlaybackError("AUTH_EXPIRED");
       const r = await cloud.preview(ref.versionId);
       if (!r.ok)
@@ -248,7 +285,7 @@ export function FnfShowcaseEditor({
         );
       return r.data;
     },
-    [cloud],
+    [cloud, owner],
   );
   async function select(asset: CloudAsset) {
     if (!client || asset.kind !== "video") {
@@ -274,6 +311,31 @@ export function FnfShowcaseEditor({
     } catch (e) {
       setError(e instanceof Error ? e.message : "FNF_SOURCE_MISSING");
     }
+  }
+  async function loadLocal(file: File) {
+    if (!owner || locked) return;
+    try {
+      const media = await importMedia(owner, file, "video");
+      setSession(
+        new FnfSession({
+          reference: media.reference,
+          durationUs: media.durationUs,
+          width: media.width,
+          height: media.height,
+          geometryVerified: true,
+        }),
+      );
+      setClock(0);
+      setError("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "動画を読み込めません。");
+    }
+  }
+  async function authorize() {
+    const result = await api?.me();
+    const allowed = !!result?.ok && result.data.ownerId === owner;
+    if (!allowed) setOwner(null);
+    return allowed;
   }
   const update = (work: () => void) => {
     if (busyRef.current || pending.current) return;
@@ -440,6 +502,13 @@ export function FnfShowcaseEditor({
         <p>開発者APIとログインを設定してください。</p>
       </main>
     );
+  if (!owner)
+    return (
+      <main>
+        <h1>FNF Showcase Maker</h1>
+        <p role="status">開発者権限を確認しています。{error}</p>
+      </main>
+    );
   return (
     <main
       style={{
@@ -451,7 +520,7 @@ export function FnfShowcaseEditor({
     >
       <h1>FNF Showcase Maker</h1>
       <p>
-        未送信range・譜面名はこのページのメモリー内だけです。閉じると消えます。受付済みjobは閉じても継続します。
+        編集中のrange・譜面名はメモリー内です。書き出しキューに追加すると端末に保存されます。端末内処理には画面を開いたままにしてください。
       </p>
       {error && <p role="alert">{errors[error] ?? error}</p>}
       <fieldset disabled={locked}>
@@ -530,8 +599,21 @@ export function FnfShowcaseEditor({
           </button>
         </p>
       )}
+      <label>
+        端末から元動画を読み込む
+        <input
+          disabled={locked}
+          type="file"
+          accept="video/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void loadLocal(file);
+            e.target.value = "";
+          }}
+        />
+      </label>
       <details>
-        <summary>素材を選択／upload</summary>
+        <summary>クラウド素材を選択／upload（任意）</summary>
         {cloud && (
           <CloudLibrary
             client={cloud}
@@ -618,130 +700,153 @@ export function FnfShowcaseEditor({
                 </li>
               ))}
             </ol>
-            <button
-              disabled={
-                !owner ||
-                busy ||
-                !session.ranges.length ||
-                (!pending.current && submitted.current === fingerprint)
-              }
-              onClick={() => void submit()}
-            >
-              {pending.current ? "前回受付結果を再確認" : "全rangeを一括受付"}
-            </button>
+            {serverEncodingAvailable && (
+              <button
+                disabled={
+                  !owner ||
+                  busy ||
+                  !session.ranges.length ||
+                  (!pending.current && submitted.current === fingerprint)
+                }
+                onClick={() => void submit()}
+              >
+                {pending.current ? "前回受付結果を再確認" : "全rangeを一括受付"}
+              </button>
+            )}
           </fieldset>
         </>
       )}
-      {pending.current && !busy && (
+      <LocalEncodingPanel
+        owner={owner}
+        snapshot={() => {
+          if (!session) throw Error("元動画を読み込んでください。");
+          return session.snapshot(preferences);
+        }}
+        authorize={authorize}
+        materialize={
+          cloud ? (ref) => cacheCloudSource(owner, ref, cloud) : undefined
+        }
+      />
+      {serverEncodingAvailable && pending.current && !busy && (
         <button onClick={() => void submit()}>
           同じ内容・同じキーで受付を再確認
         </button>
       )}
-      <section aria-label="受付済みbatch">
-        <h2>batch進捗・各MP4</h2>
-        <button onClick={() => void list()}>受付済batch一覧を確認</button>
-        <ul>
-          {history.map((h) => (
-            <li key={h.id}>
-              <button onClick={() => void refresh(h.id)}>
-                {h.createdAt}・{h.id}
-              </button>
-            </li>
-          ))}
-        </ul>
-        {cursor && (
-          <button onClick={() => void list(true)}>batchをさらに表示</button>
-        )}
-        <label>
-          batch ID
-          <input value={batchId} onChange={(e) => setBatchId(e.target.value)} />
-        </label>
-        <button onClick={() => void refresh(batchId)}>進捗を再確認</button>
-        {batch &&
-          batch.items.slice(cardPage * 20, (cardPage + 1) * 20).map((item) => {
-            const latest = batch.batch.jobs
-                .filter((j) => j.rangeIndex === item.rangeIndex)
-                .sort((a, b) => b.attempt - a.attempt)[0],
-              output = batch.batch.outputs.find((o) => o.jobId === latest?.id);
-            return (
-              <article
-                key={item.rangeIndex}
-                style={{ border: "1px solid #777", padding: 12, margin: 8 }}
-              >
-                <h3>{item.chartName}</h3>
-                <p>
-                  {item.filename} ／{" "}
-                  {latest
-                    ? videoStateMessage[
-                        latest.state === "queued" ||
-                        latest.state === "cancel_requested"
-                          ? "waiting"
-                          : latest.state === "interrupted"
-                            ? "failed"
-                            : latest.state
-                      ]
-                    : "待機"}
-                </p>
-                {latest && progress[latest.id] && (
-                  <p>
-                    {progress[latest.id].completedFrames} /{" "}
-                    {progress[latest.id].totalFrames} frames（worker試行{" "}
-                    {progress[latest.id].runs}）
-                    {progress[latest.id].errorCode
-                      ? `・${progress[latest.id].errorCode}`
-                      : ""}
-                  </p>
-                )}
-                {latest &&
-                  ["failed", "cancelled", "interrupted"].includes(
-                    latest.state,
-                  ) && (
-                    <button
-                      disabled={busy}
-                      onClick={() => void retry(latest.id)}
-                    >
-                      この失敗rangeだけretry
-                    </button>
-                  )}
-                {output && (
-                  <>
-                    <button onClick={() => void saveUrl(output.id)}>
-                      MP4保存URLを取得・更新
-                    </button>
-                    {access[output.id] && (
-                      <a
-                        href={access[output.id]}
-                        download={item.filename}
-                        rel="noreferrer"
-                      >
-                        {item.filename}を保存
-                      </a>
+      <details>
+        <summary>既存のServer Encodingジョブ・完成物（保持）</summary>
+        <section aria-label="受付済みbatch">
+          <h2>batch進捗・各MP4</h2>
+          <button onClick={() => void list()}>受付済batch一覧を確認</button>
+          <ul>
+            {history.map((h) => (
+              <li key={h.id}>
+                <button onClick={() => void refresh(h.id)}>
+                  {h.createdAt}・{h.id}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {cursor && (
+            <button onClick={() => void list(true)}>batchをさらに表示</button>
+          )}
+          <label>
+            batch ID
+            <input
+              value={batchId}
+              onChange={(e) => setBatchId(e.target.value)}
+            />
+          </label>
+          <button onClick={() => void refresh(batchId)}>進捗を再確認</button>
+          {batch &&
+            batch.items
+              .slice(cardPage * 20, (cardPage + 1) * 20)
+              .map((item) => {
+                const latest = batch.batch.jobs
+                    .filter((j) => j.rangeIndex === item.rangeIndex)
+                    .sort((a, b) => b.attempt - a.attempt)[0],
+                  output = batch.batch.outputs.find(
+                    (o) => o.jobId === latest?.id,
+                  );
+                return (
+                  <article
+                    key={item.rangeIndex}
+                    style={{ border: "1px solid #777", padding: 12, margin: 8 }}
+                  >
+                    <h3>{item.chartName}</h3>
+                    <p>
+                      {item.filename} ／{" "}
+                      {latest
+                        ? videoStateMessage[
+                            latest.state === "queued" ||
+                            latest.state === "cancel_requested"
+                              ? "waiting"
+                              : latest.state === "interrupted"
+                                ? "failed"
+                                : latest.state
+                          ]
+                        : "待機"}
+                    </p>
+                    {latest && progress[latest.id] && (
+                      <p>
+                        {progress[latest.id].completedFrames} /{" "}
+                        {progress[latest.id].totalFrames} frames（worker試行{" "}
+                        {progress[latest.id].runs}）
+                        {progress[latest.id].errorCode
+                          ? `・${progress[latest.id].errorCode}`
+                          : ""}
+                      </p>
                     )}
-                  </>
-                )}
-              </article>
-            );
-          })}
-        {batch && batch.items.length > 20 && (
-          <div>
-            <button
-              disabled={cardPage === 0}
-              onClick={() => void refresh(batch.batch.id, cardPage - 1)}
-            >
-              前のMP4カード
-            </button>
-            <span>
-              {cardPage + 1} / {Math.ceil(batch.items.length / 20)}
-            </span>
-            <button
-              disabled={(cardPage + 1) * 20 >= batch.items.length}
-              onClick={() => void refresh(batch.batch.id, cardPage + 1)}
-            >
-              次のMP4カード
-            </button>
-          </div>
-        )}
-      </section>
+                    {latest &&
+                      ["failed", "cancelled", "interrupted"].includes(
+                        latest.state,
+                      ) && (
+                        <button
+                          disabled={busy}
+                          onClick={() => void retry(latest.id)}
+                        >
+                          この失敗rangeだけretry
+                        </button>
+                      )}
+                    {output && (
+                      <>
+                        <button onClick={() => void saveUrl(output.id)}>
+                          MP4保存URLを取得・更新
+                        </button>
+                        {access[output.id] && (
+                          <a
+                            href={access[output.id]}
+                            download={item.filename}
+                            rel="noreferrer"
+                          >
+                            {item.filename}を保存
+                          </a>
+                        )}
+                      </>
+                    )}
+                  </article>
+                );
+              })}
+          {batch && batch.items.length > 20 && (
+            <div>
+              <button
+                disabled={cardPage === 0}
+                onClick={() => void refresh(batch.batch.id, cardPage - 1)}
+              >
+                前のMP4カード
+              </button>
+              <span>
+                {cardPage + 1} / {Math.ceil(batch.items.length / 20)}
+              </span>
+              <button
+                disabled={(cardPage + 1) * 20 >= batch.items.length}
+                onClick={() => void refresh(batch.batch.id, cardPage + 1)}
+              >
+                次のMP4カード
+              </button>
+            </div>
+          )}
+        </section>
+      </details>
       <style>
         {
           "button,input {min-height:44px} label{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px} input{max-width:100%} fieldset{margin:12px 0} main{overflow-wrap:anywhere}"

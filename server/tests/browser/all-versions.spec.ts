@@ -54,7 +54,7 @@ test.beforeAll(async () => {
   );
   media = await readFile(path);
 });
-test("six-step editor keeps names, saves offline, synchronizes revisions, and uses server text PNG", async ({
+test("six-step editor keeps names, saves offline, synchronizes revisions, and uses local text PNG", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -223,6 +223,13 @@ test("six-step editor keeps names, saves offline, synchronizes revisions, and us
       body: '<!doctype html><html lang="ja"><div id="root"></div></html>',
     }),
   );
+  await page.route("**/local-encoding/Aleo.ttf", async (r) =>
+    r.fulfill({
+      body: await readFile(
+        "server/worker/templates/all-versions/assets/Aleo.ttf",
+      ),
+    }),
+  );
   await page.goto("https://all-versions-browser.test/");
   await page.addScriptTag({ content: bundle });
   await page.getByRole("button", { name: "使用：song.wav" }).click();
@@ -248,8 +255,8 @@ test("six-step editor keeps names, saves offline, synchronizes revisions, and us
   );
   expect((saved as AllVersionsProject | null)?.design.height).toBe(1440);
   await page.getByRole("button", { name: "5. 全長preview" }).click();
-  await expect(page.getByAltText("server生成の文字")).toBeVisible();
-  expect(texts).toBeGreaterThan(0);
+  await expect(page.getByAltText("端末内生成の文字")).toBeVisible();
+  expect(texts).toBe(0);
   await page.evaluate(() =>
     Object.defineProperty(navigator, "onLine", {
       configurable: true,
@@ -281,4 +288,29 @@ test("six-step editor keeps names, saves offline, synchronizes revisions, and us
   expect(JSON.stringify(stored)).toContain("Offline One");
   expect(JSON.stringify(stored)).not.toContain("test-token");
   expect(errors).toEqual([]);
+});
+
+test("All Versions denies local media and export controls when server membership rejects access", async ({
+  page,
+}) => {
+  await page.route("https://av-api.test/**", (r) =>
+    r.fulfill({
+      status: 403,
+      headers: {
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "authorization",
+      },
+      body: JSON.stringify({ code: "FORBIDDEN" }),
+    }),
+  );
+  await page.route("https://all-versions-browser.test/", (r) =>
+    r.fulfill({ contentType: "text/html", body: '<div id="root"></div>' }),
+  );
+  await page.goto("https://all-versions-browser.test/");
+  await page.addScriptTag({ content: bundle });
+  await expect(page.getByRole("status")).toContainText("HTTP_403");
+  await expect(
+    page.getByLabel("端末から音声・動画・カバーアートを読み込む"),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Local Low-Load Encoding")).toHaveCount(0);
 });

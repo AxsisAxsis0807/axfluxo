@@ -37,7 +37,19 @@ import {
   syncEntry,
   listProjects,
 } from "../../services/developer-storage/projects";
+import { watchOwner } from "../../services/local-encoding/session";
+import { LocalEncodingPanel } from "../local-encoding/LocalEncodingPanel";
+import {
+  importMedia,
+  localPreview,
+  localUrl,
+  releaseMedia,
+  generateWaveform,
+} from "../../services/local-encoding/media";
+import { localText } from "../../services/local-encoding/graphics";
+import { cacheCloudSource } from "../../services/local-encoding/cloud-source";
 import { PlaybackError } from "../../services/video/playback";
+const serverEncodingAvailable = false;
 const steps = [
   "素材",
   "音声編集",
@@ -69,12 +81,16 @@ export function AllVersionsEditor({
   api?: AuthenticatedApi;
 }) {
   const enabled =
-    !!injected || process.env.NEXT_PUBLIC_ALL_VERSIONS_ENABLED === "true";
+    !!injected ||
+    process.env.NEXT_PUBLIC_ALL_VERSIONS_ENABLED === "true" ||
+    process.env.NEXT_PUBLIC_DEVELOPER_STUDIO_ENABLED === "true";
   const api = useMemo(() => {
     if (injected) return injected;
     if (!enabled) return null;
     const session = currentVideoSessionSource(),
-      baseUrl = process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN;
+      baseUrl =
+        process.env.NEXT_PUBLIC_DEVELOPER_AUTH_API_ORIGIN ??
+        process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN;
     if (!session || !baseUrl) return null;
     try {
       return createVideoApiClient({ baseUrl, session });
@@ -82,7 +98,13 @@ export function AllVersionsEditor({
       return null;
     }
   }, [enabled, injected]);
-  const cloud = useMemo(() => (api ? cloudClient(api) : null), [api]);
+  const cloud = useMemo(
+    () =>
+      api && (injected || process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN)
+        ? cloudClient(api)
+        : null,
+    [api, injected],
+  );
   const [project, setProject] = useState<AllVersionsProject>(() =>
       newProject(),
     ),
@@ -100,10 +122,15 @@ export function AllVersionsEditor({
     [text, setText] = useState(""),
     [batch, setBatch] = useState(""),
     [status, setStatus] = useState(""),
-    [output, setOutput] = useState("");
+    [output, setOutput] = useState(""),
+    [waveRevision, setWaveRevision] = useState(0),
+    [waveBusy, setWaveBusy] = useState(false);
   const remote = useMemo(
-    () => (api && owner ? projectsClient(api, owner) : null),
-    [api, owner],
+    () =>
+      api && owner && (injected || process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN)
+        ? projectsClient(api, owner)
+        : null,
+    [api, owner, injected],
   );
   const queue = useRef<ProjectSaveQueue | null>(null),
     docRef = useRef(project),
@@ -113,6 +140,10 @@ export function AllVersionsEditor({
     finalPosition = useRef(0);
   docRef.current = project;
   useEffect(() => {
+    if (owner && !injected) return watchOwner(owner, () => setOwner(null));
+  }, [owner, injected]);
+  useEffect(() => {
+    setOwner(null);
     if (!api) return;
     let live = true;
     void api.me().then(async (r) => {
@@ -120,18 +151,6 @@ export function AllVersionsEditor({
         if (r.ok) setOwner(r.data.ownerId);
         else {
           setError(r.code);
-          if (!navigator.onLine || r.code === "REQUEST_FAILED") {
-            try {
-              const session = await currentVideoSessionSource()?.getSession();
-              const id = session?.data.session?.user?.id;
-              if (live && id) {
-                setOwner(id);
-                setCloudState("offline編集・cloud権限は未確認");
-              }
-            } catch {
-              /* Local editor remains closed if the session owner is unavailable. */
-            }
-          }
         }
       }
     });
@@ -169,7 +188,14 @@ export function AllVersionsEditor({
     if (!owner || !remote) return;
     let stopped = false;
     const sync = () => {
-      if (stopped || !navigator.onLine) return;
+      if (
+        stopped ||
+        !navigator.onLine ||
+        docRef.current.document?.clips.some(
+          (c) => c.source.libraryId === "local",
+        )
+      )
+        return;
       const id = docRef.current.id;
       void (async () => {
         if (!(await syncEntry(owner, id))) return false;
@@ -213,6 +239,7 @@ export function AllVersionsEditor({
   }, []);
   const resolve: PreviewResolver = useCallback(
     async (ref) => {
+      if (ref.libraryId === "local" && owner) return localPreview(owner, ref);
       if (!cloud) throw new PlaybackError("AUTH_EXPIRED");
       const r = await cloud.preview(ref.versionId);
       if (!r.ok)
@@ -225,7 +252,7 @@ export function AllVersionsEditor({
         );
       return r.data;
     },
-    [cloud],
+    [cloud, owner],
   );
   async function selected(asset: CloudAsset) {
     try {
@@ -267,6 +294,52 @@ export function AllVersionsEditor({
       setError(e instanceof Error ? e.message : "PREVIEW_FAILED");
     }
   }
+  async function loadLocal(file: File) {
+    if (!owner) return;
+    try {
+      const kind = file.type.startsWith("image/")
+        ? "image"
+        : file.type.startsWith("audio/")
+          ? "audio"
+          : "video";
+      const media = await importMedia(owner, file, kind),
+        old = docRef.current;
+      if (kind === "image") {
+        change({ ...old, cover: media.reference });
+        return;
+      }
+      const clip = {
+        id: crypto.randomUUID(),
+        source: media.reference,
+        sourceDurationUs: media.durationUs,
+        interval: { startUs: 0, endUs: media.durationUs },
+        markersUs: [],
+      };
+      change({
+        ...old,
+        document: allVersionsDocumentSchema.parse(
+          old.document
+            ? { ...old.document, clips: [...old.document.clips, clip] }
+            : {
+                schemaVersion: 1,
+                kind: "all-versions",
+                id: crypto.randomUUID(),
+                revision: 0,
+                fnf: { schemaVersion: 1, mode: "fnf", paddingUs: 0 },
+                clips: [clip],
+              },
+        ),
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "素材を読み込めません。");
+    }
+  }
+  async function authorize() {
+    const result = await api?.me();
+    const allowed = !!result?.ok && result.data.ownerId === owner;
+    if (!allowed) setOwner(null);
+    return allowed;
+  }
   const versions = versionIntervals(project),
     names = projectNames(project),
     issues = projectIssues(project),
@@ -282,36 +355,62 @@ export function AllVersionsEditor({
   useEffect(() => {
     let live = true;
     setText("");
-    if (remote && projectNames(docRef.current)[index]?.trim())
-      void remote
-        .text(docRef.current, index)
-        .then((r) => {
-          if (live) setText(`data:image/png;base64,${r.png}`);
+    let url = "";
+    if (owner && projectNames(docRef.current)[index]?.trim())
+      void localText(docRef.current, index)
+        .then((blob) => {
+          if (live) {
+            url = URL.createObjectURL(blob);
+            setText(url);
+          }
         })
         .catch((e) => {
           if (live) setError(e.message);
         });
+
     return () => {
       live = false;
+      if (url) URL.revokeObjectURL(url);
     };
-  }, [remote, textKey, index]);
+  }, [owner, textKey, index]);
   useEffect(() => {
     let live = true;
     setCoverUrl("");
-    if (project.cover && cloud)
+    if (project.cover?.libraryId === "local" && owner) {
+      void localUrl(owner, project.cover.versionId)
+        .then((url) => {
+          if (live) setCoverUrl(url);
+        })
+        .catch((e) => {
+          if (live) setError(e.message);
+        });
+    } else if (project.cover && cloud)
       void cloud.access(project.cover.versionId).then((r) => {
         if (live && r.ok) setCoverUrl(r.data.url);
       });
     return () => {
       live = false;
     };
-  }, [cloud, project.cover]);
+  }, [cloud, project.cover, owner]);
+  useEffect(
+    () => () => {
+      if (owner) releaseMedia(owner);
+    },
+    [owner],
+  );
   async function save(sync = true) {
     try {
       const id = docRef.current.id;
       queue.current?.schedule(docRef.current);
       await queue.current?.flush();
-      if (sync && owner && remote) {
+      if (
+        sync &&
+        owner &&
+        remote &&
+        !docRef.current.document?.clips.some(
+          (c) => c.source.libraryId === "local",
+        )
+      ) {
         setCloudState("cloud：同期中");
         await syncProject(owner, id, remote.transport);
         const pending = await syncEntry(owner, id);
@@ -331,11 +430,12 @@ export function AllVersionsEditor({
   }
   async function open() {
     try {
-      if (!owner || !remote) return;
+      if (!owner) return;
       const request = ++generation.current;
       await queue.current?.flush();
       let row = await localProject(owner, openId);
       if (!row) {
+        if (!remote) throw Error("PROJECT_NOT_FOUND");
         const r = await remote.get(openId);
         if (!r.ok) throw new Error(r.code);
         const { saveProject, acknowledge } =
@@ -419,6 +519,13 @@ export function AllVersionsEditor({
         <p>開発者APIとログインを設定してください。</p>
       </main>
     );
+  if (!owner)
+    return (
+      <main>
+        <h1>All Versions Video Maker</h1>
+        <p role="status">開発者権限を確認しています。{error}</p>
+      </main>
+    );
   return (
     <main style={{ maxWidth: 1100, margin: "auto", padding: 16 }}>
       <h1>All Versions Video Maker</h1>
@@ -482,6 +589,20 @@ export function AllVersionsEditor({
           </button>
         ))}
       </nav>
+      {step === 0 && (
+        <label>
+          端末から音声・動画・カバーアートを読み込む
+          <input
+            type="file"
+            accept="audio/*,video/*,image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void loadLocal(file);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      )}
       {step === 0 && cloud && (
         <>
           <p>
@@ -493,6 +614,7 @@ export function AllVersionsEditor({
       )}
       {(step === 1 || step === 4) && project.document && (
         <VideoPreview
+          key={waveRevision}
           mode="all-versions"
           document={project.document}
           onDocumentChange={(document) =>
@@ -550,7 +672,7 @@ export function AllVersionsEditor({
                   <img
                     width={1920}
                     height={1080}
-                    alt="server生成の文字"
+                    alt="端末内生成の文字"
                     src={text}
                     style={{
                       position: "absolute",
@@ -567,6 +689,31 @@ export function AllVersionsEditor({
             ) : undefined
           }
         />
+      )}
+      {step === 1 && (
+        <button
+          disabled={waveBusy}
+          onClick={() =>
+            void (async () => {
+              if (!owner) return;
+              setWaveBusy(true);
+              try {
+                for (const c of project.document?.clips ?? [])
+                  if (c.source.libraryId === "local")
+                    await generateWaveform(owner, c.source.versionId);
+                setWaveRevision((v) => v + 1);
+              } catch (e) {
+                setError(
+                  e instanceof Error ? e.message : "波形を生成できません。",
+                );
+              } finally {
+                setWaveBusy(false);
+              }
+            })()
+          }
+        >
+          {waveBusy ? "波形を端末内で生成中…" : "端末素材の波形を生成"}
+        </button>
       )}
       {step === 1 &&
         project.document?.clips.map((c, i) => (
@@ -722,7 +869,7 @@ export function AllVersionsEditor({
           </p>
         </>
       )}
-      {step === 4 && (
+      {step === 4 && serverEncodingAvailable && (
         <section aria-label="検証済み全長preview">
           <p>生成した全長previewを、そのままMP4の書き出しに使えます。</p>
           <button
@@ -761,6 +908,16 @@ export function AllVersionsEditor({
         </section>
       )}
       {step === 5 && (
+        <LocalEncodingPanel
+          owner={owner}
+          snapshot={() => docRef.current}
+          authorize={authorize}
+          materialize={
+            cloud ? (ref) => cacheCloudSource(owner, ref, cloud) : undefined
+          }
+        />
+      )}
+      {step === 5 && serverEncodingAvailable && (
         <>
           <p>
             全長：{versions.at(-1)?.endFrame ?? 0} frames・version数：

@@ -34,3 +34,8 @@
 ## FNF Showcase graphics (V6)
 
 Noto Sans JP variable font, Google Fonts `ofl/notosansjp/NotoSansJP[wght].ttf`: SIL Open Font License 1.1. Unmodified font SHA-256 `c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f`; license: `public/licenses/NotoSansJP-OFL.txt` and the bundled server asset directory. Used by the server for the fixed heading/username PNG shared with preview. No runtime font download and no new JavaScript dependency.
+
+## Local encoding
+
+- `@ffmpeg/ffmpeg` 0.12.15 — MIT; `@ffmpeg/core` 0.12.10 — GPL-2.0-or-later, single-thread FFmpeg 5.1.4 including libx264. The build copies the unmodified npm distribution to `local-encoding/`; upstream sources and build instructions: https://github.com/ffmpegwasm/ffmpeg.wasm/tree/v0.12.10 and https://github.com/FFmpeg/FFmpeg/tree/n5.1.4. Distribution notices: `local-encoding/ffmpeg-LICENSE.txt`, `local-encoding/core-LICENSE.txt`. Package versions and integrity hashes are pinned in `package-lock.json`.
+- The same verified Aleo and Noto Sans JP font assets above are now also used by browser Canvas for local preview/export graphics. Their unmodified OFL notices accompany the local assets. No external font service is required.
