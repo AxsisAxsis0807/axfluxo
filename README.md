@@ -141,7 +141,9 @@ saveは通常キャッシュから分離し、同じ再実行系列の結果を�
 [設計・互換性・rollback](docs/adr/006-library-workflow-io.md)と
 [Phase 3検証記録・実機手順](docs/manual-tests/workflow-phase3-results.md)を参照してください。
 
-### 開発者向け動画統合（V0–V7、既定OFF）
+### 開発者向け動画統合（既定OFF）
+
+新しい書き出しは **Developer Studio内の端末内エンコードが標準**です。All Versions Video Maker / FNF Showcase Makerの既存設定へ低負荷キューを統合しています。10分処理・4分休憩、保存済みチャンクからの再開に対応し、動画処理用サーバーは不要です。Safariを開いたまま使ってください。既存のサーバー実装・API・DB・完成物は保持し、新規サーバー書き出しは通常UIから外しています。[実装・制約・設定・Safari実機検証](docs/video/local-encoding.md) を先に確認してください。以下のV0–V7の説明は既存サーバー構成の記録です。
 
 動画editor・server workerは既存の画像Studio/Workflowと分離しています。
 V7は完成MP4の個別保存、写真アプリでの明示保存確認、確認後の専用bucket削除、PWA通知を追加します。

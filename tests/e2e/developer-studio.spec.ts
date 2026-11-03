@@ -53,7 +53,9 @@ test("saving, cancelling share and opening a huge MP4 never confirm saved; expli
       reason: null,
     };
     let body: unknown = {};
-    if (path === "/outputs")
+    if (path === "/v1/developer/me")
+      body = { ownerId: id, membership: "developer" };
+    else if (path === "/outputs")
       body = {
         items: [
           item,
@@ -269,9 +271,11 @@ test("push permission denial occurs only after a tap and preserves the output li
         route.request().method() === "OPTIONS"
           ? ""
           : JSON.stringify(
-              new URL(route.request().url()).pathname === "/push/config"
-                ? { enabled: true, publicKey: "BAAAAA" }
-                : { items: [], nextCursor: null },
+              new URL(route.request().url()).pathname === "/v1/developer/me"
+                ? { ownerId: id, membership: "developer" }
+                : new URL(route.request().url()).pathname === "/push/config"
+                  ? { enabled: true, publicKey: "BAAAAA" }
+                  : { items: [], nextCursor: null },
             ),
     }),
   );

@@ -52,7 +52,7 @@ test.beforeAll(async () => {
   );
   media = await readFile(path);
 });
-test("FNF ranges stay transient; equal starts and names are stable; accepted batch survives tab closure without editor restoration", async ({
+test("FNF draft ranges stay transient, local queue survives closure, and server submission is unavailable", async ({
   context,
   page,
 }) => {
@@ -262,12 +262,21 @@ test("FNF ranges stay transient; equal starts and names are stable; accepted bat
       body: '<!doctype html><html lang="ja"><div id="root"></div></html>',
     }),
   );
+  await context.route("**/local-encoding/NotoSansJP.ttf", async (r) =>
+    r.fulfill({
+      body: await readFile(
+        "server/worker/templates/fnf-showcase/assets/NotoSansJP.ttf",
+      ),
+    }),
+  );
   async function start(p: typeof page) {
     await p.goto("https://fnf-browser.test/");
     await p.addScriptTag({ content: bundle });
   }
   await start(page);
-  await page.getByText("素材を選択／upload", { exact: true }).click();
+  await page
+    .getByText("クラウド素材を選択／upload（任意）", { exact: true })
+    .click();
   await page.getByRole("button", { name: "使用：gameplay.mp4" }).click();
   await expect(page.getByLabel("range 1 終了", { exact: true })).toHaveValue(
     "00:00:03.000000",
@@ -312,23 +321,24 @@ test("FNF ranges stay transient; equal starts and names are stable; accepted bat
   expect(records).not.toContain("DO_NOT_PERSIST");
   expect(records).not.toContain("creationOrder");
   expect(records).not.toContain("test-token");
-  await page.getByLabel("上crop(px)", { exact: true }).fill("100");
-  await page.getByRole("button", { name: "全rangeを一括受付" }).click();
-  await expect(page.getByRole("alert")).toContainText("crop後");
-  await expect(page.getByLabel("上crop(px)", { exact: true })).toBeEnabled();
-  await page.getByLabel("上crop(px)", { exact: true }).fill("0");
-  await page.getByRole("button", { name: "全rangeを一括受付" }).click();
   await expect(
-    page.getByRole("heading", { name: "DO_NOT_PERSIST_日本語", exact: true }),
-  ).toHaveCount(2);
-  expect((snapshot as FnfShowcaseSnapshot | null)?.ranges).toEqual([
-    { startUs: 0, endUs: 3000000 },
-    { startUs: 0, endUs: 3000000 },
-  ]);
-  expect((snapshot as FnfShowcaseSnapshot | null)?.names).toEqual([
-    "DO_NOT_PERSIST_日本語.mp4",
-    "DO_NOT_PERSIST_日本語 (2).mp4",
-  ]);
+    page.getByRole("button", { name: "全rangeを一括受付" }),
+  ).toHaveCount(0);
+  await page.getByLabel("端末から元動画を読み込む").setInputFiles({
+    name: "gameplay.mp4",
+    mimeType: "video/mp4",
+    buffer: media,
+  });
+  await page
+    .getByLabel("range 1 譜面名", { exact: true })
+    .fill("LOCAL_QUEUE_日本語");
+  await page
+    .getByRole("button", { name: "現在の編集内容をキューに追加" })
+    .click();
+  await expect(page.getByLabel("Local Low-Load Encoding")).toContainText(
+    "LOCAL_QUEUE_日本語.mp4",
+  );
+  expect(snapshot).toBeNull();
   await page.close();
   const next = await context.newPage();
   next.on("pageerror", (e) => errors.push(e.message));
@@ -339,15 +349,12 @@ test("FNF ranges stay transient; equal starts and names are stable; accepted bat
   expect(await next.getByLabel("range 1 譜面名", { exact: true }).count()).toBe(
     0,
   );
-  await next.getByRole("button", { name: "受付済batch一覧を確認" }).click();
-  await next.getByRole("button", { name: new RegExp(batchId) }).click();
-  await expect(
-    next.getByRole("heading", { name: "DO_NOT_PERSIST_日本語", exact: true }),
-  ).toHaveCount(2);
-  expect(await next.getByLabel("range 1 譜面名", { exact: true }).count()).toBe(
-    0,
+  await expect(next.getByLabel("Local Low-Load Encoding")).toContainText(
+    "LOCAL_QUEUE_日本語.mp4",
   );
-  await next.getByText("素材を選択／upload", { exact: true }).click();
+  await next
+    .getByText("クラウド素材を選択／upload（任意）", { exact: true })
+    .click();
   await next.getByRole("button", { name: "使用：gameplay.mp4" }).click();
   await expect(next.getByLabel("range 1 譜面名", { exact: true })).toHaveValue(
     "",
@@ -357,4 +364,27 @@ test("FNF ranges stay transient; equal starts and names are stable; accepted bat
   );
   expect(cancels).toBe(0);
   expect(errors).toEqual([]);
+});
+
+test("FNF rejects local editing and queue access without server developer membership", async ({
+  page,
+}) => {
+  await page.route("https://fnf-api.test/**", (r) =>
+    r.fulfill({
+      status: 403,
+      headers: {
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "authorization",
+      },
+      body: JSON.stringify({ code: "FORBIDDEN" }),
+    }),
+  );
+  await page.route("https://fnf-browser.test/", (r) =>
+    r.fulfill({ contentType: "text/html", body: '<div id="root"></div>' }),
+  );
+  await page.goto("https://fnf-browser.test/");
+  await page.addScriptTag({ content: bundle });
+  await expect(page.getByRole("status")).toContainText("HTTP_403");
+  await expect(page.getByLabel("端末から元動画を読み込む")).toHaveCount(0);
+  await expect(page.getByLabel("Local Low-Load Encoding")).toHaveCount(0);
 });
