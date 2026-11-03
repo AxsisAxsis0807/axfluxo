@@ -79,6 +79,7 @@ import { importImage } from "../../services/assets";
 import type { ProjectDocument } from "../../domain/document";
 import WorkspaceDialog from "./WorkspaceDialog";
 import Account from "../auth/Account";
+import { DeveloperStudioEntry } from "../developer/DeveloperAccess";
 import "../workflow/workflow.css";
 import "./workspace.css";
 type History = {
@@ -777,7 +778,12 @@ export default function WorkflowWorkspace({
           <p>
             端末内保存。画像コピーで容量が増えます。端末へのバックアップも保存してください。
           </p>
-          {active && <Account />}
+          {active && (
+            <>
+              <Account />
+              <DeveloperStudioEntry />
+            </>
+          )}
         </aside>
         <main className="workspace-main" inert={operation ? true : undefined}>
           <section

@@ -2234,3 +2234,18 @@ h1 {
     font-size: 11px;
   }
 }
+
+/* The legacy sidebar becomes a bottom bar on phones. Keep account/tools reachable. */
+.legacy-mobile-account {
+  display: none;
+}
+.global-nav .nav-bottom > a {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 700px) {
+  .legacy-mobile-account {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+}

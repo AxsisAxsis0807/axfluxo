@@ -1,4 +1,9 @@
 "use client";
+import { LocalExport } from "../video-common/LocalExport";
+import {
+  imageForEncode,
+  type LocalEncodeJob,
+} from "../../services/video/local-encode";
 /* eslint-disable @next/next/no-img-element -- The private server-rasterized overlay must remain a native, unoptimized PNG. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -285,6 +290,57 @@ export function FnfShowcaseEditor({
       setError("FNF_INVALID_RANGE");
     }
   };
+  async function prepareLocal(): Promise<LocalEncodeJob[]> {
+    if (!session || !client || !cloud || !session.ranges.length)
+      throw Error("素材とrangeを指定してください。");
+    const membership = await api!.me();
+    if (!membership.ok) throw Error("開発者権限を確認できません。");
+    const snapshot = session.snapshot(preferences);
+    const result = await client.overlay(snapshot.preferences);
+    if (!result.ok) throw Error(result.code);
+    const overlay = await imageForEncode(
+      `data:image/png;base64,${result.data.png}`,
+    );
+    const source = session.source,
+      template = snapshot.preferences.template;
+    return snapshot.ranges.map((range, i) => ({
+      filename: snapshot.names[i],
+      width: 1080,
+      height: 1920,
+      pieces: [
+        {
+          start: range.startUs / 1e6,
+          end: range.endUs / 1e6,
+          url: async () => {
+            const r = await cloud.access(source.reference.versionId);
+            if (!r.ok) throw Error(r.code);
+            return r.data.url;
+          },
+        },
+      ],
+      draw: (ctx, media) => {
+        ctx.fillStyle = "black";
+        ctx.fillRect(0, 0, 1080, 1920);
+        const croppedHeight =
+          source.height - template.cropTop - template.cropBottom;
+        if (croppedHeight <= 0) throw Error("cropを確認してください。");
+        const w = source.width * template.scale,
+          h = croppedHeight * template.scale;
+        ctx.drawImage(
+          media,
+          0,
+          template.cropTop,
+          source.width,
+          croppedHeight,
+          (1080 - w) / 2,
+          (1920 - h) / 2,
+          w,
+          h,
+        );
+        ctx.drawImage(overlay, 0, 0, 1080, 1920);
+      },
+    }));
+  }
   async function refresh(id = batch?.batch.id ?? batchId, page = cardPage) {
     if (!client || !id) return;
     const request = ++batchRequest.current;
@@ -618,17 +674,24 @@ export function FnfShowcaseEditor({
                 </li>
               ))}
             </ol>
-            <button
-              disabled={
-                !owner ||
-                busy ||
-                !session.ranges.length ||
-                (!pending.current && submitted.current === fingerprint)
-              }
-              onClick={() => void submit()}
-            >
-              {pending.current ? "前回受付結果を再確認" : "全rangeを一括受付"}
-            </button>
+            <LocalExport
+              prepare={prepareLocal}
+              disabled={!owner || busy || !session.ranges.length || !!mismatch}
+            />
+            <details>
+              <summary>サーバーで書き出す</summary>
+              <button
+                disabled={
+                  !owner ||
+                  busy ||
+                  !session.ranges.length ||
+                  (!pending.current && submitted.current === fingerprint)
+                }
+                onClick={() => void submit()}
+              >
+                {pending.current ? "前回受付結果を再確認" : "全rangeを一括受付"}
+              </button>
+            </details>
           </fieldset>
         </>
       )}
