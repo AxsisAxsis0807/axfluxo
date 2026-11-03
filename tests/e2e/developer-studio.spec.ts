@@ -167,9 +167,9 @@ test("manifest and service worker remain within developer scope and never instal
   expect(sw).not.toContain("caches.open");
   expect(sw).not.toContain("clients.claim");
   await page.goto("./developer/studio/");
-  await expect(page.getByRole("status")).toContainText(
-    /ログイン|設定|開発者権限/,
-  );
+  await expect(
+    page.getByRole("heading", { name: "Developer Studio 簡易ロック" }),
+  ).toBeVisible();
   expect(
     await page.evaluate(async () =>
       navigator.serviceWorker.getRegistrations().then((rs) => rs.length),

@@ -37,100 +37,6 @@ test.beforeAll(async () => {
   });
   bundle = result.outputFiles[0].text;
 });
-for (const allowed of [true, false])
-  test(`developer entry and direct routes: membership=${allowed}`, async ({
-    page,
-  }) => {
-    let permitted = allowed;
-    const errors: string[] = [];
-    page.on("pageerror", (e) => errors.push(e.message));
-    await page.route("https://entry-api.test/**", async (route) => {
-      const path = new URL(route.request().url()).pathname;
-      const headers = {
-        "access-control-allow-origin": "*",
-        "access-control-allow-headers": "*",
-        "access-control-allow-methods": "GET,POST,OPTIONS",
-      };
-      if (route.request().method() === "OPTIONS")
-        return route.fulfill({ status: 204, headers });
-      const body =
-        path === "/access"
-          ? permitted
-            ? {
-                ownerId: "11111111-1111-4111-8111-111111111111",
-                membership: "developer",
-                validUntil: new Date(Date.now() + 60_000).toISOString(),
-              }
-            : null
-          : path === "/outputs"
-            ? { items: [], nextCursor: null }
-            : {};
-      return route.fulfill({
-        status: 200,
-        headers,
-        contentType: "application/json",
-        body: JSON.stringify(body),
-      });
-    });
-    await page.route("https://entry.test/bundle.js", (route) =>
-      route.fulfill({ contentType: "application/javascript", body: bundle }),
-    );
-    await page.route("https://entry.test/**", (route) =>
-      new URL(route.request().url()).pathname === "/bundle.js"
-        ? route.fulfill({ contentType: "application/javascript", body: bundle })
-        : route.fulfill({
-            contentType: "text/html",
-            body: `<html lang="ja"><meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script src="/bundle.js"></script></html>`,
-          }),
-    );
-    await page.goto("https://entry.test/");
-    const entry = page.getByRole("link", {
-      name: "Developer Studio",
-      exact: true,
-    });
-    if (allowed) {
-      await expect(entry).toBeVisible({ timeout: 15_000 });
-      await entry.click();
-      await expect(
-        page.getByRole("heading", { name: "Developer Studio", exact: true }),
-      ).toBeVisible({ timeout: 15_000 });
-      await page
-        .getByRole("link", { name: "All Versions Video Maker", exact: true })
-        .click();
-      await expect(
-        page.getByRole("heading", {
-          name: "All Versions Video Maker",
-          exact: true,
-        }),
-      ).toBeVisible({ timeout: 15_000 });
-      await page.goto("https://entry.test/developer/studio/");
-      await page
-        .getByRole("link", { name: "FNF Showcase Maker", exact: true })
-        .click();
-      await expect(
-        page.getByRole("heading", { name: "FNF Showcase Maker", exact: true }),
-      ).toBeVisible({ timeout: 15_000 });
-      permitted = false;
-      await page.evaluate(() =>
-        document.dispatchEvent(new Event("visibilitychange")),
-      );
-      await expect(page.getByRole("status")).toContainText(
-        "開発者権限を確認できません",
-      );
-      await expect(page.getByRole("heading")).toHaveCount(0);
-    } else {
-      await expect(entry).toHaveCount(0);
-      for (const path of ["studio", "all-versions", "fnf-showcase"]) {
-        await page.goto(`https://entry.test/developer/${path}/`);
-        await expect(page.getByRole("status")).toContainText(
-          "開発者権限を確認できません",
-        );
-        await expect(page.getByRole("heading")).toHaveCount(0);
-      }
-    }
-    expect(errors).toEqual([]);
-  });
-
 for (const mode of ["all-versions", "fnf-showcase"] as const)
   test(`local ${mode} accepts device files and exports without video API`, async ({
     page,
@@ -172,7 +78,9 @@ for (const mode of ["all-versions", "fnf-showcase"] as const)
       "-y",
       cover,
     ]);
-    const unexpected: string[] = [];
+    const unexpected: string[] = [],
+      errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
     page.on("request", (r) => {
       if (
         !r.url().startsWith("https://entry.test/") &&
@@ -204,25 +112,53 @@ for (const mode of ["all-versions", "fnf-showcase"] as const)
     );
     await page.goto(`https://entry.test/developer/${mode}/`);
     await page
-      .getByLabel("端末の素材", { exact: true })
-      .setInputFiles({
-        name: "source.mp4",
-        mimeType: "video/mp4",
-        buffer: await readFile(file),
-      });
+      .getByLabel("パスコード", { exact: true })
+      .fill("test-only-passcode");
+    await page
+      .getByLabel("パスコードの確認", { exact: true })
+      .fill("test-only-passcode");
+    await page.getByRole("button", { name: "設定してロック解除" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Developer Studio", exact: true }),
+    ).toBeVisible();
+    await page.goto(`https://entry.test/developer/${mode}/`);
+    await page.getByLabel("端末の素材", { exact: true }).setInputFiles({
+      name: "source.mp4",
+      mimeType: "video/mp4",
+      buffer: await readFile(file),
+    });
     await expect(
       page.getByRole("button", { name: "端末内で書き出す" }),
     ).toBeEnabled();
     if (mode === "all-versions") {
-      await page
-        .getByLabel("カバー画像")
-        .setInputFiles({
-          name: "cover.png",
-          mimeType: "image/png",
-          buffer: await readFile(cover),
-        });
+      await page.getByLabel("カバー画像").setInputFiles({
+        name: "cover.png",
+        mimeType: "image/png",
+        buffer: await readFile(cover),
+      });
       await page.getByLabel("version名（1行に1つ）").fill("local version");
-    } else await page.getByLabel("譜面名", { exact: true }).fill("local chart");
+    } else {
+      await page.getByLabel("譜面名", { exact: true }).fill("local chart");
+      await page
+        .getByRole("button", { name: "rangeを追加", exact: true })
+        .click();
+      await page
+        .getByLabel("譜面名", { exact: true })
+        .nth(1)
+        .fill("second chart");
+    }
+    await page
+      .getByRole("button", { name: "テンプレートを端末に保存" })
+      .click();
+    await page
+      .getByRole("button", { name: "端末のテンプレートを読み込む" })
+      .click();
+    await page.getByRole("button", { name: "波形を生成" }).click();
+    await expect(page.getByText("波形生成済み", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "合成プレビューを更新" }).click();
+    await expect(
+      page.getByRole("region", { name: "合成プレビュー" }).locator("canvas"),
+    ).toBeVisible();
     const available = await page.evaluate(
       () =>
         typeof MediaRecorder !== "undefined" &&
@@ -234,11 +170,43 @@ for (const mode of ["all-versions", "fnf-showcase"] as const)
     );
     await page.getByRole("button", { name: "端末内で書き出す" }).click();
     if (available) {
-      await expect(page.getByRole("status")).toContainText("完了", {
+      await expect(
+        page
+          .getByRole("region", { name: "端末内書き出し", exact: true })
+          .getByRole("status"),
+      ).toContainText("完了", {
         timeout: 20000,
       });
-      await expect(page.getByRole("link", { name: /を保存/ })).toHaveCount(1);
+      const save = page.getByRole("link", { name: /を保存/ });
+      await expect(save).toHaveCount(mode === "fnf-showcase" ? 2 : 1);
+      const downloadPromise = page.waitForEvent("download");
+      await save.first().click();
+      const downloaded = await downloadPromise;
+      const saved = join(dir, downloaded.suggestedFilename());
+      await downloaded.saveAs(saved);
+      const probe = JSON.parse(
+        execFileSync(
+          "ffprobe",
+          ["-v", "error", "-show_streams", "-of", "json", saved],
+          { encoding: "utf8" },
+        ),
+      );
+      expect(
+        probe.streams.some(
+          (s: { codec_type: string }) => s.codec_type === "audio",
+        ),
+      ).toBe(true);
+      expect(
+        probe.streams.some(
+          (s: { codec_type: string }) => s.codec_type === "video",
+        ),
+      ).toBe(true);
     } else
-      await expect(page.getByRole("status")).toContainText("対応していません");
+      await expect(
+        page
+          .getByRole("region", { name: "端末内書き出し", exact: true })
+          .getByRole("status"),
+      ).toContainText("対応していません");
     expect(unexpected).toEqual([]);
+    expect(errors).toEqual([]);
   });

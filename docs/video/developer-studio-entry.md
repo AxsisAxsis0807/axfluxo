@@ -1,96 +1,56 @@
-# Developer Studio：動画APIに依存しない開発者認可
+# Developer Studio：個人用の端末内制作
 
-## PR #12の公開サイトで入口が見えない原因
+## 原因とPR #12 / #13
 
-`338c5373321ba943d12b170e9543e05fb586766a`（PR #12）は main に反映済み。
-[本番Pages実行41611444877](https://github.com/AxsisAxsis0807/axfluxo/actions/runs/41611444877) の build / deploy / verify はすべて成功した。
-同じビルドのログでは `NEXT_PUBLIC_VIDEO_API_ORIGIN` が空だった。
+main のPR #12は `NEXT_PUBLIC_VIDEO_API_ORIGIN` と `GET /v1/developer/me` の成功を入口表示条件にしていた。API未設定・停止・会員未登録のいずれでも入口が消える。ログインやGitHub所有者であることは動画APIの会員権限ではない。
 
-PR #12の `DeveloperAccess.tsx` は、この変数がない場合、Supabaseにログイン済みでも権限照会をせず入口を隠していた。設定されていても、動画APIの JWT 検証と独立DBの `axfluxo_video.developer_memberships` に有効な行が必要だった。Supabaseへのログインは開発者登録ではない。GitHub所有者であることもSupabaseの開発者権限にはならない。
+この変更はPR #13の先頭 `5910969d916748222391ed9daf6c02a540e63a33` を取り込んでいる。ローカル素材・文字描画・無音修正・Safari再生許可を再利用し、入口だけでなくローカル書き出しのSupabase RPC依存も取り除く。PR #13を別途マージする必要はない。このPRをmainへマージした場合、#13は重複変更として閉じることを推奨する。自動マージはしない。
 
-現在ログイン中のブラウザーセッションと本番DBの管理接続はこの作業環境にないため、そのアカウントの登録状態は未確認。GitHubのメールアドレスや表示名からSupabaseユーザーを推定して登録してはならない。
+リポジトリと親ディレクトリにAGENTS.mdは見つからなかった。
 
-## 今回の認可
+## 採用した簡易ロック
 
-既存Supabaseプロジェクトの `public.axfluxo_developer_access()` RPC が唯一の入口判定になる。動画APIは不要。
+Workflow・旧Studioのアカウント直下に入口を常時表示する。初回はそのSafariで8文字以上のパスコードを本人が設定する。値は送信せず、ランダム128bitソルトとPBKDF2-SHA256（210,000回、256bit）の検証値だけをlocalStorageに保存する。公開コード、ビルド変数、会話に秘密を設定する必要はない。
 
-- SupabaseがJWTを検証し、引数なしの関数内で `auth.uid()` を取得する。
-- 管理者だけが変更できる非公開schemaの `axfluxo_access.developer_memberships` で本人の `user_id`、`active`、`expires_at` を確認する。
-- `anon` は実行不可。`authenticated` はRPC実行のみで、会員テーブルの参照・登録・更新は不可。RLS有効、利用者向けpolicyなし。関数は `SECURITY DEFINER`、空のsearch_pathと修飾済みの参照を使う。
-- `user_metadata`、自己申告、公開メールallowlist、localStorageのrole、公開環境変数で開発者を決めない。
-- 正常応答でも本人IDの一致と有効期間を検証する。会員なし・失効・期限切れ・RPC未設定・通信失敗では閉じる。RPCの応答を永続キャッシュしない。
-- 45秒ごと、認証変更、画面復帰に再確認。応答の有効期間は最大60秒で、再確認できなければ閉じる。ログアウトや別ユーザーへの切替でも閉じる。書き出し開始前にも再確認する。
+解除期限はsessionStorageに2時間保持する。再読み込みでも保持し、期限切れ、再ロック、タブセッション終了時に閉じる。直接URLも同じロックを通る。解除後はメニューへ戻る。ブラウザによるタブ復元ではsessionStorageが復元される場合があるが、絶対期限は再検証する。
 
-一般ユーザーにはサイドバー入口を表示せず、専用URLへの直接アクセスでも編集UIをマウントしない。GitHub Pagesは静的配信なので、HTML/JavaScriptそのもののダウンロードを認可する仕組みではない。保護対象の会員情報はSupabase側で制限する。
+**これはセキュリティ境界ではない。** 検証値の総当たり、ストレージ編集、JavaScript改変で回避できる。誰でも別端末で自分用のロックを設定できる。静的HTML/JSやツールの配信を非公開にはしない。秘密の素材を同じ端末の別利用者から保護する用途にも使わない。サイトデータを消すと設定が消える。忘れた場合は開発者ツールで `axfluxo.developer.local-lock.v1` と `axfluxo.developer.local-unlock.v1` だけを削除して再設定できる。他のDBやサイトデータを削除する必要はない。
 
-## 管理者による設定・現在のアカウントの正規登録
+|方式|秘密の照合|追加設定|用途|
+|---|---|---|---|
+|今回の端末内ロック|公開クライアント内、回避可能|初回に端末で設定|個人の操作上の簡易ロック|
+|Supabase Edge Function|サーバーに保管した秘密と照合|Function配備、秘密設定、試行制限、期限付きセッションの検証|共通パスコードを安全に照合する必要がある場合|
+|PR #13の会員RPC|Supabase JWTと非公開会員表|管理者によるmigration・本人登録|会員認可。パスコード方式ではない|
 
-この手順の実行には既存Supabaseプロジェクトの管理権限が必要。本修正で本番DBへの適用や会員付与は自動実行しない。
+Edge Function方式は今回配備していない。安全な照合が必要になった場合も、端末の解除フラグをサーバーAPIの権限にしてはならない。
 
-1. AxFluxoがログイン先に使っているSupabaseプロジェクトを開く。現行公開設定のproject refは `nbyigfqkweodzlhwdryz`。新しいプロジェクトを作らない。
-2. Authentication → Usersで、AxFluxoにログインしている本人の確認済みメールとユーザーID（UUID）を確認する。修正後のAxFluxoの「アカウント」にも本人IDを表示する。IDを他人のものと取り違えない。
-3. 同じプロジェクトのSQL Editorで [認可migration](../../supabase/migrations/202611030001_developer_access.sql) をDB管理者として実行する。既存の認証・制作DBや動画サーバーmigrationは変更しない。公開schemaには引数なしRPCだけを追加する。
-4. 以下の `YOUR_CONFIRMED_USER_UUID` を確認した本人IDに置き換えて管理者として実行する。JWTやservice role鍵をフロントエンド・GitHub変数・チャットに貼らない。
+## ローカルとクラウドの境界
 
-```sql
-DO $$
-DECLARE target_user uuid := 'YOUR_CONFIRMED_USER_UUID';
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM auth.users
-    WHERE id = target_user AND email_confirmed_at IS NOT NULL
-  ) THEN
-    RAISE EXCEPTION '確認済みの本人アカウントを指定してください';
-  END IF;
-  INSERT INTO axfluxo_access.developer_memberships(user_id, active, expires_at)
-  VALUES (target_user, true, NULL)
-  ON CONFLICT (user_id) DO UPDATE SET active = true, expires_at = NULL;
-END $$;
-```
+端末内制作はSupabase・動画APIを呼ばない。MP3/WAV/M4A/MP4/MOV等を選択できるが、実際に読めるコーデックは端末依存。元ファイルを変更しない。
 
-5. 修正のPRをmainに反映し、GitHub Pagesのbuild・deploy・verify成功を確認する。`NEXT_PUBLIC_VIDEO_API_ORIGIN` は未設定のままでよい。既存の `NEXT_PUBLIC_SUPABASE_URL` とpublishable keyを使う。
-6. 同じアカウントでサイトを再読み込みする。「アカウント」の直下のDeveloper Studioから両ツールを開き、端末の素材を選択する。一般アカウントでは入口と専用画面を開けないことも確認する。
+- All Versions：複数素材の並べ替え・削除、前後トリム、version境界、名前、文字フェード、カバーとぼかし背景、結合出力。
+- FNF：1080×1920、独立した複数区間、区間追加・削除・タイムライン移動、譜面名、固定見出し、ユーザー名、上下crop、中央配置とスケール、区間別ファイル名・順次出力。
+- 既存Timelineを再利用し、タッチ編集・ピンチズーム・All Versionsの中央固定ヘッドに対応。波形は明示操作で端末内生成する。メモリ節約のため32MB・10分以下に限定。ブラウザが音声をdecodeできない素材では理由を表示し、数値編集・プレビューは継続できる。
+- テンプレートはツール別に端末保存。名前・FNF区間・配置設定のみ。素材・カバーを含まない。再読み込み後は素材を選び直し、テンプレートを読み込み、区間を確認する。
+- 「合成プレビューを更新」で現設定を描画する。編集後は再更新する。All Versionsのプレビューは素材ごとの選択式で、結合動画の連続プレビューは未実装。出力は結合される。
 
-管理者による登録確認・失効・期限設定：
+既存クラウド編集画面とサーバー実装を残している。API未設定時はクラウド処理を開始しない。設定時も追加操作で開き、既存Supabaseの会員RPCと動画APIのJWT・会員・owner検証を維持する。署名URL、クラウド素材、クラウド保存、サーバー文字PNG、非同期job、管理者APIを簡易ロックで許可しない。RLS・秘密鍵・既存テーブルは変更していない。PR #13から含まれるSupabase migrationは**実行していない**。ローカル制作のために実行する必要もない。
 
-```sql
--- 必ず上の本人IDに置き換える。
-SELECT user_id, active, expires_at
-FROM axfluxo_access.developer_memberships
-WHERE user_id = 'YOUR_CONFIRMED_USER_UUID'::uuid;
+## エンコード・保存・制限
 
--- 失効。ブラウザーでは次回確認（前面なら通常45秒以内、最大60秒）で閉じる。
-UPDATE axfluxo_access.developer_memberships SET active = false
-WHERE user_id = 'YOUR_CONFIRMED_USER_UUID'::uuid;
+Canvas / Web Audio / MediaRecorderを使用する。対応する場合のみMP4、それ以外はWebMまたは非対応表示。WebMをMP4と偽装しない。端末フォントを使うためクラウド文字PNGとの画素一致は保証しない。
 
--- 期間限定にする場合（例）。
-UPDATE axfluxo_access.developer_memberships
-SET active = true, expires_at = now() + interval '30 days'
-WHERE user_id = 'YOUR_CONFIRMED_USER_UUID'::uuid;
-```
+10分処理・4分休憩は初期ON。録画・素材再生を止め、休憩を動画に含めない。複数出力にも累積し、休憩中も中止可能。温度の安全性を保証しない。画面非表示では現在の処理を停止し、失敗・中止した未完成ファイルを保存リンクにしない。完了済みファイルは同じ画面に保持する。
 
-登録IDの誤り、異なるSupabaseプロジェクト、失効・期限切れ、未適用migrationは、動画APIを用意しても解決しない。一般ユーザーへ権限を一括付与して回避しない。
+Safariは前面で使用し、画面をロックしない。リアルタイム処理なので再生時間程度かかる。素材decodeと完成Blobはメモリを使い、長時間・高解像度でメモリ不足やOSによる終了があり得る。書き出し中の復帰・途中再開、永続的な完成物保存は未実装。移動・再読み込み・再ロック前に保存する。Filesへダウンロードし、MP4はFilesの共有から「ビデオを保存」、写真アプリで確認する。WebMは写真へ保存できない場合がある。
 
-## 端末内エンコード
+iPhone Safari実機の長時間処理・全入力形式・AV同期・写真保存は未確認。ChromiumやLinux WebKitの結果を実機確認として扱わない。
 
-専用画面の標準はローカル制作ツール。動画APIを設定していても標準は変わらない。
+## マージ後
 
-- All Versions Video Maker：端末の音声/動画を順序付きで選択、区間指定、素材内の秒数でversion境界を入力、version名を1行ずつ入力、端末のcover画像を指定。結合した音声とcover・名前を端末内で動画にする。
-- FNF Showcase Maker：端末動画を選択、cropとusername、複数rangeの開始/終了・譜面名を入力。rangeごとに端末内で動画化する。
-- Canvas + Web Audio + MediaRecorderを使用し、素材や動画をアップロードしない。文字も端末内描画。標準レイアウトは端末フォントを使い、旧クラウドツールの固定フォント・pixel一致を保証する経路ではない。
-- 10分処理・4分休憩は初期ON。録画・素材再生を一時停止し、休憩時間を完成動画に含めない。複数出力間も処理時間を累積。中止、背景移動、画面離脱にも対応する。
-- 音声は録画用のWeb Audio出力に接続し、要素のmuteで無音にならないようにする。Safariで追加の再生許可が必要な場合はタップで再開する。音声トラックの有無だけでなく、合成音の波形が無音でないことも自動検証する。
-- 対応端末はMP4、その他の対応端末はWebM。非対応ブラウザーでは理由を表示し出力しない。Linux WebKitでエンコーダーがない場合とiPhone Safariの実機は区別する。
-- ローカル編集内容は画面のメモリー内。移動や再読み込み前に出力を保存する。iPhone Safariは前面で操作する。実機での長時間処理と保存は別途確認する。
+1. mainへのマージ後、既存Pages workflowのbuild/deploy/verifyを確認する。公開先は `/axfluxo/` のまま。PRの間はdeployされない。
+2. iPhone Safariで更新し、アカウント直下からDeveloper Studioを開く。パスコードを端末で設定する。ローカル機能にAPI変数やSupabase会員登録は不要。
+3. 短い素材でプレビュー・書き出し・音声・Files/写真保存を確認してから長い素材を扱う。
+4. クラウドを使う場合だけ、管理者がPR #13由来のRPC migration、本人会員設定、動画API側の既存設定を別途確認する。秘密鍵はフロントに置かない。
 
-既存のクラウド素材・サーバー書き出しは、動画APIが設定されている場合の追加操作として残す。そちらは引き続き動画API側のJWT / `axfluxo_video.developer_memberships` / owner照合で保護する。新しいローカル用登録はクラウド権限を自動付与しない。既存のWorkflow、画像Studio、4つの制作DB、動画プロジェクトDB、バックアップ形式は変更しない。
-
-## 公開ビルドの確認
-
-今回からpostbuildで `/axfluxo/build-info.json` に公開コミットSHAとビルド日時だけを出す。GitHub Actionsの対象SHAと一致するか確認できる。秘密情報は含めない。
-
-- サイトが古い：Pagesのdeploy/verify結果とbuild-infoのSHAを確認する。
-- 「確認機能が未設定」：同じSupabaseプロジェクトにmigrationを適用する。
-- 「開発者登録が必要」：本人ID・active・expires_atを管理者が確認する。
-- 「ログインしてください」：既存アカウントでログインし直す。
-- 通信失敗：Supabaseへの接続を復旧する。認可を省略する回避策は用意しない。
+`build-info.json`で公開SHAを確認できる。通常のログイン設定とPagesの認証設定検査は維持している。
