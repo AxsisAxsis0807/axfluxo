@@ -4,7 +4,7 @@ Workflow と旧 Studio の左サイドバーにあるアカウントの直下に
 
 `/developer/studio/` から All Versions Video Maker (`/developer/all-versions/`) と FNF Showcase Maker (`/developer/fnf-showcase/`) を同じタブで開く。3画面は直接アクセスでも認可確認前に制作 UI をマウントしない。ログアウト、認証変更、画面復帰、前面での60秒ごとの確認で失効を反映する。サーバー API は従来どおり JWT の署名検証と developer_memberships の active / expires_at を確認する。静的エクスポートの HTML 自体には秘密情報を含めない。
 
-実行環境には既存の `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`NEXT_PUBLIC_VIDEO_API_ORIGIN` が必要。開発者権限は管理者がサーバー DB で付与する。入口のために一般ユーザーへ権限を自動付与しない。これらの専用画面からは古い Studio / 個別ツールの表示フラグに依存せずツールを開ける。
+実行環境には既存の `NEXT_PUBLIC_SUPABASE_URL`、`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`、`NEXT_PUBLIC_VIDEO_API_ORIGIN` が必要。GitHub Pages / CI のビルドでは、同名の GitHub リポジトリ変数 `NEXT_PUBLIC_VIDEO_API_ORIGIN` を渡す。公開 origin のみを設定し、鍵は含めない。開発者権限は管理者がサーバー DB で付与する。入口のために一般ユーザーへ権限を自動付与しない。これらの専用画面からは古い Studio / 個別ツールの表示フラグに依存せずツールを開ける。
 
 両ツールの標準書き出しは Canvas captureStream + Web Audio + MediaRecorder による端末内エンコード。原素材の署名 URL と既存の文字 PNG API を使い、動画レンダー job は作成しない。原素材配信元には CORS 設定が必要。書き出し時も開発者権限を再確認する。既存サーバー書き出しは「サーバーで書き出す」内に残す。
 
