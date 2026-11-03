@@ -52,6 +52,27 @@ jobs:
             sleep 1
           done
           PLAYWRIGHT_BASE_URL=http://localhost:3000/axfluxo/ npm run test:e2e
+      - name: Developer access ON matrix (mock API only; never published)
+        env:
+          NEXT_PUBLIC_DEVELOPER_STUDIO_ENABLED: "true"
+          NEXT_PUBLIC_ALL_VERSIONS_ENABLED: "true"
+          NEXT_PUBLIC_FNF_SHOWCASE_ENABLED: "true"
+          NEXT_PUBLIC_VIDEO_PREVIEW_ENABLED: "true"
+          NEXT_PUBLIC_VIDEO_API_ORIGIN: https://developer-api.test
+        run: |
+          for base in '' '/axfluxo'; do
+            NEXT_PUBLIC_BASE_PATH="$base" npm run build
+            NEXT_PUBLIC_BASE_PATH="$base" PORT=3172 node scripts/serve.mjs > /tmp/developer-access.log 2>&1 &
+            developer_pid=$!
+            trap 'kill "$developer_pid" 2>/dev/null || true' EXIT
+            for attempt in $(seq 1 30); do
+              if curl --fail "http://127.0.0.1:3172$base/" > /dev/null; then break; fi
+              sleep 1
+            done
+            PLAYWRIGHT_BASE_URL="http://127.0.0.1:3172$base/" npm run test:developer:published
+            kill "$developer_pid"
+            wait "$developer_pid" || true
+          done
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

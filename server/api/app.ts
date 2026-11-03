@@ -1,3 +1,5 @@
+import { developerServices } from "./developer-services";
+import type { DeveloperServices } from "../contracts/developer-services";
 import { z } from "zod";
 import { createBatchSchema } from "../contracts/video";
 import type { Database } from "../db/database";
@@ -13,6 +15,7 @@ import {
   retryJob,
 } from "./jobs";
 export interface ApiConfig {
+  developerServices?: Partial<DeveloperServices>;
   outputs?: (
     request: Request,
     owner: string,
@@ -193,6 +196,15 @@ export function createVideoApi(
       );
       const result = await config.db.transaction(async (sql) => {
         await requireMembership(sql, identity.ownerId);
+        if (request.method === "GET" && path === "/v1/developer/services")
+          return {
+            status: 200,
+            body: await developerServices(
+              sql,
+              identity.ownerId,
+              config.developerServices,
+            ),
+          };
         if (request.method === "GET" && path === "/v1/developer/me")
           return {
             status: 200,

@@ -148,3 +148,7 @@ V7は完成MP4の個別保存、写真アプリでの明示保存確認、確認
 入口は既存Workflowを保持したまま別タブで開きます。既存DB・原本・未確認完成物を期限削除しません。
 本番接続・migration・有効化は未実施です。[設計と停止flag](docs/video/v7.md)、
 [自動検証結果と実機未検証項目](docs/video/v7-verification.md)を参照してください。
+
+Developer Studioの入口と2つの動画editorの段階有効化には、Feature Flagだけでなく
+実Developer APIによるサーバー側membership確認が必要です。
+[本番設定・Phase A〜D・未準備時の範囲](docs/video/developer-activation.md)を参照してください。

@@ -8,6 +8,7 @@ import {
 import {
   cloudClient,
   type CloudClient,
+  type AuthenticatedApi,
 } from "../../services/cloud-library/client";
 import {
   cloudErrorMessage,
@@ -27,13 +28,18 @@ type Folder = {
 };
 export default function CloudLibrary({
   client: injected,
+  auth,
+  uploadsEnabled = true,
   onSelect,
 }: {
   client?: CloudClient;
+  auth?: AuthenticatedApi;
+  uploadsEnabled?: boolean;
   onSelect?: (asset: CloudAsset) => void;
 }) {
   const api = useMemo(() => {
     if (injected) return injected;
+    if (auth) return cloudClient(auth);
     const origin = process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN,
       session = origin ? currentVideoSessionSource() : null;
     if (!origin || !session) return null;
@@ -42,7 +48,7 @@ export default function CloudLibrary({
     } catch {
       return null;
     }
-  }, [injected]);
+  }, [injected, auth]);
   const [owner, setOwner] = useState<string | null>(null),
     [folder, setFolder] = useState<string | null>(null),
     [crumbs, setCrumbs] = useState<Folder[]>([]),
@@ -155,7 +161,7 @@ export default function CloudLibrary({
     if (owner) setResumes(listResumes(localStorage, owner));
   }
   async function choose(file: File) {
-    if (!api || !owner || busy) return;
+    if (!api || !owner || busy || !uploadsEnabled) return;
     const controller = new AbortController();
     active.current = controller;
     setBusy(true);
@@ -218,6 +224,11 @@ export default function CloudLibrary({
         原本を非公開で保存します。既存画像ライブラリーとバックアップは変更しません。
       </p>
       {!api && <p role="status">クラウド素材APIは未設定です。</p>}
+      {!uploadsEnabled && (
+        <p role="status">
+          新しいuploadは停止中です。既存の確定原本は保持されています。
+        </p>
+      )}
       {error && <p role="alert">{error}</p>}
       {message && <p role="status">{message}</p>}
       {api && (
@@ -415,7 +426,7 @@ export default function CloudLibrary({
             aria-label="クラウドへ転送する素材"
             type="file"
             accept="video/mp4,video/quicktime,video/webm,audio/wav,audio/mpeg,audio/mp4,audio/ogg,image/png,image/jpeg,image/webp"
-            disabled={busy}
+            disabled={busy || !uploadsEnabled}
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) void choose(file);
@@ -429,7 +440,7 @@ export default function CloudLibrary({
               <li key={r.key}>
                 {r.input.name}
                 <button
-                  disabled={busy}
+                  disabled={busy || !uploadsEnabled}
                   onClick={() => {
                     selectedResume.current = r;
                     fileInput.current?.click();

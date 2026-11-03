@@ -20,6 +20,24 @@ function start() {
   const cloud = cloudConfiguration(process.env);
   const handler = createVideoApi({
     ...config,
+    developerServices: {
+      cloudLibrary: Boolean(cloud.storage),
+      uploads: cloud.uploadsEnabled(),
+      preview: cloud.previewEnabled(),
+      projects: true,
+      fnfPreferences: true,
+      outputs: process.env.VIDEO_OUTPUTS_ENABLED === "true",
+      renderAcceptance:
+        config.admissionEnabled() && config.unitsPerFrame !== undefined,
+      fnfRenderAcceptance:
+        config.admissionEnabled() &&
+        config.unitsPerFrame !== undefined &&
+        process.env.VIDEO_FNF_ACCEPTING === "true",
+      deleteAcceptance: process.env.VIDEO_DELETE_ACCEPTING === "true",
+      push:
+        process.env.VIDEO_PUSH_ENABLED === "true" &&
+        Boolean(process.env.VIDEO_VAPID_PUBLIC_KEY),
+    },
     db,
     outputs:
       process.env.VIDEO_OUTPUTS_ENABLED === "true"
