@@ -31,11 +31,23 @@ export async function derive(passcode: string, salt: string) {
 export function readVerifier(storage: Storage): Verifier | null {
   const raw = storage.getItem(LOCK_KEY);
   if (!raw) return null;
-  const value = JSON.parse(raw);
-  if (!/^[a-f0-9]{32}$/.test(value.salt) || !/^[a-f0-9]{64}$/.test(value.hash))
-    throw Error(
+  const invalid = () =>
+    Error(
       "ロック設定が壊れています。このサイトのロック設定だけを削除して再設定してください。",
     );
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw invalid();
+  }
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !/^[a-f0-9]{32}$/.test(value.salt) ||
+    !/^[a-f0-9]{64}$/.test(value.hash)
+  )
+    throw invalid();
   return value;
 }
 export async function configureLock(passcode: string, storage: Storage) {

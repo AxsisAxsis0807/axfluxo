@@ -126,6 +126,9 @@ export default function LocalDeveloperGate({
               <input
                 required
                 minLength={configured ? undefined : 8}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 autoComplete={configured ? "current-password" : "new-password"}
                 type={show ? "text" : "password"}
                 value={passcode}
@@ -138,6 +141,9 @@ export default function LocalDeveloperGate({
                 <input
                   required
                   type={show ? "text" : "password"}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
                   autoComplete="new-password"
                   value={confirmation}
                   onChange={(e) => setConfirmation(e.target.value)}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   configureLock,
   verifyLock,
+  readVerifier,
   isUnlocked,
   LOCK_KEY,
   SESSION_KEY,
@@ -21,6 +22,13 @@ function memory() {
   } as Storage;
 }
 describe("device convenience lock", () => {
+  it("explains corrupt verifier data and never accepts it", () => {
+    const storage = memory();
+    for (const raw of ["not json", "null", "{}", "[]"]) {
+      storage.setItem(LOCK_KEY, raw);
+      expect(() => readVerifier(storage)).toThrow("ロック設定が壊れています");
+    }
+  });
   it("stores only a salted verifier and rejects wrong input", async () => {
     const storage = memory();
     await configureLock("test-only-passcode", storage);

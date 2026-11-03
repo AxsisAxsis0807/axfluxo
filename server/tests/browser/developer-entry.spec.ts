@@ -122,11 +122,38 @@ for (const mode of ["all-versions", "fnf-showcase"] as const)
       page.getByRole("heading", { name: "Developer Studio", exact: true }),
     ).toBeVisible();
     await page.goto(`https://entry.test/developer/${mode}/`);
-    await page.getByLabel("端末の素材", { exact: true }).setInputFiles({
-      name: "source.mp4",
-      mimeType: "video/mp4",
-      buffer: await readFile(file),
-    });
+    const files = [
+      {
+        name: "source.mp4",
+        mimeType: "video/mp4",
+        buffer: await readFile(file),
+      },
+    ];
+    if (mode === "all-versions" && test.info().project.name === "chromium") {
+      for (const [extension, mimeType, options] of [
+        ["mp3", "audio/mpeg", ["-vn", "-c:a", "libmp3lame"]],
+        ["wav", "audio/wav", ["-vn", "-c:a", "pcm_s16le"]],
+        ["m4a", "audio/mp4", ["-vn", "-c:a", "aac"]],
+        ["mov", "video/quicktime", ["-c", "copy"]],
+      ] as const) {
+        const path = join(dir, `source.${extension}`);
+        execFileSync("ffmpeg", [
+          "-v",
+          "error",
+          "-i",
+          file,
+          ...options,
+          "-y",
+          path,
+        ]);
+        files.push({
+          name: `source.${extension}`,
+          mimeType,
+          buffer: await readFile(path),
+        });
+      }
+    }
+    await page.getByLabel("端末の素材", { exact: true }).setInputFiles(files);
     await expect(
       page.getByRole("button", { name: "端末内で書き出す" }),
     ).toBeEnabled();
@@ -136,7 +163,9 @@ for (const mode of ["all-versions", "fnf-showcase"] as const)
         mimeType: "image/png",
         buffer: await readFile(cover),
       });
-      await page.getByLabel("version名（1行に1つ）").fill("local version");
+      await page
+        .getByLabel("version名（1行に1つ）")
+        .fill(files.map((_, i) => `local version ${i + 1}`).join("\n"));
     } else {
       await page.getByLabel("譜面名", { exact: true }).fill("local chart");
       await page
@@ -153,8 +182,14 @@ for (const mode of ["all-versions", "fnf-showcase"] as const)
     await page
       .getByRole("button", { name: "端末のテンプレートを読み込む" })
       .click();
-    await page.getByRole("button", { name: "波形を生成" }).click();
-    await expect(page.getByText("波形生成済み", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "波形を生成" }).first().click();
+    await expect(
+      page.getByText(
+        test.info().project.name === "chromium"
+          ? /^波形生成済み$/
+          : /波形生成済み|この素材の波形を端末で解析できません/,
+      ),
+    ).toBeVisible();
     await page.getByRole("button", { name: "合成プレビューを更新" }).click();
     await expect(
       page.getByRole("region", { name: "合成プレビュー" }).locator("canvas"),

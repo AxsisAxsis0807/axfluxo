@@ -68,7 +68,7 @@ export function LocalExport({
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "処理を停止しました。");
     } finally {
-      await audio?.close();
+      await audio?.close().catch(() => {});
       abort.current = null;
       setBusy(false);
     }
