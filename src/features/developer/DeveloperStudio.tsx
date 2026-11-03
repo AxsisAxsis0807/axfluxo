@@ -1,4 +1,5 @@
 "use client";
+import { DeveloperGate } from "./DeveloperAccess";
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import {
@@ -42,12 +43,19 @@ export default function DeveloperStudio() {
         </p>
       </nav>
       <p>端末内エンコード・10分処理／4分休憩に対応しています。</p>
+      {!api && (
+        <p>
+          クラウド機能は動画APIまたはログインが未設定のため利用できません。端末内制作は利用できます。
+        </p>
+      )}
       {api && (
         <>
           <button onClick={() => setCloud((v) => !v)} style={{ minHeight: 44 }}>
             クラウドの完成動画を表示／閉じる
           </button>
-          {cloud && <Library api={api} />}
+          {cloud && (
+            <DeveloperGate>{() => <Library api={api} />}</DeveloperGate>
+          )}
         </>
       )}
     </main>

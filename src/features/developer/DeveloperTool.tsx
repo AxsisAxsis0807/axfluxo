@@ -1,4 +1,5 @@
 "use client";
+import { DeveloperGate } from "./DeveloperAccess";
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
 import LocalVideoTool from "./LocalVideoTool";
@@ -33,6 +34,11 @@ export default function DeveloperTool({
   return (
     <>
       <LocalVideoTool mode={mode} ownerId={ownerId} />
+      {!api && (
+        <p>
+          クラウド機能は動画APIまたはログインが未設定のため利用できません。端末内制作は利用できます。
+        </p>
+      )}
       {api && (
         <details
           onToggle={(e) => {
@@ -43,12 +49,17 @@ export default function DeveloperTool({
             既存のクラウド素材・サーバー書き出しを開く
           </summary>
           <p>この追加機能には動画API側の開発者登録も必要です。</p>
-          {opened &&
-            (mode === "all-versions" ? (
-              <AllVersions api={api} />
-            ) : (
-              <Fnf api={api} />
-            ))}
+          {opened && (
+            <DeveloperGate>
+              {() =>
+                mode === "all-versions" ? (
+                  <AllVersions api={api} />
+                ) : (
+                  <Fnf api={api} />
+                )
+              }
+            </DeveloperGate>
+          )}
         </details>
       )}
     </>

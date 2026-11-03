@@ -83,8 +83,6 @@ export function useDeveloperAccess() {
   return { access, message };
 }
 export function DeveloperStudioEntry() {
-  const { access } = useDeveloperAccess();
-  if (!access) return null;
   return (
     <a
       href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/developer/studio/`}

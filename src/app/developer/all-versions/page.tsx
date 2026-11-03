@@ -1,14 +1,14 @@
 "use client";
 import dynamic from "next/dynamic";
-import { DeveloperGate } from "../../../features/developer/DeveloperAccess";
+import LocalDeveloperGate from "../../../features/developer/LocalDeveloperGate";
 const LocalTool = dynamic(
   () => import("../../../features/developer/DeveloperTool"),
   { ssr: false },
 );
 export default function Page() {
   return (
-    <DeveloperGate>
-      {(access) => <LocalTool mode="all-versions" ownerId={access.ownerId} />}
-    </DeveloperGate>
+    <LocalDeveloperGate>
+      <LocalTool mode="all-versions" ownerId="device-local" />
+    </LocalDeveloperGate>
   );
 }

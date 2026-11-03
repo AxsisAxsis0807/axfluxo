@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import LocalCompositionPreview from "./LocalCompositionPreview";
+import LocalTimeline from "./LocalTimeline";
 import { LocalExport } from "../video-common/LocalExport";
 import {
   imageForEncode,
   type LocalEncodeJob,
 } from "../../services/video/local-encode";
-import { verifyDeveloperAccess } from "../../services/developer/access";
+import { isUnlocked } from "../../services/developer/local-lock";
 import { fnfFilenames, FNF_HEADING } from "../../domain/video/fnf-showcase";
 
 type Source = {
@@ -119,16 +121,18 @@ function line(
 }
 export default function LocalVideoTool({
   mode,
-  ownerId,
 }: {
   mode: "all-versions" | "fnf-showcase";
   ownerId: string;
 }) {
+  const [previewIndex, setPreviewIndex] = useState(0);
+  const [previewJobs, setPreviewJobs] = useState<LocalEncodeJob[]>([]);
   const [sources, setSources] = useState<Source[]>([]),
     [cover, setCover] = useState(""),
     [names, setNames] = useState("");
   const [ranges, setRanges] = useState<Range[]>([]),
     [username, setUsername] = useState("@username");
+  const [scaleFactor, setScaleFactor] = useState(1);
   const [cropTop, setCropTop] = useState(0),
     [cropBottom, setCropBottom] = useState(0),
     [error, setError] = useState(""),
@@ -182,10 +186,61 @@ export default function LocalVideoTool({
       if (active.current) setLoading(false);
     }
   }
+  function template(save: boolean) {
+    try {
+      const key = `axfluxo.local-video-template.${mode}`;
+      if (save)
+        localStorage.setItem(
+          key,
+          JSON.stringify({
+            names,
+            username,
+            cropTop,
+            cropBottom,
+            scaleFactor,
+            ranges,
+          }),
+        );
+      else {
+        const value = JSON.parse(localStorage.getItem(key) ?? "null");
+        if (
+          !value ||
+          typeof value.names !== "string" ||
+          typeof value.username !== "string" ||
+          ![value.cropTop, value.cropBottom, value.scaleFactor].every(
+            Number.isFinite,
+          ) ||
+          !Array.isArray(value.ranges) ||
+          value.ranges.some(
+            (r: Range) =>
+              typeof r.name !== "string" ||
+              ![r.start, r.end].every(Number.isFinite),
+          )
+        )
+          throw Error();
+        setNames(value.names);
+        setUsername(value.username);
+        setCropTop(value.cropTop);
+        setCropBottom(value.cropBottom);
+        setScaleFactor(value.scaleFactor);
+        setRanges(
+          value.ranges.map((r: Range) => ({ ...r, id: crypto.randomUUID() })),
+        );
+      }
+      setError(
+        save
+          ? "テンプレートをこの端末に保存しました。素材は含まれません。"
+          : "テンプレートを読み込みました。素材と区間を確認してください。",
+      );
+    } catch {
+      setError(
+        "テンプレートを保存・読み込みできません。保存領域と保存済み設定を確認してください。",
+      );
+    }
+  }
   async function prepare(): Promise<LocalEncodeJob[]> {
-    const access = await verifyDeveloperAccess();
-    if (access.ownerId !== ownerId)
-      throw Error("アカウントが変更されました。画面を開き直してください。");
+    if (!isUnlocked(sessionStorage))
+      throw Error("簡易ロックを解除してください。");
     if (!sources.length) throw Error("素材を選択してください。");
     if (fnf) {
       const source = sources[0];
@@ -211,7 +266,9 @@ export default function LocalVideoTool({
       const ordered = [...ranges].sort((a, b) => a.start - b.start),
         filenames = fnfFilenames(ordered.map((r) => r.name));
       const cropped = source.height - cropTop - cropBottom,
-        scale = Math.min(1080 / source.width, 1400 / cropped),
+        scale =
+          Math.min(1080 / source.width, 1400 / cropped) *
+          Math.min(2, Math.max(0.1, scaleFactor)),
         w = source.width * scale,
         h = cropped * scale;
       return ordered.map((range, i) => ({
@@ -236,6 +293,7 @@ export default function LocalVideoTool({
             h,
           );
           line(ctx, FNF_HEADING, 130, 1000, 46);
+          line(ctx, range.name, 240, 1000, 44);
           line(ctx, username, 1770, 1000, 64);
         },
       }));
@@ -315,11 +373,15 @@ export default function LocalVideoTool({
     >
       <h1>{fnf ? "FNF Showcase Maker" : "All Versions Video Maker"}</h1>
       <p>
-        端末の素材を選択して制作します。素材・動画のアップロードは行いません。開発者権限の確認には接続が必要です。
+        端末の素材を選択して制作します。素材・動画のアップロードは行いません。端末内機能はログイン・動画APIなしで利用できます。
       </p>
       <p>
         編集中の内容はこの画面内に保持されます。移動・再読み込みの前に完成動画を保存してください。
       </p>
+      <button onClick={() => template(true)}>テンプレートを端末に保存</button>
+      <button onClick={() => template(false)}>
+        端末のテンプレートを読み込む
+      </button>
       <label>
         端末の素材
         <input
@@ -339,12 +401,51 @@ export default function LocalVideoTool({
             素材 {i + 1}：{s.file.name}（{s.duration.toFixed(2)}秒）
           </legend>
           <video
+            id={`local-media-${s.id}`}
             src={s.url}
             controls
             playsInline
             preload="metadata"
             style={{ width: "100%", maxHeight: 360 }}
             aria-label={`素材 ${i + 1} プレビュー`}
+          />
+          <LocalTimeline
+            file={s.file}
+            duration={s.duration}
+            media={() =>
+              document.getElementById(
+                `local-media-${s.id}`,
+              ) as HTMLVideoElement | null
+            }
+            fnf={fnf}
+            items={
+              fnf
+                ? ranges.map((r) => ({
+                    id: r.id,
+                    startUs: Math.round(r.start * 1e6),
+                    endUs: Math.round(r.end * 1e6),
+                    label: r.name || "range",
+                  }))
+                : [
+                    {
+                      id: s.id,
+                      startUs: Math.round(s.start * 1e6),
+                      endUs: Math.round(s.end * 1e6),
+                      label: s.file.name,
+                    },
+                  ]
+            }
+            markers={s.markers
+              .split(",")
+              .filter((v) => v.trim() && Number.isFinite(Number(v)))
+              .map((v) => Number(v) * 1e6)}
+            onEdit={(id, start, end) =>
+              fnf
+                ? setRanges((old) =>
+                    old.map((r) => (r.id === id ? { ...r, start, end } : r)),
+                  )
+                : patch(id, { start, end })
+            }
           />
           {!fnf && (
             <>
@@ -402,6 +503,17 @@ export default function LocalVideoTool({
       ))}
       {fnf ? (
         <>
+          <label>
+            映像スケール
+            <input
+              type="number"
+              min="0.1"
+              max="2"
+              step="0.1"
+              value={scaleFactor}
+              onChange={(e) => setScaleFactor(Number(e.target.value))}
+            />
+          </label>
           <label>
             @ユーザー名
             <input
@@ -506,6 +618,41 @@ export default function LocalVideoTool({
               onChange={(e) => setNames(e.target.value)}
             />
           </label>
+        </>
+      )}
+      <button
+        disabled={loading || !sources.length}
+        onClick={() =>
+          void prepare()
+            .then(setPreviewJobs)
+            .catch((e) =>
+              setError(
+                e instanceof Error ? e.message : "プレビューを準備できません。",
+              ),
+            )
+        }
+      >
+        合成プレビューを更新
+      </button>
+      {previewJobs.length > 0 && (
+        <>
+          <label>
+            プレビューする出力
+            <select
+              value={Math.min(previewIndex, previewJobs.length - 1)}
+              onChange={(e) => setPreviewIndex(Number(e.target.value))}
+            >
+              {previewJobs.map((job, i) => (
+                <option key={i} value={i}>
+                  {job.filename}
+                </option>
+              ))}
+            </select>
+          </label>
+          <LocalCompositionPreview
+            key={Math.min(previewIndex, previewJobs.length - 1)}
+            job={previewJobs[Math.min(previewIndex, previewJobs.length - 1)]}
+          />
         </>
       )}
       <LocalExport prepare={prepare} disabled={loading || !sources.length} />

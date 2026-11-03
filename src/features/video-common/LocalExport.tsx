@@ -45,8 +45,9 @@ export function LocalExport({
     abort.current = control;
     setBusy(true);
     setStatus("素材を準備しています…");
-    const audio = new AudioContext();
+    let audio: AudioContext | undefined;
     try {
+      audio = new AudioContext();
       await audio.resume();
       const budget = { processing: 0 };
       for (const job of await prepare()) {
@@ -67,7 +68,7 @@ export function LocalExport({
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "処理を停止しました。");
     } finally {
-      await audio.close();
+      await audio?.close();
       abort.current = null;
       setBusy(false);
     }
@@ -76,7 +77,7 @@ export function LocalExport({
     <section aria-label="端末内書き出し">
       <h2>端末内エンコード（標準）</h2>
       <p>
-        Safariを前面にしたまま処理してください。書き出しは再生時間程度かかります。対応端末ではMP4、その他はWebMで保存します。
+        休憩モードは温度の安全性を保証しません。Safariを前面にしたまま処理してください。書き出しは再生時間程度かかります。対応端末ではMP4、その他はWebMで保存します。
       </p>
       <label>
         <input
@@ -98,6 +99,9 @@ export function LocalExport({
         </button>
       )}
       <p role="status">{status}</p>
+      <p>
+        保存リンクからFilesへ保存できます。MP4はFilesの共有メニューから「ビデオを保存」を選び、写真アプリで確認してください。WebMは端末によって写真へ保存できません。完成ファイルはこの画面を閉じる前に保存してください。
+      </p>
       {files.map((f) => (
         <p key={f.url}>
           <a
