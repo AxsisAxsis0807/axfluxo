@@ -55,6 +55,19 @@ test("device encoder joins trimmed audio/video or reports an unavailable encoder
       body: result.outputFiles[0].text,
     }),
   );
+  await page.addInitScript(() => {
+    const original = HTMLMediaElement.prototype.play;
+    let blocked = false;
+    HTMLMediaElement.prototype.play = function () {
+      if (!blocked) {
+        blocked = true;
+        return Promise.reject(
+          new DOMException("tap required", "NotAllowedError"),
+        );
+      }
+      return original.call(this);
+    };
+  });
   await page.goto("https://encode.test/");
   await expect(page.getByRole("checkbox")).toBeChecked();
   const available = await page.evaluate(
@@ -75,6 +88,9 @@ test("device encoder joins trimmed audio/video or reports an unavailable encoder
     await expect(page.getByRole("link", { name: /を保存/ })).toHaveCount(0);
     return;
   }
+  await page
+    .getByRole("button", { name: "再生を許可して書き出しを続ける" })
+    .click();
   await expect(page.getByRole("status")).toContainText("完了", {
     timeout: 20000,
   });
@@ -93,6 +109,25 @@ test("device encoder joins trimmed audio/video or reports an unavailable encoder
   expect(
     info.streams.map((s: { codec_type: string }) => s.codec_type).sort(),
   ).toEqual(["audio", "video"]);
+  // A declared audio stream is insufficient: the old muted source encoded silence.
+  const pcm = execFileSync("ffmpeg", [
+    "-v",
+    "error",
+    "-i",
+    output,
+    "-vn",
+    "-f",
+    "f32le",
+    "-ac",
+    "1",
+    "-ar",
+    "8000",
+    "pipe:1",
+  ]);
+  let energy = 0;
+  for (let i = 0; i + 4 <= pcm.length; i += 4)
+    energy += pcm.readFloatLE(i) ** 2;
+  expect(Math.sqrt(energy / (pcm.length / 4))).toBeGreaterThan(0.005);
   expect(Number(info.format.duration)).toBeGreaterThan(0.8);
   expect(Number(info.format.duration)).toBeLessThan(2);
 });
