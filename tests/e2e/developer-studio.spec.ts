@@ -167,9 +167,9 @@ test("manifest and service worker remain within developer scope and never instal
   expect(sw).not.toContain("caches.open");
   expect(sw).not.toContain("clients.claim");
   await page.goto("./developer/studio/");
-  await expect(
-    page.getByText("開発者Studioの入口は停止中です。"),
-  ).toBeVisible();
+  await expect(page.getByRole("status")).toContainText(
+    /ログイン|設定|開発者権限/,
+  );
   expect(
     await page.evaluate(async () =>
       navigator.serviceWorker.getRegistrations().then((rs) => rs.length),

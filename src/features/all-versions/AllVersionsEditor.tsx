@@ -1,4 +1,9 @@
 "use client";
+import { LocalExport } from "../video-common/LocalExport";
+import {
+  imageForEncode,
+  type LocalEncodeJob,
+} from "../../services/video/local-encode";
 /* eslint-disable @next/next/no-img-element -- Private signed media and server-rasterized PNGs use native images without an optimization service. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { allVersionsDocumentSchema } from "../../domain/video/schema";
@@ -355,6 +360,86 @@ export function AllVersionsEditor({
     } catch (e) {
       setError(e instanceof Error ? e.message : "PROJECT_NOT_FOUND");
     }
+  }
+  async function prepareLocal(): Promise<LocalEncodeJob[]> {
+    if (
+      !cloud ||
+      !remote ||
+      !project.document ||
+      !project.cover ||
+      projectIssues(project).length
+    )
+      throw Error("素材と名前を確認してください。");
+    const membership = await api!.me();
+    if (!membership.ok) throw Error("開発者権限を確認できません。");
+    const coverAccess = await cloud.access(project.cover.versionId);
+    if (!coverAccess.ok) throw Error(coverAccess.code);
+    const cover = await imageForEncode(coverAccess.data.url);
+    const overlays: HTMLImageElement[] = [];
+    for (let i = 0; i < versions.length; i++) {
+      const r = await remote.text(project, i);
+      overlays.push(await imageForEncode(`data:image/png;base64,${r.png}`));
+    }
+    const height = project.design.height,
+      width = (height * 16) / 9;
+    return [
+      {
+        filename: "All Versions.mp4",
+        width,
+        height,
+        pieces: project.document.clips.map((c) => ({
+          start: c.interval.startUs / 1e6,
+          end: c.interval.endUs / 1e6,
+          url: async () => {
+            const r = await cloud.access(c.source.versionId);
+            if (!r.ok) throw Error(r.code);
+            return r.data.url;
+          },
+        })),
+        draw: (ctx, _media, seconds) => {
+          ctx.save();
+          ctx.scale(width / 1920, height / 1080);
+          ctx.fillStyle = "black";
+          ctx.fillRect(0, 0, 1920, 1080);
+          ctx.save();
+          ctx.filter = "blur(24px)";
+          ctx.globalAlpha = 0.7;
+          const scale = Math.max(2150 / cover.width, 1210 / cover.height);
+          ctx.drawImage(
+            cover,
+            (1920 - cover.width * scale) / 2,
+            (1080 - cover.height * scale) / 2,
+            cover.width * scale,
+            cover.height * scale,
+          );
+          ctx.restore();
+          const size = 605,
+            crop = Math.min(cover.width, cover.height);
+          ctx.drawImage(
+            cover,
+            (cover.width - crop) / 2,
+            (cover.height - crop) / 2,
+            crop,
+            crop,
+            (1920 - size) / 2,
+            130,
+            size,
+            size,
+          );
+          ctx.fillStyle = "rgba(0,0,0,.48)";
+          ctx.fillRect(96, 842, 1728, 162);
+          const frame = Math.floor(seconds * 60),
+            i = versions.findIndex(
+              (v) => frame >= v.startFrame && frame < v.endFrame,
+            );
+          if (i >= 0) {
+            ctx.globalAlpha = textAlpha(frame, versions[i], project.design);
+            ctx.drawImage(overlays[i], 0, 0, 1920, 1080);
+          }
+          ctx.restore();
+        },
+      },
+    ];
   }
   async function exportVideo() {
     if (rendered.current?.key === JSON.stringify(project)) {
@@ -766,25 +851,32 @@ export function AllVersionsEditor({
             全長：{versions.at(-1)?.endFrame ?? 0} frames・version数：
             {versions.length}
           </p>
-          <button
+          <LocalExport
+            prepare={prepareLocal}
             disabled={!owner || issues.length > 0}
-            onClick={() => void exportVideo()}
-          >
-            全長を書き出す
-          </button>
-          {batch && (
-            <>
-              <p>
-                job：{batch} ／ {status}
-              </p>
-              <button onClick={() => void check()}>進捗・結果を確認</button>
-            </>
-          )}
-          {output && (
-            <a href={output} rel="noreferrer">
-              検証済みMP4を保存
-            </a>
-          )}
+          />
+          <details>
+            <summary>サーバーで書き出す</summary>
+            <button
+              disabled={!owner || issues.length > 0}
+              onClick={() => void exportVideo()}
+            >
+              全長を書き出す
+            </button>
+            {batch && (
+              <>
+                <p>
+                  job：{batch} ／ {status}
+                </p>
+                <button onClick={() => void check()}>進捗・結果を確認</button>
+              </>
+            )}
+            {output && (
+              <a href={output} rel="noreferrer">
+                検証済みMP4を保存
+              </a>
+            )}
+          </details>
         </>
       )}
       {issues.length > 0 && (

@@ -37,15 +37,6 @@ export default function WorkspaceShell() {
   if (!WORKFLOW_FIRST_ENABLED) return <LegacyEditor />;
   return (
     <>
-      {process.env.NEXT_PUBLIC_DEVELOPER_STUDIO_ENABLED === "true" && (
-        <a
-          href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/developer/studio/`}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          開発者Studioを別タブで開く
-        </a>
-      )}
       <div hidden={legacy} inert={legacy ? true : undefined}>
         {workflowOpened && (
           <WorkflowWorkspace active={!legacy} onLegacy={chooseLegacy} />

@@ -1,12 +1,19 @@
 "use client";
 import Account from "../auth/Account";
+import { DeveloperStudioEntry } from "../developer/DeveloperAccess";
 import dynamic from "next/dynamic";
 import { WORKFLOW_ENABLED } from "../../config/workflow-limits";
 const Workflow = dynamic(() => import("../workflow/Workflow"), {
   ssr: false,
   loading: () => <p role="status">Workflowを読み込み中…</p>,
 });
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 /* eslint-disable @next/next/no-img-element -- Blob URLs are local decoded user assets. */
 import {
   Download,
@@ -60,9 +67,22 @@ type View =
   "workflow" | "dashboard" | "studio" | "templates" | "assets" | "settings";
 type LocalTemplate = Template & { templateId?: string };
 const start = newProject();
+function subscribeMobileAccount(onChange: () => void) {
+  const query = window.matchMedia("(max-width: 700px)");
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+const mobileAccountSnapshot = () =>
+  window.matchMedia("(max-width: 700px)").matches;
+const serverAccountSnapshot = () => false;
 export default function Editor({
   onWorkflowFirst,
 }: { onWorkflowFirst?: () => void } = {}) {
+  const mobileAccount = useSyncExternalStore(
+    subscribeMobileAccount,
+    mobileAccountSnapshot,
+    serverAccountSnapshot,
+  );
   const {
     history,
     dispatch,
@@ -704,6 +724,12 @@ export default function Editor({
           )}
         </nav>
         <div className="nav-bottom">
+          {!mobileAccount && (
+            <>
+              <Account />
+              <DeveloperStudioEntry />
+            </>
+          )}
           <div className="local-badge">
             <span className="online-dot" />
             <div>
@@ -746,7 +772,12 @@ export default function Editor({
             </b>
           </div>
           <div className="top-actions">
-            <Account />
+            {mobileAccount && (
+              <div className="legacy-mobile-account">
+                <Account />
+                <DeveloperStudioEntry />
+              </div>
+            )}
             <span className="privacy">
               <span className="online-dot" /> LOCAL FIRST
             </span>

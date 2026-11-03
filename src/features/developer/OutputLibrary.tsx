@@ -124,25 +124,21 @@ export function OutputLibrary({ api: injected }: { api?: AuthenticatedApi }) {
       style={{ maxWidth: 960, margin: "auto", padding: 16 }}
     >
       <style>{`.developer-output-library button,.developer-output-library a{min-height:44px;display:inline-flex;align-items:center;margin:4px;padding:8px}.developer-output-library label{padding-block:8px}.developer-output-library article{overflow-wrap:anywhere}`}</style>
-      <h1>開発者Studio・完成動画</h1>
+      <h1>Developer Studio</h1>
       <p>
         1本ずつMP4を保存してください。共有・ダウンロード開始や共有成功だけでは保存確認になりません。
       </p>
       <nav>
         <a
           href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/developer/all-versions/`}
-          target="_blank"
-          rel="noopener noreferrer"
         >
-          All Versions
+          All Versions Video Maker
         </a>
         {" / "}
         <a
           href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/developer/fnf-showcase/`}
-          target="_blank"
-          rel="noopener noreferrer"
         >
-          FNF Showcase
+          FNF Showcase Maker
         </a>
       </nav>
       <DeveloperPwa api={api} />

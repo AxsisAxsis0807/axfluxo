@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-test("FNF rollback keeps all five databases and never admits network work", async ({
+test("FNF unauthorized access preserves all five databases and admits no media work", async ({
   page,
 }) => {
   const calls: string[] = [];
@@ -14,10 +14,10 @@ test("FNF rollback keeps all five databases and never admits network work", asyn
   await page.goto("developer/fnf-showcase/");
   await expect(
     page.getByRole("heading", { name: "FNF Showcase Maker", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("入口はOFFです。受付jobと完成物は保持されています。"),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText(
+    /ログイン|設定|開発者権限/,
+  );
   const names = [
     "axfluxo",
     "axfluxo-workflow",
@@ -43,9 +43,9 @@ test("FNF rollback keeps all five databases and never admits network work", asyn
     }
   }, names);
   await page.reload();
-  await expect(
-    page.getByText("入口はOFFです。受付jobと完成物は保持されています。"),
-  ).toBeVisible();
+  await expect(page.getByRole("status")).toContainText(
+    /ログイン|設定|開発者権限/,
+  );
   expect(
     await page.evaluate(async (names) => {
       const values = [];
