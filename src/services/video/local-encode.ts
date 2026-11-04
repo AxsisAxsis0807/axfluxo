@@ -2,7 +2,12 @@ export type LocalEncodeJob = {
   filename: string;
   width: number;
   height: number;
-  pieces: { url: () => Promise<string>; start: number; end: number }[];
+  pieces: {
+    file?: File;
+    url: () => Promise<string>;
+    start: number;
+    end: number;
+  }[];
   draw: (
     ctx: CanvasRenderingContext2D,
     media: HTMLVideoElement,
@@ -68,6 +73,27 @@ function mediaReady(
     signal.addEventListener("abort", fail, { once: true });
   });
 }
+function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const aborted = () => {
+      signal.removeEventListener("abort", aborted);
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", aborted, { once: true });
+    operation.then(
+      (value) => {
+        signal.removeEventListener("abort", aborted);
+        if (signal.aborted) reject(signal.reason);
+        else resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", aborted);
+        reject(error);
+      },
+    );
+    if (signal.aborted) aborted();
+  });
+}
 async function playForEncode(
   media: HTMLVideoElement,
   signal: AbortSignal,
@@ -75,7 +101,7 @@ async function playForEncode(
 ) {
   signal.throwIfAborted();
   try {
-    await media.play();
+    await abortable(media.play(), signal);
     return;
   } catch (error) {
     if (!(error instanceof DOMException) || error.name !== "NotAllowedError")
@@ -121,6 +147,7 @@ export async function encodeLocal(
   rest: boolean,
   budget: { processing: number },
   status: (s: string) => void,
+  progress: (fraction: number) => void = () => {},
 ) {
   const mimeType = recorderType();
   if (!mimeType)
@@ -143,16 +170,30 @@ export async function encodeLocal(
   media.style.cssText =
     "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";
   document.body.append(media);
-  const destination = audio.createMediaStreamDestination();
-  const source = audio.createMediaElementSource(media);
-  source.connect(destination);
-  const stream = canvas.captureStream(60);
-  destination.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
-  const recorder = new MediaRecorder(stream, {
-    mimeType,
-    videoBitsPerSecond: 8_000_000,
-    audioBitsPerSecond: 320_000,
-  });
+  const { source, stream, recorder } = (() => {
+    let source: MediaElementAudioSourceNode | undefined;
+    let destination: MediaStreamAudioDestinationNode | undefined;
+    let stream: MediaStream | undefined;
+    try {
+      destination = audio.createMediaStreamDestination();
+      source = audio.createMediaElementSource(media);
+      source.connect(destination);
+      stream = canvas.captureStream(60);
+      destination.stream.getAudioTracks().forEach((t) => stream!.addTrack(t));
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: 8_000_000,
+        audioBitsPerSecond: 320_000,
+      });
+      return { source, stream, recorder };
+    } catch (error) {
+      source?.disconnect();
+      stream?.getTracks().forEach((t) => t.stop());
+      destination?.stream.getTracks().forEach((t) => t.stop());
+      media.remove();
+      throw error;
+    }
+  })();
   const chunks: BlobPart[] = [];
   recorder.ondataavailable = (e) => {
     if (e.data.size) chunks.push(e.data);
@@ -164,7 +205,20 @@ export async function encodeLocal(
   recorder.onerror = () => {
     recordError = Error("端末内エンコードに失敗しました。");
   };
+  const total = job.pieces.reduce((n, p) => n + p.end - p.start, 0);
+  let recordingStarted = false;
   let elapsed = 0;
+  let outputBytes = 0;
+  const collect = recorder.ondataavailable;
+  recorder.ondataavailable = (event) => {
+    outputBytes += event.data.size;
+    if (outputBytes > 256 * 1024 * 1024) {
+      recordError = Error(
+        "完成ファイルが安全な保持上限256MiBを超えました。区間を短くしてください。",
+      );
+      if (recorder.state !== "inactive") recorder.stop();
+    } else collect?.call(recorder, event);
+  };
   try {
     for (const piece of job.pieces) {
       signal.throwIfAborted();
@@ -182,6 +236,7 @@ export async function encodeLocal(
       job.draw(ctx, media, elapsed);
       if (recorder.state === "inactive") {
         recorder.start(1000);
+        recordingStarted = true;
         recorder.pause();
       }
       await playForEncode(media, signal, status);
@@ -214,6 +269,7 @@ export async function encodeLocal(
           await playForEncode(media, signal, status);
           recorder.resume();
         }
+        progress((elapsed + current - piece.start) / total);
         status(
           `端末内で処理中：${Math.floor(elapsed + current - piece.start)}秒`,
         );
@@ -223,8 +279,10 @@ export async function encodeLocal(
       recorder.pause();
       elapsed += piece.end - piece.start;
     }
-    recorder.stop();
+    signal.throwIfAborted();
+    if (recorder.state !== "inactive") recorder.stop();
     await stopped;
+    signal.throwIfAborted();
     if (recordError) throw recordError;
     return {
       blob: new Blob(chunks, { type: mimeType }),
@@ -235,6 +293,7 @@ export async function encodeLocal(
   } finally {
     if (recorder.state !== "inactive") recorder.stop();
     media.pause();
+    if (recordingStarted) await stopped;
     media.removeAttribute("src");
     media.load();
     media.remove();

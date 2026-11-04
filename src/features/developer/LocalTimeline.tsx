@@ -1,7 +1,16 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Timeline, type TimelineItem } from "../video-common/Timeline";
 import { useLocalWaveform } from "../video-common/useLocalWaveform";
+import {
+  useWaveformDetail,
+  type VisibleWindow,
+} from "../video-common/useWaveformDetail";
+import {
+  bindTrimPlayback,
+  clampToTrim,
+  trimRanges,
+} from "../../services/video/trim-playback";
 export default function LocalTimeline({
   file,
   duration,
@@ -20,14 +29,73 @@ export default function LocalTimeline({
   onEdit: (id: string, start: number, end: number) => void;
 }) {
   const [current, setCurrent] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState("");
+  const [view, setView] = useState<VisibleWindow>();
+  const visible = useCallback(
+    (next: VisibleWindow) =>
+      setView((old) =>
+        old &&
+        old.start === next.start &&
+        old.end === next.end &&
+        old.pps === next.pps
+          ? old
+          : next,
+      ),
+    [],
+  );
+  const chosen = items.find((i) => i.id === selected) ?? items[0];
+  const ranges = useMemo(
+    () =>
+      trimRanges(
+        (fnf && chosen ? [chosen] : items).map((i) => ({
+          start: i.startUs / 1e6,
+          end: i.endUs / 1e6,
+        })),
+        duration,
+      ),
+    [fnf, chosen, items, duration],
+  );
+  const bounds = useMemo(
+    () => ({ startUs: ranges[0].start * 1e6, endUs: ranges.at(-1)!.end * 1e6 }),
+    [ranges],
+  );
   const analysis = useLocalWaveform(file, duration);
+  const detail = useWaveformDetail(
+    file,
+    duration,
+    view,
+    analysis.status === "complete",
+  );
+  const waveform = useMemo(
+    () =>
+      analysis.waveform
+        ? {
+            ...(detail.waveform ?? analysis.waveform),
+            clipStartUs: detail.waveform?.originUs ?? 0,
+            clipEndUs: detail.waveform
+              ? detail.waveform.originUs +
+                (detail.waveform.levels[0].stepUs *
+                  detail.waveform.levels[0].peaks.length) /
+                  2
+              : analysis.analyzedUntilUs,
+          }
+        : undefined,
+    [analysis.waveform, analysis.analyzedUntilUs, detail.waveform],
+  );
+  const rangeKey = JSON.stringify(ranges);
   useEffect(() => {
     const video = media();
     if (!video) return;
     const update = () => setCurrent(video.currentTime * 1e6);
+    const release = bindTrimPlayback(video, JSON.parse(rangeKey));
     video.addEventListener("timeupdate", update);
-    return () => video.removeEventListener("timeupdate", update);
-  }, [media]);
+    update();
+    return () => {
+      release();
+      video.removeEventListener("timeupdate", update);
+    };
+  }, [media, rangeKey]);
   const busy = analysis.status === "queued" || analysis.status === "analyzing";
   const messages = {
     queued: "音声波形の解析待ち…",
@@ -55,25 +123,52 @@ export default function LocalTimeline({
           波形を再解析
         </button>
       )}
+      <button
+        type="button"
+        aria-pressed={editing}
+        onClick={() => setEditing((v) => !v)}
+      >
+        {editing ? "通常再生に戻る" : "トリミング範囲を編集"}
+      </button>
+      {fnf && items.length > 0 && (
+        <label>
+          再生する範囲
+          <select
+            aria-label="再生する範囲"
+            value={chosen?.id}
+            onChange={(e) => setSelected(e.target.value)}
+          >
+            {items.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      <p>
+        残る長さ：{((bounds.endUs - bounds.startUs) / 1e6).toFixed(3)}秒。
+        {editing
+          ? "暗い部分は除外範囲です。ツマミで再び含められます。"
+          : "通常操作は選択したトリミング範囲内に制限されます。"}
+      </p>
+      <p role="status">{detail.status}</p>
       <Timeline
+        bounds={bounds}
+        editing={editing}
+        media={media}
+        onVisibleWindow={visible}
         mode={fnf ? "fnf" : "all-versions"}
         durationUs={Math.round(duration * 1e6)}
         currentUs={current}
         items={items}
         markers={markers}
-        waveform={
-          analysis.waveform
-            ? {
-                ...analysis.waveform,
-                clipStartUs: 0,
-                clipEndUs: analysis.analyzedUntilUs,
-              }
-            : undefined
-        }
+        waveform={waveform}
         onSeek={(us) => {
           const video = media();
-          if (video) video.currentTime = us / 1e6;
-          setCurrent(us);
+          const target = clampToTrim(us / 1e6, ranges);
+          if (video) video.currentTime = target;
+          setCurrent(target * 1e6);
         }}
         onEdit={(id, start, end) => onEdit(id, start / 1e6, end / 1e6)}
       />

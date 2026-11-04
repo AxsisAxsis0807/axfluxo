@@ -13,8 +13,11 @@ const MAX_PACKET_BYTES = 4 * 1024 * 1024;
 export class PeakAccumulator {
   readonly step: number;
   readonly peaks: number[];
-  constructor(readonly duration: number) {
-    this.step = Math.max(0.02, duration / MAX_BINS);
+  constructor(
+    readonly duration: number,
+    step = 0.02,
+  ) {
+    this.step = Math.max(step, duration / MAX_BINS);
     this.peaks = Array(Math.ceil(duration / this.step) * 2).fill(0);
   }
   add(
@@ -72,9 +75,21 @@ export async function analyzeLocalWaveform(
   duration: number,
   signal: AbortSignal,
   update: (result: WaveformResult) => void,
+  window?: { start: number; end: number; step: number },
 ): Promise<WaveformResult> {
   if (!Number.isFinite(duration) || duration <= 0)
     throw Error("INVALID_DURATION");
+  const start = Math.max(0, window?.start ?? 0);
+  const endTime = Math.min(duration, window?.end ?? duration);
+  if (
+    ![start, endTime].every(Number.isFinite) ||
+    endTime <= start ||
+    (window &&
+      (!Number.isFinite(window.step) ||
+        window.step <= 0 ||
+        endTime - start > 30))
+  )
+    throw Error("INVALID_WINDOW");
   update({ status: "queued", progress: 0, analyzedUntilUs: 0 });
   return serial(signal, async () => {
     const {
@@ -114,21 +129,24 @@ export async function analyzeLocalWaveform(
         config.sampleRate > 96000
       )
         throw Error("UNSUPPORTED_AUDIO");
-      const accumulator = new PeakAccumulator(duration);
+      const accumulator = new PeakAccumulator(
+        endTime - start,
+        window ? Math.max(window.step, 1 / config.sampleRate) : undefined,
+      );
       const versionId = crypto.randomUUID();
       let lastPublish = 0;
-      let analyzed = 0;
+      let analyzed = start;
       const publish = (until: number, complete = false): WaveformResult => {
-        analyzed = Math.min(duration, Math.max(analyzed, until));
+        analyzed = Math.min(endTime, Math.max(analyzed, until));
         const result: WaveformResult = {
           status: complete ? "complete" : "analyzing",
-          progress: complete ? 1 : analyzed / duration,
+          progress: complete ? 1 : (analyzed - start) / (endTime - start),
           analyzedUntilUs: Math.round(analyzed * 1e6),
           waveform: {
             schemaVersion: 1,
             versionId,
             hash: "a".repeat(64),
-            originUs: 0,
+            originUs: Math.round(start * 1e6),
             sampleRate: 8000,
             levels: [
               {
@@ -155,25 +173,36 @@ export async function analyzeLocalWaveform(
           { length: buffer.numberOfChannels },
           (_, i) => buffer.getChannelData(i),
         );
-        accumulator.add(channels, buffer.sampleRate, timestamp, from, until);
+        accumulator.add(
+          channels,
+          buffer.sampleRate,
+          timestamp - start,
+          Math.max(start, from ?? start) - start,
+          Math.min(endTime, until ?? endTime) - start,
+        );
       };
       update({ status: "analyzing", progress: 0, analyzedUntilUs: 0 });
       if (codec.startsWith("pcm-")) {
         // The library's PCM decoder does not require WebCodecs (including Safari).
         for await (const { buffer, timestamp } of new AudioBufferSink(
           track,
-        ).buffers()) {
+        ).buffers(start, endTime)) {
           signal.throwIfAborted();
           consume(buffer, timestamp);
           publish(timestamp + buffer.duration);
           await yieldUI();
         }
       } else if (codec === "aac" || codec === "mp3") {
-        context = new AudioContext({ sampleRate: 8000 });
+        context = new AudioContext({
+          sampleRate: window ? config.sampleRate : 8000,
+        });
         const sink = new EncodedPacketSink(track);
-        let packet = await sink.getFirstPacket();
+        let packet =
+          start > 0
+            ? await sink.getPacket(Math.max(0, start - 0.2))
+            : await sink.getFirstPacket();
         let overlap: import("mediabunny").EncodedPacket[] = [];
-        while (packet) {
+        while (packet && packet.timestamp < endTime) {
           signal.throwIfAborted();
           const freshStart = packet.timestamp;
           const packets = [...overlap];
@@ -236,7 +265,7 @@ export async function analyzeLocalWaveform(
         if (!(await track.canDecode())) throw Error("UNSUPPORTED_AUDIO");
         for await (const { buffer, timestamp } of new AudioBufferSink(
           track,
-        ).buffers()) {
+        ).buffers(start, endTime)) {
           signal.throwIfAborted();
           consume(buffer, timestamp);
           publish(timestamp + buffer.duration);
@@ -244,7 +273,7 @@ export async function analyzeLocalWaveform(
         }
       }
       signal.throwIfAborted();
-      return publish(duration, true);
+      return publish(endTime, true);
     } finally {
       signal.removeEventListener("abort", abort);
       input.dispose();

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   configureLock,
@@ -90,7 +91,7 @@ export default function LocalDeveloperGate({
         >
           旧Studioへ戻る
         </a>
-        <a href={`${base}/developer/studio/`}>Developer Studioへ戻る</a>
+        <Link href="/developer/studio/">Developer Studioへ戻る</Link>
       </nav>
       {!ready ? (
         <p role="status">ロック設定を確認しています…</p>
@@ -99,6 +100,7 @@ export default function LocalDeveloperGate({
           <button
             onClick={() => {
               sessionStorage.removeItem(SESSION_KEY);
+              window.dispatchEvent(new Event("axfluxo-local-lock-change"));
               setOpen(false);
             }}
           >

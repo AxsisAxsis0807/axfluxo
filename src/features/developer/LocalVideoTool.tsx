@@ -285,7 +285,12 @@ export default function LocalVideoTool({
         width: 1080,
         height: 1920,
         pieces: [
-          { url: async () => source.url, start: range.start, end: range.end },
+          {
+            file: source.file,
+            url: async () => source.url,
+            start: range.start,
+            end: range.end,
+          },
         ],
         draw: (ctx, media) => {
           ctx.fillStyle = "black";
@@ -321,6 +326,7 @@ export default function LocalVideoTool({
         width: 1920,
         height: 1080,
         pieces: sources.map((s) => ({
+          file: s.file,
           url: async () => s.url,
           start: s.start,
           end: s.end,

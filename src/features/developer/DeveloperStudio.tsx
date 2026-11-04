@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { DeveloperGate } from "./DeveloperAccess";
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
@@ -19,27 +20,26 @@ export default function DeveloperStudio() {
       return null;
     }
   }, []);
-  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
   return (
     <main style={{ maxWidth: 960, margin: "auto", padding: 16 }}>
       <h1>Developer Studio</h1>
       <p>動画APIの設定なしで、端末の素材から動画を制作・書き出しできます。</p>
       <nav aria-label="動画ツール">
         <p>
-          <a
+          <Link
             style={{ display: "inline-block", padding: 12, minHeight: 44 }}
-            href={`${base}/developer/all-versions/`}
+            href="/developer/all-versions/"
           >
             All Versions Video Maker
-          </a>
+          </Link>
         </p>
         <p>
-          <a
+          <Link
             style={{ display: "inline-block", padding: 12, minHeight: 44 }}
-            href={`${base}/developer/fnf-showcase/`}
+            href="/developer/fnf-showcase/"
           >
             FNF Showcase Maker
-          </a>
+          </Link>
         </p>
       </nav>
       <p>端末内エンコード・10分処理／4分休憩に対応しています。</p>

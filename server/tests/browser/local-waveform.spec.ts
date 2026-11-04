@@ -170,6 +170,10 @@ test("cancel, retry, remove/re-add, independent files, editing, zoom and interru
   await page
     .getByLabel("files")
     .setInputFiles([join(dir, "long.m4a"), join(dir, "source.wav")]);
+  await page
+    .getByRole("button", { name: "トリミング範囲を編集", exact: true })
+    .first()
+    .click();
   const editing = page.getByRole("button", {
     name: "long.m4a 終了handle",
     exact: true,
@@ -232,6 +236,9 @@ test("invalid audio fails without disabling timeline editing", async ({
   await expect(
     page.getByText(/この素材の音声形式を端末で解析できません/),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "トリミング範囲を編集", exact: true })
+    .click();
   const handle = page.getByRole("button", {
     name: "bad.mov 終了handle",
     exact: true,
@@ -239,4 +246,70 @@ test("invalid audio fails without disabling timeline editing", async ({
   await handle.focus();
   await handle.press("ArrowLeft");
   await expect(page.getByLabel("edited", { exact: true })).not.toHaveText("8");
+});
+test("visible-window refinement uses real finer peaks with source origin and bounded storage", async ({
+  page,
+}) => {
+  await open(page);
+  const bytes = await readFile(join(dir, "source.wav"));
+  const result = await page.evaluate(async (bytes) => {
+    const api = window as unknown as {
+      analyzeLocalWaveform: typeof import("../../../src/services/video/local-waveform").analyzeLocalWaveform;
+    };
+    const source = new File([new Uint8Array(bytes)], "source.wav");
+    const overview = await api.analyzeLocalWaveform(
+      source,
+      8,
+      new AbortController().signal,
+      () => {},
+    );
+    const detail = await api.analyzeLocalWaveform(
+      source,
+      8,
+      new AbortController().signal,
+      () => {},
+      { start: 0.75, end: 1.25, step: 1 / 48000 },
+    );
+    return { overview, detail };
+  }, Array.from(bytes));
+  const level = result.detail.waveform!.levels[0];
+  expect(result.detail.waveform!.originUs).toBe(750000);
+  expect(level.stepUs).toBeLessThan(
+    result.overview.waveform!.levels[0].stepUs / 10,
+  );
+  expect(level.peaks.length).toBeLessThanOrEqual(40002);
+  const onset = Math.floor(250000 / level.stepUs);
+  expect(level.peaks.slice(0, (onset - 1) * 2).every((p) => p === 0)).toBe(
+    true,
+  );
+  expect(
+    level.peaks.slice((onset + 1) * 2).some((p) => Math.abs(p) > 0.4),
+  ).toBe(true);
+});
+test("canvas leaves silent bars absent and keeps a separate center line", async ({
+  page,
+}) => {
+  await open(page);
+  await page.evaluate(() => {
+    const calls: { x: number; h: number }[] = [];
+    Object.assign(window, { waveformBars: calls });
+    const fill = CanvasRenderingContext2D.prototype.fillRect;
+    CanvasRenderingContext2D.prototype.fillRect = function (x, y, w, h) {
+      calls.push({ x, h });
+      return fill.call(this, x, y, w, h);
+    };
+  });
+  await page.getByLabel("files").setInputFiles(join(dir, "source.wav"));
+  await expect(
+    page.getByText("音声波形の解析完了", { exact: true }),
+  ).toBeVisible();
+  const bars = await page.evaluate(
+    () =>
+      (window as unknown as { waveformBars: { x: number; h: number }[] })
+        .waveformBars,
+  );
+  expect(bars.length).toBeGreaterThan(0);
+  // 80 px/sec: the first second is exactly silent PCM; no minimum bars there.
+  expect(bars.filter((b) => b.x >= 0 && b.x < 75)).toHaveLength(0);
+  expect(bars.every((b) => b.h > 0)).toBe(true);
 });
