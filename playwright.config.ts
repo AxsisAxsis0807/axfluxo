@@ -8,10 +8,17 @@ export default defineConfig({
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:3000/",
     headless: true,
+    // The navigation regression loads H.264/AAC MP4, as the video browser suite does.
+    // Bundled Chromium is not a codec-equivalent replacement for branded Chrome.
+    channel: "chrome",
     launchOptions: {
       executablePath:
         process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ||
-        (existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : undefined),
+        [
+          "/usr/bin/google-chrome",
+          "/usr/bin/google-chrome-stable",
+          "/usr/bin/chromium",
+        ].find(existsSync),
       args: ["--no-sandbox", "--disable-dev-shm-usage"],
     },
     trace: "retain-on-failure",
