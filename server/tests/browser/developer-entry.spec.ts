@@ -37,10 +37,15 @@ test.beforeAll(async () => {
   });
   bundle = result.outputFiles[0].text;
 });
-for (const mode of ["all-versions", "fnf-showcase"] as const)
-  test(`local ${mode} accepts device files and exports without video API`, async ({
+for (const scenario of [
+  "all-versions",
+  "fnf-showcase",
+  "failed-waveform",
+] as const)
+  test(`local ${scenario} accepts device files and exports without video API`, async ({
     page,
   }) => {
+    const mode = scenario === "failed-waveform" ? "fnf-showcase" : scenario;
     const dir = await mkdtemp(join(tmpdir(), "local-tool-")),
       file = join(dir, "source.mp4"),
       cover = join(dir, "cover.png");
@@ -153,6 +158,12 @@ for (const mode of ["all-versions", "fnf-showcase"] as const)
         });
       }
     }
+    if (scenario === "failed-waveform")
+      await page.evaluate(() => {
+        AudioContext.prototype.decodeAudioData = async () => {
+          throw Error("test waveform failure");
+        };
+      });
     await page.getByLabel("端末の素材", { exact: true }).setInputFiles(files);
     await expect(
       page.getByRole("button", { name: "端末内で書き出す" }),
@@ -182,14 +193,14 @@ for (const mode of ["all-versions", "fnf-showcase"] as const)
     await page
       .getByRole("button", { name: "端末のテンプレートを読み込む" })
       .click();
-    await page.getByRole("button", { name: "波形を生成" }).first().click();
-    await expect(
-      page.getByText(
-        test.info().project.name === "chromium"
-          ? /^波形生成済み$/
-          : /波形生成済み|この素材の波形を端末で解析できません/,
-      ),
-    ).toBeVisible();
+    if (scenario === "failed-waveform")
+      await expect(
+        page.getByText(/この素材の音声形式を端末で解析できません/),
+      ).toBeVisible();
+    else
+      await expect(
+        page.getByText("音声波形の解析完了", { exact: true }).first(),
+      ).toBeVisible();
     await page.getByRole("button", { name: "合成プレビューを更新" }).click();
     await expect(
       page.getByRole("region", { name: "合成プレビュー" }).locator("canvas"),

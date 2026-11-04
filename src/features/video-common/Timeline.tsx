@@ -60,13 +60,17 @@ function LaneWaveform({
     if (!level) return;
     ctx.fillStyle = "#b899c9";
     // Aggregate every peak covered by a bar so short transients survive zooming out.
-    for (let x = 0; x < width; x += 8) {
+    const barUs = Math.max(8 * stepUs, level.stepUs);
+    const stride = barUs / stepUs;
+    const offset = (waveform?.originUs ?? 0) - startUs;
+    const firstBar = Math.floor(-offset / barUs);
+    for (let x = (offset + firstBar * barUs) / stepUs; x < width; x += stride) {
       const start = Math.max(
         startUs + x * stepUs,
         waveform?.clipStartUs ?? -Infinity,
       );
       const end = Math.min(
-        startUs + (x + 8) * stepUs,
+        startUs + (x + stride) * stepUs,
         endUs,
         waveform?.clipEndUs ?? Infinity,
       );
