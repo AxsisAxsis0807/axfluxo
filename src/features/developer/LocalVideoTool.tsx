@@ -625,6 +625,11 @@ export default function LocalVideoTool({
               }}
             />
           </label>
+          {!cover && (
+            <p role="alert" style={{ color: "#fbbf24" }}>
+              書き出しにはカバー画像が必要です。画像を選択してください。
+            </p>
+          )}
           <label>
             version名（1行に1つ）
             <textarea
@@ -633,6 +638,15 @@ export default function LocalVideoTool({
               onChange={(e) => setNames(e.target.value)}
             />
           </label>
+          {sources.length > 0 && (() => {
+            const expected = localIntervals(sources).length;
+            const actual = names.replace(/\\r\\n?/g, "\\n").split("\\n").filter((v) => v.trim()).length;
+            return actual !== expected ? (
+              <p role="alert" style={{ color: "#fbbf24" }}>
+                version名は{expected}行必要です（現在{actual}行）。各区間に1行ずつ入力してください。
+              </p>
+            ) : null;
+          })()}
         </>
       )}
       <button
