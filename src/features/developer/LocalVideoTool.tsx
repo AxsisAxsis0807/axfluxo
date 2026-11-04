@@ -640,7 +640,7 @@ export default function LocalVideoTool({
           </label>
           {sources.length > 0 && (() => {
             const expected = localIntervals(sources).length;
-            const actual = names.replace(/\\r\\n?/g, "\\n").split("\\n").filter((v) => v.trim()).length;
+            const actual = names.replace(/\r\n?/g, "\n").split("\n").filter((v) => v.trim()).length;
             return actual !== expected ? (
               <p role="alert" style={{ color: "#fbbf24" }}>
                 version名は{expected}行必要です（現在{actual}行）。各区間に1行ずつ入力してください。
