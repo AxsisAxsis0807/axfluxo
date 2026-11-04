@@ -142,12 +142,21 @@ export default function LocalVideoTool({
   const fnf = mode === "fnf-showcase";
   useEffect(() => {
     active.current = true;
-    const allocated = urls.current;
     return () => {
       active.current = false;
-      allocated.forEach(URL.revokeObjectURL);
+      urls.current.forEach(URL.revokeObjectURL);
     };
   }, []);
+  const previousSources = useRef<Source[]>([]);
+  useEffect(() => {
+    for (const source of previousSources.current) {
+      if (!sources.some((current) => current.id === source.id)) {
+        URL.revokeObjectURL(source.url);
+        urls.current = urls.current.filter((url) => url !== source.url);
+      }
+    }
+    previousSources.current = sources;
+  }, [sources]);
   function objectUrl(file: File) {
     const url = URL.createObjectURL(file);
     urls.current.push(url);
@@ -166,7 +175,7 @@ export default function LocalVideoTool({
       if (!active.current) return;
       if (fnf && (!selected[0].width || !selected[0].height))
         throw Error("FNFには動画を選択してください。");
-      setSources(selected);
+      setSources((old) => (fnf ? selected : [...old, ...selected]));
       setRanges(
         fnf
           ? [

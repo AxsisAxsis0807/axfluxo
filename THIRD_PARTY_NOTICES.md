@@ -34,3 +34,7 @@
 ## FNF Showcase graphics (V6)
 
 Noto Sans JP variable font, Google Fonts `ofl/notosansjp/NotoSansJP[wght].ttf`: SIL Open Font License 1.1. Unmodified font SHA-256 `c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f`; license: `public/licenses/NotoSansJP-OFL.txt` and the bundled server asset directory. Used by the server for the fixed heading/username PNG shared with preview. No runtime font download and no new JavaScript dependency.
+
+## Local audio waveform analysis
+
+- Mediabunny 1.65.1 — Mozilla Public License 2.0 (`public/licenses/mediabunny-MPL-2.0.txt`). Unmodified demuxing, audio packet remuxing and PCM decoding library. Corresponding source is distributed in the npm package and available at https://github.com/Vanilagy/mediabunny/tree/v1.65.1 (https://www.npmjs.com/package/mediabunny/v/1.65.1). No server or runtime CDN is required.
