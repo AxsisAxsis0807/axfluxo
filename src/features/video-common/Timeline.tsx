@@ -28,6 +28,86 @@ type Drag = {
 };
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
+type TimelineWaveform = Waveform & { clipStartUs?: number; clipEndUs?: number };
+
+function LaneWaveform({
+  waveform,
+  startUs,
+  endUs,
+  width,
+  left,
+}: {
+  waveform?: TimelineWaveform;
+  startUs: number;
+  endUs: number;
+  width: number;
+  left: number;
+}) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const node = canvas.current;
+    if (!node || width <= 0) return;
+    const ratio = Math.min(2, window.devicePixelRatio || 1);
+    node.width = Math.ceil(width * ratio);
+    node.height = 88 * ratio;
+    const ctx = node.getContext("2d");
+    if (!ctx) return;
+    ctx.scale(ratio, ratio);
+    const stepUs = (endUs - startUs) / width;
+    const level =
+      waveform?.levels.find((level) => level.stepUs >= stepUs) ??
+      waveform?.levels[0];
+    if (!level) return;
+    ctx.fillStyle = "#b899c9";
+    // Aggregate every peak covered by a bar so short transients survive zooming out.
+    for (let x = 0; x < width; x += 8) {
+      const start = Math.max(
+        startUs + x * stepUs,
+        waveform?.clipStartUs ?? -Infinity,
+      );
+      const end = Math.min(
+        startUs + (x + 8) * stepUs,
+        endUs,
+        waveform?.clipEndUs ?? Infinity,
+      );
+      if (end <= start) continue;
+      const first = Math.max(
+        0,
+        Math.floor((start - (waveform?.originUs ?? 0)) / level.stepUs),
+      );
+      const last = Math.min(
+        level.peaks.length / 2,
+        Math.ceil((end - (waveform?.originUs ?? 0)) / level.stepUs),
+      );
+      let amplitude = 0;
+      for (let i = first; i < last; i++) {
+        amplitude = Math.max(
+          amplitude,
+          Math.abs(level.peaks[i * 2]),
+          Math.abs(level.peaks[i * 2 + 1]),
+        );
+      }
+      if (last <= first) continue;
+      const height = Math.max(2, Math.min(1, amplitude) * 60);
+      ctx.fillRect(x, (88 - height) / 2, Math.min(5, width - x), height);
+    }
+  }, [waveform, startUs, endUs, width]);
+  return (
+    <canvas
+      ref={canvas}
+      aria-label="音声波形"
+      style={{
+        position: "absolute",
+        left,
+        top: 0,
+        width,
+        height: 88,
+        pointerEvents: "none",
+      }}
+    />
+  );
+}
+
 export function Timeline({
   mode,
   durationUs,
@@ -45,10 +125,9 @@ export function Timeline({
   markers: number[];
   onSeek: (us: number) => void;
   onEdit: (id: string, startUs: number, endUs: number) => void;
-  waveform?: Waveform & { clipStartUs?: number; clipEndUs?: number };
+  waveform?: TimelineWaveform;
 }) {
   const viewport = useRef<HTMLDivElement>(null),
-    canvas = useRef<HTMLCanvasElement>(null),
     points = useRef(new Map<number, { x: number; y: number }>()),
     drag = useRef<Drag | null>(null),
     pinch = useRef<{ distance: number; zoom: number; anchor: number } | null>(
@@ -95,38 +174,6 @@ export function Timeline({
       node.scrollLeft = target;
     }
   }, [currentUs, origin, spanUs, durationUs, pps, mode, padding]);
-  useEffect(() => {
-    const c = canvas.current;
-    if (!c) return;
-    const ratio = Math.min(2, window.devicePixelRatio || 1);
-    c.width = Math.round(width * ratio);
-    c.height = 60 * ratio;
-    const ctx = c.getContext("2d");
-    if (!ctx) return;
-    ctx.scale(ratio, ratio);
-    ctx.clearRect(0, 0, width, 60);
-    ctx.strokeStyle = "#67c9d5";
-    ctx.beginPath();
-    const level =
-      waveform?.levels.find((l) => l.stepUs >= 1_000_000 / pps) ??
-      waveform?.levels[0];
-    if (level)
-      for (let x = 0; x < width; x++) {
-        const time = origin + ((scroll + x - padding) / pps) * 1_000_000,
-          index =
-            Math.floor((time - (waveform?.originUs ?? 0)) / level.stepUs) * 2;
-        if (
-          waveform?.clipStartUs !== undefined &&
-          (time < waveform.clipStartUs || time >= waveform.clipEndUs!)
-        )
-          continue;
-        if (index >= 0 && index + 1 < level.peaks.length) {
-          ctx.moveTo(x, 30 - level.peaks[index] * 25);
-          ctx.lineTo(x, 30 - level.peaks[index + 1] * 25);
-        }
-      }
-    ctx.stroke();
-  }, [waveform, origin, scroll, padding, pps, width]);
   function changeZoom(next: number, anchorX = width / 2) {
     const node = viewport.current;
     if (!node) return;
@@ -328,24 +375,17 @@ export function Timeline({
               mode === "fnf" ? Math.max(240, display.length * 148 + 60) : 170,
           }}
         >
-          <canvas
-            ref={canvas}
-            aria-label="音声波形"
-            style={{
-              position: "sticky",
-              left: 0,
-              top: 0,
-              width,
-              height: 60,
-              pointerEvents: "none",
-            }}
-          />
+          <div style={{ height: 60 }} />
           {display.map((item, index) => {
             if (item.endUs < origin || item.startUs > origin + spanUs)
               return null;
             const left = padding + ((item.startUs - origin) / 1_000_000) * pps,
               right = padding + ((item.endUs - origin) / 1_000_000) * pps,
-              top = 60 + (mode === "fnf" ? index * 148 : 0);
+              top = 60 + (mode === "fnf" ? index * 148 : 0),
+              laneLeft = Math.max(padding, left),
+              laneRight = Math.min(right, padding + (spanUs / 1_000_000) * pps),
+              visibleLeft = Math.max(laneLeft, scroll),
+              visibleRight = Math.min(laneRight, scroll + width);
             return (
               <div key={item.id}>
                 <div
@@ -363,11 +403,39 @@ export function Timeline({
                         Math.max(padding, left),
                     ),
                     height: 88,
-                    background: "#234253",
+                    background: "#895e9f",
+                    borderTop: "3px solid #f5f1f7",
+                    borderBottom: "3px solid #f5f1f7",
+                    boxSizing: "border-box",
+                    overflow: "hidden",
                     pointerEvents: "none",
                   }}
                 >
-                  {item.label}
+                  {visibleRight > visibleLeft && (
+                    <LaneWaveform
+                      waveform={waveform}
+                      startUs={
+                        origin + ((visibleLeft - padding) / pps) * 1_000_000
+                      }
+                      endUs={
+                        origin + ((visibleRight - padding) / pps) * 1_000_000
+                      }
+                      width={visibleRight - visibleLeft}
+                      left={visibleLeft - laneLeft}
+                    />
+                  )}
+                  <span
+                    style={{
+                      position: "relative",
+                      zIndex: 1,
+                      padding: "2px 6px",
+                      fontSize: 12,
+                      color: "white",
+                      background: "#493357b3",
+                    }}
+                  >
+                    {item.label}
+                  </span>
                 </div>
                 <button
                   data-action="start"
