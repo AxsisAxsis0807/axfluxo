@@ -63,6 +63,13 @@ function Fixture() {
         />
       </label>
       <video id="media" src={url} controls playsInline />
+      <button
+        onClick={() => {
+          void (document.getElementById("media") as HTMLVideoElement).play();
+        }}
+      >
+        範囲を再生
+      </button>
       {file && (
         <LocalTimeline
           file={file}

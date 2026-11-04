@@ -86,15 +86,15 @@ for (const mobile of [false, true])
     expect(geometry.left).toBeLessThanOrEqual(geometry.max);
     await video.evaluate((v: HTMLVideoElement) => {
       v.currentTime = 5.8;
-      return v.play();
     });
+    await page.getByRole("button", { name: "範囲を再生", exact: true }).click();
     await expect
       .poll(() => video.evaluate((v: HTMLVideoElement) => v.paused))
       .toBe(true);
     await expect
       .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
       .toBeCloseTo(6, 1);
-    await video.evaluate((v: HTMLVideoElement) => v.play());
+    await page.getByRole("button", { name: "範囲を再生", exact: true }).click();
     await expect
       .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
       .toBeLessThan(3);
@@ -179,6 +179,18 @@ test("real queue keeps snapshots, auto-runs 3 jobs and survives editor/panel unm
   test.setTimeout(60_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page, "queue");
+  test.skip(
+    await page.evaluate(
+      () =>
+        typeof MediaRecorder === "undefined" ||
+        ![
+          "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+          "video/mp4",
+          "video/webm;codecs=vp8,opus",
+        ].some((type) => MediaRecorder.isTypeSupported(type)),
+    ),
+    "This browser has no local encoder; playback and queue unit tests still run.",
+  );
   await page.getByLabel("端末の素材", { exact: true }).setInputFiles(file);
   const range = page
     .locator("fieldset")
@@ -232,6 +244,18 @@ test("running cancellation releases media before next job, failure continues and
 }) => {
   test.setTimeout(60_000);
   await open(page, "queue");
+  test.skip(
+    await page.evaluate(
+      () =>
+        typeof MediaRecorder === "undefined" ||
+        ![
+          "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+          "video/mp4",
+          "video/webm;codecs=vp8,opus",
+        ].some((type) => MediaRecorder.isTypeSupported(type)),
+    ),
+    "This browser has no local encoder; playback and queue unit tests still run.",
+  );
   await page.getByLabel("端末の素材", { exact: true }).setInputFiles(file);
   await page.getByLabel("譜面名", { exact: true }).fill("CANCEL ME");
   await page.getByLabel("終了秒", { exact: true }).fill("6");

@@ -36,7 +36,7 @@ TimelineのrAFはvideo.currentTimeを直接読み、再生ヘッドのDOM位置�
 
 ExportQueueはReact外のタブ単位ストア。subscribe/getSnapshotをuseSyncExternalStoreで購読する。LocalExportは予約時だけprepareを呼び、LocalVideoToolのそのレンダー時の設定を固定する。piecesの配列と開始/終了値をコピーし、描画closureはその時点のテキスト・crop・スケール・境界・カバー画像を保持する。既存の解像度（FNF 1080x1920、All Versions 1920x1080）、60fps・音声設定を維持する。
 
-素材はFile参照を保持し、実行時にキュー専用のObject URLを作成する。編集側の素材削除や画面のunmountで元のURLが解放されても予約は影響されない。カバーは予約準備時にロード済みのHTMLImageElementを保持する。作業画面がなくても予約は動作するが、文書全体の再読み込み/通常のaリンクによるページ移動はタブ内メモリを失う。beforeunloadで警告するが、特にiOSでは必ず警告される保証はない。予約/完成ファイルは永続化・復旧対応と表示しない。
+素材はFile参照を保持し、実行時にキュー専用のObject URLを作成する。編集側の素材削除や画面のunmountで元のURLが解放されても予約は影響されない。カバーは予約準備時にロード済みのHTMLImageElementを保持する。作業画面がなくても予約は動作するが、Developer Studioと両動画ツール間はNext Linkで移動し、ルートlayoutとキューを保持する。文書全体の再読み込み/それ以外の通常のaリンクによるページ移動はタブ内メモリを失う。beforeunloadで警告するが、特にiOSでは必ず警告される保証はない。予約/完成ファイルは永続化・復旧対応と表示しない。
 
 pumpは同期的に実行枠を取得し、前ジョブのfinally（Recorder停止、音声切断、video/URLの解放）完了後に次のqueuedを自動開始する。同時エンコード数は1。queued/preparing/rendering/completed/failed/cancelledを区別する。実行中・待機中キャンセル、待機中の並べ替え、失敗の再試行を提供する。取消後に遅れて返った成功は無視し、取消処理が完了するまで実行枠を譲らない。通常失敗はそのジョブに記録して後続へ進む。非表示/画面ロック/ロック失効はキューを停止し、実行中は失敗として再試行可能にする。共有障害時は手動一時停止も可能。
 
@@ -55,37 +55,47 @@ Safariはユーザー操作によるWeb Audio/メディア再生許可が必要�
 ## 検証
 
 - 型チェック、全体Lint、本番静的ビルド成功。
-- 全40ファイル・326単体/回帰テスト成功。さらに終了境界で反復シークしない回帰テストを追加。キューの4件直列・同時1件・実行中追加・スナップショット・遅延キャンセル結果破棄・後続継続・並べ替え・再試行・保持上限・非表示中断を追加検証。
+- 全40ファイル・327単体/回帰テスト成功（終了境界で反復シークしない回帰テストを含む）。キューの4件直列・同時1件・実行中追加・スナップショット・遅延キャンセル結果破棄・後続継続・並べ替え・再試行・保持上限・非表示中断を追加検証。
 - Chromium: 既存波形/プレビュー13件成功。新規詳細解析/無音Canvasと既存実音声出力を含む11件成功。実ファイルを使った3件連続予約、画面/パネルunmount後の継続、個別保存、PC/390pxトリム再拡張と停止/再開を確認。
 - WAV/MP3/M4A/MP4/MOV、合成363秒/33MiB超MOV、603秒音声は既存回帰テストで確認。実ユーザーファイルそのものではない。
 - WebKit取得はcdn.playwright.dev等がネットワークポリシーの403で失敗。ローカルWebKitおよびiPhone実機のSafariは未検証。CIの既存WebKitプロジェクトに新規試験も含まれる。
 - 初回sandbox内のffmpeg/ffprobe/ChromiumはEPERM、NextビルドはTypeScript子プロセス出力取得で失敗。許可された制限外実行で上記の成功を確認した。
 
-全体ブラウザ/E2E結果はPRへ追記する。
+- 最終Chromium動画ブラウザ試験28件すべて成功（出力先を独立させて再実行）。全体PC/モバイルE2E120件すべて成功。さらに実エンコーダーのDeveloper Studio経由のツール間移動と既存ロックをPC/モバイルで4件確認して成功。
+- GitHub Pagesと同じ`/axfluxo`で本番ビルド成功。PC/モバイルのツール間キュー保持・ロック・アセット読込6件成功。
+- 390pxの実ビルド画面を目視確認し、横はみ出しがないことを確認。保存/上限の詳細を折りたたんでジョブ一覧を優先表示。
+- 初回の全体E2Eは公開認証設定が未指定だったため中止し、CIと同じ公開設定で上記120件を再実行して成功。動画試験1件のレポート出力競合も独立出力先で解消した。
+- レビュー用PR: https://github.com/AxsisAxsis0807/axfluxo/pull/19 。mainへの直接変更と自動マージは行わない。GitHub Actionsの最新結果はPRのChecksを参照。
+
+## 未解決・未検証
+
+実機iPhoneの長時間処理・低メモリ・OSによるタブ終了、Safariの実際の音声/録画許可挙動は未検証。ローカルWebKitは取得できず、CIの結果待ち。音声解析の既存チャンク境界誤差、ブラウザ全体のメモリ上限、リアルタイム録画のフレーム粒度は保証しない。再読み込み後のジョブ/完成Blob復旧は実装せず、消失することを表示する。
 
 ## 変更ファイル一覧
 
 - `docs/video/local-waveform.md`
+- `docs/video/timeline-export-queue.md`
 - `server/tests/browser/developer-entry-fixture.tsx`
 - `server/tests/browser/developer-entry.spec.ts`
 - `server/tests/browser/local-encode-fixture.tsx`
 - `server/tests/browser/local-encode.spec.ts`
 - `server/tests/browser/local-waveform.spec.ts`
+- `server/tests/browser/timeline-queue-fixture.tsx`
+- `server/tests/browser/timeline-queue.spec.ts`
 - `src/app/layout.tsx`
+- `src/features/developer/DeveloperStudio.tsx`
 - `src/features/developer/LocalDeveloperGate.tsx`
 - `src/features/developer/LocalTimeline.tsx`
 - `src/features/developer/LocalVideoTool.tsx`
+- `src/features/video-common/ExportDock.tsx`
 - `src/features/video-common/LocalExport.tsx`
 - `src/features/video-common/Timeline.tsx`
-- `src/services/video/local-encode.ts`
-- `src/services/video/local-waveform.ts`
-- `docs/video/timeline-export-queue.md`
-- `server/tests/browser/timeline-queue-fixture.tsx`
-- `server/tests/browser/timeline-queue.spec.ts`
-- `src/features/video-common/ExportDock.tsx`
 - `src/features/video-common/useWaveformDetail.ts`
 - `src/services/video/export-queue.ts`
+- `src/services/video/local-encode.ts`
 - `src/services/video/local-export-runtime.ts`
+- `src/services/video/local-waveform.ts`
 - `src/services/video/trim-playback.ts`
+- `tests/e2e/local-export-navigation.spec.ts`
 - `tests/video/timeline/export-queue.test.ts`
 - `tests/video/timeline/trim-playback.test.ts`
