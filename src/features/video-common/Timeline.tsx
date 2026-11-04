@@ -54,13 +54,20 @@ function LaneWaveform({
     if (!ctx) return;
     ctx.scale(ratio, ratio);
     const stepUs = (endUs - startUs) / width;
+    const levels = [...(waveform?.levels ?? [])].sort(
+      (a, b) => b.stepUs - a.stepUs,
+    );
     const level =
-      waveform?.levels.find((level) => level.stepUs >= stepUs) ??
-      waveform?.levels[0];
+      levels.find((level) => level.stepUs <= stepUs) ?? levels.at(-1);
+    ctx.strokeStyle = "#ffffff40";
+    ctx.beginPath();
+    ctx.moveTo(0, 44);
+    ctx.lineTo(width, 44);
+    ctx.stroke();
     if (!level) return;
     ctx.fillStyle = "#b899c9";
     // Aggregate every peak covered by a bar so short transients survive zooming out.
-    const barUs = Math.max(8 * stepUs, level.stepUs);
+    const barUs = Math.max(2 * stepUs, level.stepUs);
     const stride = barUs / stepUs;
     const offset = (waveform?.originUs ?? 0) - startUs;
     const firstBar = Math.floor(-offset / barUs);
@@ -92,8 +99,9 @@ function LaneWaveform({
         );
       }
       if (last <= first) continue;
-      const height = Math.max(2, Math.min(1, amplitude) * 60);
-      ctx.fillRect(x, (88 - height) / 2, Math.min(5, width - x), height);
+      if (amplitude === 0) continue;
+      const height = Math.min(1, amplitude) * 60;
+      ctx.fillRect(x, (88 - height) / 2, Math.min(2, width - x), height);
     }
   }, [waveform, startUs, endUs, width]);
   return (
@@ -121,6 +129,10 @@ export function Timeline({
   onSeek,
   onEdit,
   waveform,
+  bounds,
+  editing = true,
+  media,
+  onVisibleWindow,
 }: {
   mode: "all-versions" | "fnf";
   durationUs: number;
@@ -130,6 +142,10 @@ export function Timeline({
   onSeek: (us: number) => void;
   onEdit: (id: string, startUs: number, endUs: number) => void;
   waveform?: TimelineWaveform;
+  bounds?: { startUs: number; endUs: number };
+  editing?: boolean;
+  media?: () => HTMLVideoElement | null;
+  onVisibleWindow?: (view: { start: number; end: number; pps: number }) => void;
 }) {
   const viewport = useRef<HTMLDivElement>(null),
     points = useRef(new Map<number, { x: number; y: number }>()),
@@ -145,9 +161,18 @@ export function Timeline({
     [scroll, setScroll] = useState(0),
     [width, setWidth] = useState(600),
     [draft, setDraft] = useState<TimelineItem | null>(null);
+  const head = useRef<HTMLDivElement>(null);
+  const manualUntil = useRef(0);
+  const lastScrollPublish = useRef(0);
+  const minTime = bounds && !editing ? bounds.startUs : 0;
+  const maxTime = bounds && !editing ? bounds.endUs : durationUs;
   const pps = zoom,
-    spanUs = Math.min(durationUs, (8_000_000 / pps) * 1_000_000),
-    padding = mode === "all-versions" ? width / 2 : 0,
+    spanUs = Math.min(maxTime - minTime, (8_000_000 / pps) * 1_000_000),
+    padding = bounds
+      ? Math.max(0, (width - (spanUs / 1e6) * pps) / 2)
+      : mode === "all-versions"
+        ? width / 2
+        : 0,
     trackWidth = Math.max(width, (spanUs / 1_000_000) * pps + 2 * padding);
   useEffect(() => {
     const node = viewport.current;
@@ -160,16 +185,28 @@ export function Timeline({
   useLayoutEffect(() => {
     const node = viewport.current;
     if (!node) return;
+    if (origin < minTime || origin + spanUs > maxTime) {
+      setOrigin(clamp(origin, minTime, Math.max(minTime, maxTime - spanUs)));
+      return;
+    }
     if (pendingScroll.current !== null) {
       node.scrollLeft = pendingScroll.current;
       autoScroll.current = node.scrollLeft;
       pendingScroll.current = null;
       return;
     }
-    if (points.current.size) return;
+    if (
+      points.current.size ||
+      (bounds && (media || performance.now() < manualUntil.current))
+    )
+      return;
     if (currentUs < origin || currentUs > origin + spanUs) {
       setOrigin(
-        clamp(currentUs - spanUs / 2, 0, Math.max(0, durationUs - spanUs)),
+        clamp(
+          currentUs - spanUs / 2,
+          minTime,
+          Math.max(minTime, maxTime - spanUs),
+        ),
       );
       return;
     }
@@ -178,28 +215,46 @@ export function Timeline({
       autoScroll.current = target;
       node.scrollLeft = target;
     }
-  }, [currentUs, origin, spanUs, durationUs, pps, mode, padding]);
+  }, [
+    currentUs,
+    origin,
+    spanUs,
+    durationUs,
+    pps,
+    mode,
+    padding,
+    minTime,
+    maxTime,
+    bounds,
+    media,
+  ]);
   function changeZoom(next: number, anchorX = width / 2) {
     const node = viewport.current;
     if (!node) return;
-    if (mode === "all-versions") anchorX = width / 2;
+    manualUntil.current = performance.now() + 1200;
+    if (!bounds && mode === "all-versions") anchorX = width / 2;
     const anchorUs =
         origin + ((node.scrollLeft + anchorX - padding) / pps) * 1_000_000,
       newZoom = clamp(next, 0.2, 8000),
-      newSpan = Math.min(durationUs, (8_000_000 / newZoom) * 1_000_000),
+      newSpan = Math.min(maxTime - minTime, (8_000_000 / newZoom) * 1_000_000),
       newOrigin = clamp(
         anchorUs - newSpan / 2,
-        0,
-        Math.max(0, durationUs - newSpan),
+        minTime,
+        Math.max(minTime, maxTime - newSpan),
       );
     pendingScroll.current =
-      ((anchorUs - newOrigin) / 1_000_000) * newZoom + padding - anchorX;
+      ((anchorUs - newOrigin) / 1_000_000) * newZoom +
+      (bounds
+        ? Math.max(0, (width - (newSpan / 1e6) * newZoom) / 2)
+        : padding) -
+      anchorX;
     setOrigin(newOrigin);
     setZoom(newZoom);
   }
   function down(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0 && event.pointerType === "mouse") return;
     const node = event.currentTarget;
+    manualUntil.current = performance.now() + 1200;
     event.preventDefault();
     pendingDraft.current = null;
     try {
@@ -279,6 +334,7 @@ export function Timeline({
     setDraft(pendingDraft.current);
   }
   function clear(node: HTMLDivElement) {
+    manualUntil.current = performance.now() + 1200;
     const captured = [...points.current.keys()];
     points.current.clear();
     for (const id of captured)
@@ -312,14 +368,83 @@ export function Timeline({
             origin +
               ((event.currentTarget.scrollLeft + x - padding) / pps) *
                 1_000_000,
-            0,
-            durationUs,
+            minTime,
+            maxTime,
           ),
         ),
       );
     }
     clear(event.currentTarget);
   }
+  useEffect(() => {
+    onVisibleWindow?.({
+      start: Math.max(minTime, origin + ((scroll - padding) / pps) * 1e6) / 1e6,
+      end:
+        Math.min(maxTime, origin + ((scroll + width - padding) / pps) * 1e6) /
+        1e6,
+      pps,
+    });
+  }, [origin, scroll, width, padding, pps, minTime, maxTime, onVisibleWindow]);
+  useEffect(() => {
+    if (!bounds || !media) return;
+    let frame = 0;
+    const draw = () => {
+      const video = media(),
+        node = viewport.current;
+      if (video && node && head.current) {
+        const time = clamp(
+          video.currentTime * 1e6,
+          bounds.startUs,
+          bounds.endUs,
+        );
+        const x = padding + ((time - origin) / 1e6) * pps;
+        head.current.style.left = `${x}px`;
+        if (
+          !video.paused &&
+          !points.current.size &&
+          performance.now() >= manualUntil.current
+        ) {
+          if (time < origin || time > origin + spanUs)
+            setOrigin(
+              clamp(
+                time - spanUs / 2,
+                minTime,
+                Math.max(minTime, maxTime - spanUs),
+              ),
+            );
+          const target = clamp(
+            x - width / 2,
+            0,
+            Math.max(0, trackWidth - width),
+          );
+          autoScroll.current = target;
+          node.scrollLeft += (target - node.scrollLeft) * 0.2;
+          autoScroll.current = node.scrollLeft;
+        }
+      }
+      frame = requestAnimationFrame(draw);
+    };
+    frame = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(frame);
+  }, [
+    bounds,
+    media,
+    origin,
+    padding,
+    pps,
+    width,
+    trackWidth,
+    spanUs,
+    minTime,
+    maxTime,
+  ]);
+  const tickSeconds = 10 ** Math.floor(Math.log10(100 / pps));
+  const firstTick = Math.ceil(
+    Math.max(minTime, origin + ((scroll - padding) / pps) * 1e6) /
+      1e6 /
+      tickSeconds,
+  );
+  const tickCount = Math.min(100, Math.ceil(width / pps / tickSeconds) + 2);
   const display = items.map((item) => (draft?.id === item.id ? draft : item));
   return (
     <section aria-label="動画timeline">
@@ -339,7 +464,9 @@ export function Timeline({
         <output aria-label="timeline倍率">{zoom.toFixed(1)} px/秒</output>
       </div>
       <p style={{ fontSize: 12 }}>
-        左右のツマミをドラッグして切り取り範囲を調整
+        {editing
+          ? "左右のツマミをドラッグして切り取り範囲を調整"
+          : "タップでシーク・ドラッグで移動・2本指で拡大。矢印キーで微調整。"}
       </p>
       <output aria-live="polite" style={{ fontSize: 12 }}>
         {draft
@@ -349,12 +476,43 @@ export function Timeline({
       <div
         ref={viewport}
         data-testid="video-timeline"
+        tabIndex={0}
+        aria-label="動画タイムライン操作"
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          const time = media?.()?.currentTime;
+          const current = time === undefined ? currentUs : time * 1e6;
+          let target: number;
+          if (event.key === "ArrowLeft" || event.key === "ArrowRight")
+            target =
+              current +
+              (event.key === "ArrowLeft" ? -1 : 1) *
+                frameTimeUs(event.shiftKey ? 10 : 1);
+          else if (event.key === "Home") target = bounds?.startUs ?? minTime;
+          else if (event.key === "End") target = bounds?.endUs ?? maxTime;
+          else return;
+          event.preventDefault();
+          onSeek(
+            Math.round(
+              clamp(
+                target,
+                bounds?.startUs ?? minTime,
+                bounds?.endUs ?? maxTime,
+              ),
+            ),
+          );
+        }}
         style={{
           position: "relative",
           height: mode === "fnf" ? 300 : 180,
           overflow: "auto",
           touchAction: "none",
+          overscrollBehaviorX: "none",
           border: "1px solid #718096",
+          background: "#211e27",
+        }}
+        onWheel={() => {
+          manualUntil.current = performance.now() + 1200;
         }}
         onPointerDown={down}
         onPointerMove={move}
@@ -366,7 +524,10 @@ export function Timeline({
         }}
         onScroll={(e) => {
           const x = e.currentTarget.scrollLeft;
-          setScroll(x);
+          if (!bounds || performance.now() - lastScrollPublish.current > 80) {
+            setScroll(x);
+            lastScrollPublish.current = performance.now();
+          }
           if (
             autoScroll.current !== null &&
             Math.abs(x - autoScroll.current) < 1
@@ -374,18 +535,19 @@ export function Timeline({
             autoScroll.current = null;
             return;
           }
-          if (mode === "all-versions" && !pinch.current)
+          if (bounds) manualUntil.current = performance.now() + 1200;
+          if (!bounds && mode === "all-versions" && !pinch.current)
             onSeek(
               Math.round(clamp(origin + (x / pps) * 1_000_000, 0, durationUs)),
             );
           if (
             (x <= 0 || x >= trackWidth - width - 1) &&
-            spanUs < durationUs &&
+            spanUs < maxTime - minTime &&
             !points.current.size
           ) {
             const center =
                 origin + ((x + width / 2 - padding) / pps) * 1_000_000,
-              newOrigin = clamp(center - spanUs / 2, 0, durationUs - spanUs);
+              newOrigin = clamp(center - spanUs / 2, minTime, maxTime - spanUs);
             if (newOrigin !== origin) {
               pendingScroll.current =
                 ((center - newOrigin) / 1_000_000) * pps + padding - width / 2;
@@ -403,6 +565,27 @@ export function Timeline({
           }}
         >
           <div style={{ height: 60 }} />
+          {Array.from(
+            { length: tickCount },
+            (_, i) => (firstTick + i) * tickSeconds * 1e6,
+          )
+            .filter((t) => t <= maxTime)
+            .map((time) => (
+              <span
+                key={time}
+                style={{
+                  position: "absolute",
+                  left: padding + ((time - origin) / 1e6) * pps,
+                  top: 8,
+                  fontSize: 10,
+                  borderLeft: "1px solid #aaa",
+                  paddingLeft: 3,
+                  pointerEvents: "none",
+                }}
+              >
+                {formatTime(Math.round(time))}
+              </span>
+            ))}
           {display.map((item, index) => {
             if (item.endUs < origin || item.startUs > origin + spanUs)
               return null;
@@ -411,8 +594,8 @@ export function Timeline({
               top = 60 + (mode === "fnf" ? index * 148 : 0),
               laneLeft = Math.max(padding, left),
               laneRight = Math.min(right, padding + (spanUs / 1_000_000) * pps),
-              visibleLeft = Math.max(laneLeft, scroll),
-              visibleRight = Math.min(laneRight, scroll + width);
+              visibleLeft = Math.max(laneLeft, scroll - width / 2),
+              visibleRight = Math.min(laneRight, scroll + width * 1.5);
             return (
               <div key={item.id}>
                 <div
@@ -464,95 +647,96 @@ export function Timeline({
                     {item.label}
                   </span>
                 </div>
-                {(["start", "end"] as const).map((edge) => (
-                  <button
-                    key={edge}
-                    type="button"
-                    data-action={edge}
-                    data-id={item.id}
-                    aria-label={`${item.label} ${edge === "start" ? "開始" : "終了"}handle`}
-                    title={`${edge === "start" ? "開始" : "終了"}位置をドラッグして調整`}
-                    onKeyDown={(event) => {
-                      if (
-                        event.key !== "ArrowLeft" &&
-                        event.key !== "ArrowRight"
-                      )
-                        return;
-                      event.preventDefault();
-                      const delta =
-                        (event.key === "ArrowLeft" ? -1 : 1) *
-                        frameTimeUs(event.shiftKey ? 10 : 1);
-                      const start =
-                        edge === "start"
-                          ? clamp(
-                              item.startUs + delta,
-                              item.minUs ?? 0,
-                              item.endUs - frameTimeUs(1),
-                            )
-                          : item.startUs;
-                      const end =
-                        edge === "end"
-                          ? clamp(
-                              item.endUs + delta,
-                              item.startUs + frameTimeUs(1),
-                              item.maxUs ?? durationUs,
-                            )
-                          : item.endUs;
-                      onEdit(item.id, Math.round(start), Math.round(end));
-                    }}
-                    style={{
-                      position: "absolute",
-                      left: (edge === "start" ? laneLeft : laneRight) - 22,
-                      top,
-                      width: 44,
-                      height: 88,
-                      minWidth: 44,
-                      padding: 0,
-                      border: 0,
-                      borderRadius: 8,
-                      background: "transparent",
-                      color: "#513361",
-                      cursor: "ew-resize",
-                      touchAction: "none",
-                      userSelect: "none",
-                      zIndex:
-                        drag.current?.id === item.id &&
-                        drag.current.kind === edge
-                          ? 4
-                          : 2,
-                      visibility: (
-                        edge === "start"
-                          ? item.startUs < origin
-                          : item.endUs > origin + spanUs
-                      )
-                        ? "hidden"
-                        : "visible",
-                    }}
-                  >
-                    <span
-                      aria-hidden="true"
+                {editing &&
+                  (["start", "end"] as const).map((edge) => (
+                    <button
+                      key={edge}
+                      type="button"
+                      data-action={edge}
+                      data-id={item.id}
+                      aria-label={`${item.label} ${edge === "start" ? "開始" : "終了"}handle`}
+                      title={`${edge === "start" ? "開始" : "終了"}位置をドラッグして調整`}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key !== "ArrowLeft" &&
+                          event.key !== "ArrowRight"
+                        )
+                          return;
+                        event.preventDefault();
+                        const delta =
+                          (event.key === "ArrowLeft" ? -1 : 1) *
+                          frameTimeUs(event.shiftKey ? 10 : 1);
+                        const start =
+                          edge === "start"
+                            ? clamp(
+                                item.startUs + delta,
+                                item.minUs ?? 0,
+                                item.endUs - frameTimeUs(1),
+                              )
+                            : item.startUs;
+                        const end =
+                          edge === "end"
+                            ? clamp(
+                                item.endUs + delta,
+                                item.startUs + frameTimeUs(1),
+                                item.maxUs ?? durationUs,
+                              )
+                            : item.endUs;
+                        onEdit(item.id, Math.round(start), Math.round(end));
+                      }}
                       style={{
                         position: "absolute",
-                        inset: "0 12px",
-                        borderRadius: 6,
-                        background: "#f5f1f7",
-                        display: "grid",
-                        placeItems: "center",
-                        boxShadow: "0 1px 4px #0004",
+                        left: (edge === "start" ? laneLeft : laneRight) - 22,
+                        top,
+                        width: 44,
+                        height: 88,
+                        minWidth: 44,
+                        padding: 0,
+                        border: 0,
+                        borderRadius: 8,
+                        background: "transparent",
+                        color: "#513361",
+                        cursor: "ew-resize",
+                        touchAction: "none",
+                        userSelect: "none",
+                        zIndex:
+                          drag.current?.id === item.id &&
+                          drag.current.kind === edge
+                            ? 4
+                            : 2,
+                        visibility: (
+                          edge === "start"
+                            ? item.startUs < origin
+                            : item.endUs > origin + spanUs
+                        )
+                          ? "hidden"
+                          : "visible",
                       }}
                     >
                       <span
+                        aria-hidden="true"
                         style={{
-                          width: 3,
-                          height: 28,
-                          borderRadius: 2,
-                          background: "currentColor",
+                          position: "absolute",
+                          inset: "0 12px",
+                          borderRadius: 6,
+                          background: "#f5f1f7",
+                          display: "grid",
+                          placeItems: "center",
+                          boxShadow: "0 1px 4px #0004",
                         }}
-                      />
-                    </span>
-                  </button>
-                ))}
-                {mode === "fnf" && (
+                      >
+                        <span
+                          style={{
+                            width: 3,
+                            height: 28,
+                            borderRadius: 2,
+                            background: "currentColor",
+                          }}
+                        />
+                      </span>
+                    </button>
+                  ))}
+                {editing && mode === "fnf" && (
                   <button
                     data-action="move"
                     data-id={item.id}
@@ -597,11 +781,12 @@ export function Timeline({
               />
             ))}
           <div
+            ref={head}
             data-testid="timeline-head"
             style={{
               position: "absolute",
               left:
-                mode === "all-versions"
+                !bounds && mode === "all-versions"
                   ? scroll + width / 2
                   : padding + ((currentUs - origin) / 1_000_000) * pps,
               top: 0,

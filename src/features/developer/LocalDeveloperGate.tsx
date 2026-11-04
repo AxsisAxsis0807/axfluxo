@@ -99,6 +99,7 @@ export default function LocalDeveloperGate({
           <button
             onClick={() => {
               sessionStorage.removeItem(SESSION_KEY);
+              window.dispatchEvent(new Event("axfluxo-local-lock-change"));
               setOpen(false);
             }}
           >

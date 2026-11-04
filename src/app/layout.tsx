@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import ExportDock from "../features/video-common/ExportDock";
 export const metadata: Metadata = {
   title: "AxFluxo — Visual Studio",
   description:
@@ -14,7 +15,10 @@ export const viewport: Viewport = {
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body>
+        {children}
+        <ExportDock />
+      </body>
     </html>
   );
 }

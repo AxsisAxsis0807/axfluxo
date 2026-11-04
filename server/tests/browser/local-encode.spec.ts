@@ -91,9 +91,10 @@ test("device encoder joins trimmed audio/video or reports an unavailable encoder
   await page
     .getByRole("button", { name: "再生を許可して書き出しを続ける" })
     .click();
-  await expect(page.getByRole("status")).toContainText("完了", {
-    timeout: 20000,
-  });
+  await page.getByRole("button", { name: /詳細を開く/ }).click();
+  await expect(
+    page.getByRole("dialog").getByText(/完了・保存できます/),
+  ).toBeVisible({ timeout: 20000 });
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("link", { name: /を保存/ }).click();
   const download = await downloadPromise;

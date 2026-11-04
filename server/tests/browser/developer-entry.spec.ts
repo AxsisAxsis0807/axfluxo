@@ -216,13 +216,12 @@ for (const scenario of [
     );
     await page.getByRole("button", { name: "端末内で書き出す" }).click();
     if (available) {
+      await page.getByRole("button", { name: /詳細を開く/ }).click();
       await expect(
         page
-          .getByRole("region", { name: "端末内書き出し", exact: true })
-          .getByRole("status"),
-      ).toContainText("完了", {
-        timeout: 20000,
-      });
+          .getByRole("dialog", { name: "エクスポート管理" })
+          .getByText("完了・保存できます", { exact: false }),
+      ).toHaveCount(mode === "fnf-showcase" ? 2 : 1, { timeout: 20000 });
       const save = page.getByRole("link", { name: /を保存/ });
       await expect(save).toHaveCount(mode === "fnf-showcase" ? 2 : 1);
       const downloadPromise = page.waitForEvent("download");
