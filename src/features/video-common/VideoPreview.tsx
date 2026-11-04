@@ -302,7 +302,16 @@ export function VideoPreview({
         const next = allVersionsDocumentSchema.parse({
           ...document,
           clips: document.clips.map((c) =>
-            c.id === id ? { ...c, interval } : c,
+            c.id === id
+              ? {
+                  ...c,
+                  interval,
+                  markersUs: c.markersUs.filter(
+                    (marker) =>
+                      marker > interval.startUs && marker < interval.endUs,
+                  ),
+                }
+              : c,
           ),
         });
         onDocumentChange(next);

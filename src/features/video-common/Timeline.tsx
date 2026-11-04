@@ -130,6 +130,7 @@ export function Timeline({
   const viewport = useRef<HTMLDivElement>(null),
     points = useRef(new Map<number, { x: number; y: number }>()),
     drag = useRef<Drag | null>(null),
+    pendingDraft = useRef<TimelineItem | null>(null),
     pinch = useRef<{ distance: number; zoom: number; anchor: number } | null>(
       null,
     ),
@@ -195,6 +196,8 @@ export function Timeline({
   function down(event: PointerEvent<HTMLDivElement>) {
     if (event.button !== 0 && event.pointerType === "mouse") return;
     const node = event.currentTarget;
+    event.preventDefault();
+    pendingDraft.current = null;
     try {
       node.setPointerCapture(event.pointerId);
     } catch {
@@ -203,6 +206,7 @@ export function Timeline({
     points.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (points.current.size === 2) {
       drag.current = null;
+      pendingDraft.current = null;
       setDraft(null);
       const [a, b] = Array.from(points.current.values()),
         mid = (a.x + b.x) / 2 - node.getBoundingClientRect().left;
@@ -263,18 +267,28 @@ export function Timeline({
       start = clamp(start + delta, min, max - (end - start));
       end = start + (base.endUs - base.startUs);
     }
-    setDraft({ ...base, startUs: Math.round(start), endUs: Math.round(end) });
+    pendingDraft.current = {
+      ...base,
+      startUs: Math.round(start),
+      endUs: Math.round(end),
+    };
+    setDraft(pendingDraft.current);
   }
   function clear(node: HTMLDivElement) {
-    for (const id of points.current.keys())
-      if (node.hasPointerCapture(id)) node.releasePointerCapture(id);
+    const captured = [...points.current.keys()];
     points.current.clear();
+    for (const id of captured)
+      if (node.hasPointerCapture(id)) node.releasePointerCapture(id);
     pinch.current = null;
     drag.current = null;
+    pendingDraft.current = null;
     setDraft(null);
   }
   function up(event: PointerEvent<HTMLDivElement>) {
+    if (!points.current.has(event.pointerId)) return;
+    if (!pinch.current) move(event);
     const d = drag.current,
+      finalDraft = pendingDraft.current,
       isPinch = Boolean(pinch.current);
     points.current.delete(event.pointerId);
     if (event.currentTarget.hasPointerCapture(event.pointerId))
@@ -283,8 +297,8 @@ export function Timeline({
       if (!points.current.size) clear(event.currentTarget);
       return;
     }
-    if (d && draft) {
-      onEdit(d.id, draft.startUs, draft.endUs);
+    if (d && finalDraft) {
+      onEdit(d.id, finalDraft.startUs, finalDraft.endUs);
     } else if (d?.kind === "pan" && Math.abs(d.delta) < 4) {
       const x =
         event.clientX - event.currentTarget.getBoundingClientRect().left;
@@ -320,6 +334,14 @@ export function Timeline({
         </button>
         <output aria-label="timeline倍率">{zoom.toFixed(1)} px/秒</output>
       </div>
+      <p style={{ fontSize: 12 }}>
+        左右のツマミをドラッグして切り取り範囲を調整
+      </p>
+      <output aria-live="polite" style={{ fontSize: 12 }}>
+        {draft
+          ? `開始 ${formatTime(draft.startUs)} ／ 終了 ${formatTime(draft.endUs)} ／ 長さ ${formatTime(draft.endUs - draft.startUs)}`
+          : ""}
+      </output>
       <div
         ref={viewport}
         data-testid="video-timeline"
@@ -335,7 +357,8 @@ export function Timeline({
         onPointerUp={up}
         onPointerCancel={(e) => clear(e.currentTarget)}
         onLostPointerCapture={(e) => {
-          if (points.current.has(e.pointerId)) clear(e.currentTarget);
+          if (e.target === e.currentTarget && points.current.has(e.pointerId))
+            clear(e.currentTarget);
         }}
         onScroll={(e) => {
           const x = e.currentTarget.scrollLeft;
@@ -437,47 +460,94 @@ export function Timeline({
                     {item.label}
                   </span>
                 </div>
-                <button
-                  data-action="start"
-                  data-id={item.id}
-                  aria-label={`${item.label} 開始handle`}
-                  style={{
-                    position: "absolute",
-                    left:
-                      clamp(
-                        left,
-                        padding,
-                        padding + (spanUs / 1_000_000) * pps,
-                      ) - 22,
-                    visibility: item.startUs < origin ? "hidden" : "visible",
-                    top,
-                    minWidth: 44,
-                    minHeight: 44,
-                  }}
-                >
-                  開始
-                </button>
-                <button
-                  data-action="end"
-                  data-id={item.id}
-                  aria-label={`${item.label} 終了handle`}
-                  style={{
-                    position: "absolute",
-                    left:
-                      clamp(
-                        right,
-                        padding,
-                        padding + (spanUs / 1_000_000) * pps,
-                      ) - 22,
-                    visibility:
-                      item.endUs > origin + spanUs ? "hidden" : "visible",
-                    top: top + 44,
-                    minWidth: 44,
-                    minHeight: 44,
-                  }}
-                >
-                  終了
-                </button>
+                {(["start", "end"] as const).map((edge) => (
+                  <button
+                    key={edge}
+                    type="button"
+                    data-action={edge}
+                    data-id={item.id}
+                    aria-label={`${item.label} ${edge === "start" ? "開始" : "終了"}handle`}
+                    title={`${edge === "start" ? "開始" : "終了"}位置をドラッグして調整`}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key !== "ArrowLeft" &&
+                        event.key !== "ArrowRight"
+                      )
+                        return;
+                      event.preventDefault();
+                      const delta =
+                        (event.key === "ArrowLeft" ? -1 : 1) *
+                        frameTimeUs(event.shiftKey ? 10 : 1);
+                      const start =
+                        edge === "start"
+                          ? clamp(
+                              item.startUs + delta,
+                              item.minUs ?? 0,
+                              item.endUs - frameTimeUs(1),
+                            )
+                          : item.startUs;
+                      const end =
+                        edge === "end"
+                          ? clamp(
+                              item.endUs + delta,
+                              item.startUs + frameTimeUs(1),
+                              item.maxUs ?? durationUs,
+                            )
+                          : item.endUs;
+                      onEdit(item.id, Math.round(start), Math.round(end));
+                    }}
+                    style={{
+                      position: "absolute",
+                      left: (edge === "start" ? laneLeft : laneRight) - 22,
+                      top,
+                      width: 44,
+                      height: 88,
+                      minWidth: 44,
+                      padding: 0,
+                      border: 0,
+                      borderRadius: 8,
+                      background: "transparent",
+                      color: "#513361",
+                      cursor: "ew-resize",
+                      touchAction: "none",
+                      userSelect: "none",
+                      zIndex:
+                        drag.current?.id === item.id &&
+                        drag.current.kind === edge
+                          ? 4
+                          : 2,
+                      visibility: (
+                        edge === "start"
+                          ? item.startUs < origin
+                          : item.endUs > origin + spanUs
+                      )
+                        ? "hidden"
+                        : "visible",
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        position: "absolute",
+                        inset: "0 12px",
+                        borderRadius: 6,
+                        background: "#f5f1f7",
+                        display: "grid",
+                        placeItems: "center",
+                        boxShadow: "0 1px 4px #0004",
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 3,
+                          height: 28,
+                          borderRadius: 2,
+                          background: "currentColor",
+                        }}
+                      />
+                    </span>
+                  </button>
+                ))}
                 {mode === "fnf" && (
                   <button
                     data-action="move"

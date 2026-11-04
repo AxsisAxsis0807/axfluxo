@@ -287,3 +287,72 @@ test("joined clips keep marker/source coordinates and play across a cut", async 
       .evaluate((v) => (v as HTMLVideoElement).currentTime),
   ).toBeCloseTo(1.4, 3);
 });
+
+test("trim thumbs resize both edges, preview drafts, cancel touch edits and support keyboard nudging", async ({
+  page,
+}) => {
+  await open(page);
+  const start = page.getByRole("button", { name: "clip 1 開始handle" });
+  const end = page.getByRole("button", { name: "clip 1 終了handle" });
+  const timeline = page.getByTestId("video-timeline");
+  await start.scrollIntoViewIfNeeded();
+  const box = (await start.boundingBox())!;
+  expect(box.width).toBeGreaterThanOrEqual(44);
+  expect(box.height).toBe(88);
+  await page.mouse.move(box.x + 22, box.y + 60);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 102, box.y + 60, { steps: 5 });
+  await expect(page.getByTestId("source-start")).toHaveText("0");
+  await expect(page.locator('output[aria-live="polite"]')).toContainText(
+    "長さ",
+  );
+  await page.mouse.up();
+  await expect(page.getByTestId("source-start")).toHaveText("1000000");
+  await expect(page.getByTestId("saved-count")).toHaveText("1");
+  const endBox = (await end.boundingBox())!;
+  await end.dispatchEvent("pointerdown", {
+    pointerId: 9,
+    pointerType: "touch",
+    clientX: endBox.x + 22,
+    clientY: endBox.y + 60,
+    button: 0,
+  });
+  await timeline.dispatchEvent("pointermove", {
+    pointerId: 9,
+    pointerType: "touch",
+    clientX: endBox.x - 18,
+    clientY: endBox.y + 60,
+  });
+  await timeline.dispatchEvent("pointerup", {
+    pointerId: 9,
+    pointerType: "touch",
+    clientX: endBox.x - 18,
+    clientY: endBox.y + 60,
+  });
+  await expect(page.getByLabel("clip 1 終了", { exact: true })).toHaveValue(
+    "00:00:02.500000",
+  );
+  await expect(page.getByTestId("saved-count")).toHaveText("2");
+  await start.dispatchEvent("pointerdown", {
+    pointerId: 10,
+    pointerType: "touch",
+    clientX: box.x + 22,
+    clientY: box.y + 60,
+    button: 0,
+  });
+  await timeline.dispatchEvent("pointermove", {
+    pointerId: 10,
+    pointerType: "touch",
+    clientX: box.x + 62,
+    clientY: box.y + 60,
+  });
+  await timeline.dispatchEvent("pointercancel", {
+    pointerId: 10,
+    pointerType: "touch",
+  });
+  await expect(page.getByTestId("source-start")).toHaveText("1000000");
+  await expect(page.getByTestId("saved-count")).toHaveText("2");
+  await start.focus();
+  await start.press("ArrowRight");
+  await expect(page.getByTestId("source-start")).toHaveText("1016667");
+});
