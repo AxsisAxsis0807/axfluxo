@@ -1,4 +1,6 @@
+import type { LocalProjectData } from "./local-project";
 export type LocalEncodeJob = {
+  recovery?: { project: LocalProjectData; index: number };
   filename: string;
   width: number;
   height: number;
@@ -18,13 +20,28 @@ export function imageForEncode(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.crossOrigin = "anonymous";
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(Error("画像を読み込めません。"));
+    const timer = setTimeout(() => {
+      image.onload = null;
+      image.onerror = null;
+      reject(Error("画像の読み込みがタイムアウトしました。"));
+    }, 30000);
+    image.onload = () => {
+      clearTimeout(timer);
+      resolve(image);
+    };
+    image.onerror = () => {
+      clearTimeout(timer);
+      reject(Error("画像を読み込めません。"));
+    };
     image.src = url;
   });
 }
 export function recorderType() {
-  if (typeof MediaRecorder === "undefined") return null;
+  if (
+    typeof MediaRecorder === "undefined" ||
+    typeof MediaRecorder.isTypeSupported !== "function"
+  )
+    return null;
   return (
     [
       "video/mp4;codecs=avc1.42E01E,mp4a.40.2",

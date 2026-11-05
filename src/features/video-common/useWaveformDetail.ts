@@ -11,11 +11,16 @@ export function useWaveformDetail(
   view: VisibleWindow | undefined,
   ready: boolean,
 ): { waveform?: Waveform; status: string } {
-  const start = view ? Math.max(0, Math.floor(view.start * 4) / 4) : 0;
-  const end = view ? Math.min(duration, Math.ceil(view.end * 4) / 4) : 0;
   const step = view
-    ? Math.max(1 / 48000, 1 / (2 ** Math.ceil(Math.log2(view.pps)) * 2))
+    ? Math.max(1 / 96000, 1 / (2 ** Math.ceil(Math.log2(view.pps)) * 2))
     : 1;
+  const quantum = Math.min(0.25, step * 2000);
+  const start = view
+    ? Math.max(0, Math.floor(view.start / quantum) * quantum)
+    : 0;
+  const end = view
+    ? Math.min(duration, Math.ceil(view.end / quantum) * quantum)
+    : 0;
   const enabled =
     ready && !!view && view.pps > 100 && end > start && end - start <= 30;
   const key = `${start}:${end}:${step}`;

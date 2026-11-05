@@ -3,6 +3,9 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   allowExportAudio,
   localExportQueue as queue,
+  getRecoveryError,
+  subscribeRecovery,
+  retryRecoveryPersistence,
 } from "../../services/video/local-export-runtime";
 import { isUnlocked, readVerifier } from "../../services/developer/local-lock";
 import type { ExportEntry } from "../../services/video/export-queue";
@@ -25,6 +28,11 @@ export default function ExportDock() {
     queue.subscribe,
     queue.getSnapshot,
     queue.getSnapshot,
+  );
+  const recoveryError = useSyncExternalStore(
+    subscribeRecovery,
+    getRecoveryError,
+    () => "",
   );
   const [open, setOpen] = useState(false),
     [unlocked, setUnlocked] = useState(false),
@@ -51,6 +59,7 @@ export default function ExportDock() {
     };
     const hidden = () => {
       if (document.hidden) queue.pause(true);
+      else if (isUnlocked(sessionStorage)) queue.resume();
     };
     const leave = (e: BeforeUnloadEvent) => {
       if (queue.getSnapshot().entries.some((e) => e.input || e.result)) {
@@ -104,12 +113,15 @@ export default function ExportDock() {
           <button onClick={() => setOpen(false)}>詳細を閉じる</button>
           <h2>書き出しキュー</h2>
           <p>
-            予約は1件ずつ自動開始します。Safariを前面に保ってください。タブ終了で予約・完成ファイルは失われます。
+            予約は1件ずつ自動開始します。Safariを前面に保ってください。保存済みの予約と完成動画はツールを開くと自動復元し、中断した動画は先頭から再作成します。
           </p>
           {(paused || current.message.includes("音声処理")) && (
             <button
               onClick={() => {
-                void allowExportAudio()
+                void Promise.all([
+                  allowExportAudio(),
+                  retryRecoveryPersistence(),
+                ])
                   .then(() => {
                     queue.resume();
                     setError("");
@@ -126,6 +138,7 @@ export default function ExportDock() {
             </button>
           )}
           {error && <p role="alert">{error}</p>}
+          {recoveryError && <p role="alert">{recoveryError}</p>}
           <p role="status">
             {paused
               ? "キューは一時停止中です。保持上限の場合は保存済みファイルを確認して削除してください。"
@@ -164,8 +177,12 @@ export default function ExportDock() {
               {entry.state === "failed" && (
                 <button
                   onClick={() => {
-                    void allowExportAudio().catch((e) => setError(String(e)));
-                    queue.retry(entry.id);
+                    void Promise.all([
+                      allowExportAudio(),
+                      retryRecoveryPersistence(),
+                    ])
+                      .then(() => queue.retry(entry.id))
+                      .catch((e) => setError(String(e)));
                   }}
                 >
                   再試行
@@ -185,7 +202,7 @@ export default function ExportDock() {
                   }}
                 >
                   {entry.result
-                    ? "保存確認後に完成ファイルを削除"
+                    ? "保存できました（一時データを削除）"
                     : "ジョブを削除"}
                 </button>
               )}
@@ -194,10 +211,10 @@ export default function ExportDock() {
           <details>
             <summary>保存方法・保持上限・Safariの制限</summary>
             <p>
-              保存リンクからFilesへ保存後、MP4は共有メニューの「ビデオを保存」を選べます。保存完了は検知できません。ファイルを確認してから明示的に削除してください。
+              保存リンクからFilesへ保存後、MP4は共有メニューの「ビデオを保存」を選べます。保存完了は検知できません。ファイルを確認して「保存できました」を押すと、対応する一時データを自動削除します。
             </p>
             <p>
-              最大12件・完成ファイル合計512MiB以内（次の1件分256MiBを確保できないと後続処理を一時停止）。画面ロック・バックグラウンドでは中断します。再読み込み・タブ終了による予約と完成ファイルの復元はできません。
+              最大12件・完成ファイル合計512MiB以内（次の1件分256MiBを確保できないと後続処理を一時停止）。画面ロック・バックグラウンドでは中断します。自動保存に失敗したデータやSafariが削除した保存領域からの復元はできません。元の素材を保持してください。
             </p>
           </details>
         </section>
