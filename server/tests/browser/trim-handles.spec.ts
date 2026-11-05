@@ -239,9 +239,12 @@ for (const mode of ["all", "fnf"]) {
       .poll(() => timeline.evaluate((n) => n.scrollLeft))
       .toBeCloseTo(320, 0);
     // Bring start on screen without changing center: zoom out to 35.56 px/s.
-    await page
-      .getByRole("button", { name: "縮小", exact: true })
-      .click({ clickCount: 2 });
+    for (let i = 1; i <= 2; i++) {
+      await page.getByRole("button", { name: "縮小", exact: true }).tap();
+      await expect(page.getByLabel("timeline倍率")).toHaveText(
+        `${(80 / 1.5 ** i).toFixed(1)} px/秒`,
+      );
+    }
     await visibleHandle(start);
     const s = (await start.boundingBox())!,
       h = (await page.getByTestId("timeline-head").boundingBox())!;
