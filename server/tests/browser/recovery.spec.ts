@@ -111,6 +111,48 @@ test("durable queued jobs restart once; finished videos survive reload until eac
   await page.getByLabel("譜面名", { exact: true }).nth(1).fill("B");
   await page.getByLabel("終了秒", { exact: true }).nth(1).fill("1.5");
   await durable(page);
+  const canEncode = await page.evaluate(
+    () =>
+      typeof MediaRecorder !== "undefined" &&
+      typeof HTMLCanvasElement.prototype.captureStream === "function" &&
+      [
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/mp4",
+        "video/webm;codecs=vp8,opus",
+      ].some((type) => MediaRecorder.isTypeSupported(type)),
+  );
+  if (!canEncode) {
+    // Exercise the actual non-support behavior; never skip or pretend a file was encoded.
+    await page
+      .getByRole("button", { name: "端末内で書き出す", exact: true })
+      .click();
+    await expect(
+      page.getByText(
+        /このSafari／ブラウザーは対応する|Canvasの動画書き出しに対応していません/,
+      ),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              localExportQueue: { getSnapshot: () => { entries: unknown[] } };
+            }
+          ).localExportQueue.getSnapshot().entries.length,
+      ),
+    ).toBe(0);
+    await page.reload();
+    await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
+      timeout: 35000,
+    });
+    await expect(
+      page.getByLabel("譜面名", { exact: true }).first(),
+    ).toHaveValue("A");
+    await expect(page.getByLabel("譜面名", { exact: true }).nth(1)).toHaveValue(
+      "B",
+    );
+    return;
+  }
   await page.evaluate(() =>
     (
       window as unknown as { localExportQueue: { pause: () => void } }
