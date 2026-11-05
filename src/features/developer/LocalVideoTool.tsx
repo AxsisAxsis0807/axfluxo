@@ -363,7 +363,11 @@ export default function LocalVideoTool({
       <p>
         端末の素材を選択して制作します。素材・動画のアップロードは行いません。端末内機能はログイン・動画APIなしで利用できます。
       </p>
-      <p role="status" data-testid="local-save-status">
+      <p
+        role="status"
+        data-testid="local-save-status"
+        style={{ minHeight: "5.7em" }}
+      >
         {saveStatus}
       </p>
       <button onClick={() => template(true)}>テンプレートを端末に保存</button>

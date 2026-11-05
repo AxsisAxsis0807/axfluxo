@@ -129,9 +129,7 @@ for (const mode of ["all", "fnf"]) {
       .getByRole("button", { name: "トリミング範囲を編集", exact: true })
       .click();
     const timeline = page.getByTestId("video-timeline");
-    await timeline.evaluate((n) => {
-      n.scrollLeft = 320;
-    });
+    await panTo(page, timeline, 320);
     await expect
       .poll(() => timeline.evaluate((n) => n.scrollLeft))
       .toBeCloseTo(320, 0);
@@ -158,8 +156,26 @@ for (const mode of ["all", "fnf"]) {
 async function touchDrag(page: Page, handle: Locator, dx: number, dy = 0) {
   await visibleHandle(handle);
   const b = (await handle.boundingBox())!;
-  const x = b.x + b.width / 2,
-    y = b.y + b.height / 2;
+  await dragTouch(page, handle, b.x + b.width / 2, b.y + b.height / 2, dx, dy);
+}
+async function panTo(page: Page, timeline: Locator, scrollLeft: number) {
+  await timeline.scrollIntoViewIfNeeded();
+  const b = (await timeline.boundingBox())!;
+  const dx = await timeline.evaluate(
+    (n, desired) => n.scrollLeft - desired,
+    scrollLeft,
+  );
+  const x = dx < 0 ? b.x + b.width - 16 : b.x + 16;
+  await dragTouch(page, timeline, x, b.y + 30, dx, 0);
+}
+async function dragTouch(
+  page: Page,
+  target: Locator,
+  x: number,
+  y: number,
+  dx: number,
+  dy: number,
+) {
   const gesturePageY = await page.evaluate(() => window.scrollY);
   if (page.context().browser()!.browserType().name() === "chromium") {
     const session = await page.context().newCDPSession(page);
@@ -173,6 +189,7 @@ async function touchDrag(page: Page, handle: Locator, dx: number, dy = 0) {
         touchPoints: [{ x: x + (dx * i) / 10, y: y + (dy * i) / 10, id: 0 }],
       });
       await page.waitForTimeout(20);
+      expect(await page.evaluate(() => window.scrollY)).toBe(gesturePageY);
     }
     expect(await page.evaluate(() => window.scrollY)).toBe(gesturePageY);
     await session.send("Input.dispatchTouchEvent", {
@@ -181,7 +198,7 @@ async function touchDrag(page: Page, handle: Locator, dx: number, dy = 0) {
     });
     await session.detach();
   } else {
-    await handle.dispatchEvent("pointerdown", {
+    await target.dispatchEvent("pointerdown", {
       pointerId: 1,
       pointerType: "touch",
       button: 0,
@@ -189,13 +206,15 @@ async function touchDrag(page: Page, handle: Locator, dx: number, dy = 0) {
       clientY: y,
     });
     const timeline = page.getByTestId("video-timeline");
-    for (let i = 1; i <= 10; i++)
+    for (let i = 1; i <= 10; i++) {
       await timeline.dispatchEvent("pointermove", {
         pointerId: 1,
         pointerType: "touch",
         clientX: x + (dx * i) / 10,
         clientY: y + (dy * i) / 10,
       });
+      expect(await page.evaluate(() => window.scrollY)).toBe(gesturePageY);
+    }
     expect(await page.evaluate(() => window.scrollY)).toBe(gesturePageY);
     await timeline.dispatchEvent("pointerup", {
       pointerId: 1,
@@ -232,9 +251,7 @@ for (const mode of ["all", "fnf"]) {
       .poll(() => endField.inputValue().then(Number))
       .toBeCloseTo(7, 2);
     // Center on four seconds. Pull start onto the center's ten-pixel snap zone.
-    await timeline.evaluate((n) => {
-      n.scrollLeft = 320;
-    });
+    await panTo(page, timeline, 320);
     await expect
       .poll(() => timeline.evaluate((n) => n.scrollLeft))
       .toBeCloseTo(320, 0);
@@ -282,9 +299,7 @@ for (const mode of ["all", "fnf"]) {
       .getByRole("button", { name: "トリミング範囲を編集", exact: true })
       .click();
     const timeline = page.getByTestId("video-timeline");
-    await timeline.evaluate((n) => {
-      n.scrollLeft = 320;
-    });
+    await panTo(page, timeline, 320);
     await expect
       .poll(() => timeline.evaluate((n) => n.scrollLeft))
       .toBeCloseTo(320, 0);
