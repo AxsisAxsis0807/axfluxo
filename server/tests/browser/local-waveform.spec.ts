@@ -118,6 +118,7 @@ for (const format of formats)
     await open(page);
     const { result } = await analyze(page, `source.${format}`);
     expect(result.status).toBe("complete");
+    expect(result.waveform!.sampleRate).toBe(48000);
     const level = result.waveform!.levels[0];
     const peakAt = (seconds: number) =>
       level.peaks[Math.floor((seconds * 1e6) / level.stepUs) * 2 + 1];
@@ -286,7 +287,7 @@ test("visible-window refinement uses real finer peaks with source origin and bou
     level.peaks.slice((onset + 1) * 2).some((p) => Math.abs(p) > 0.4),
   ).toBe(true);
 });
-test("canvas leaves silent bars absent and keeps a separate center line", async ({
+test("canvas leaves exact silence fully transparent and keeps the separate playhead", async ({
   page,
 }) => {
   await open(page);
@@ -312,4 +313,20 @@ test("canvas leaves silent bars absent and keeps a separate center line", async 
   // 80 px/sec: the first second is exactly silent PCM; no minimum bars there.
   expect(bars.filter((b) => b.x >= 0 && b.x < 75)).toHaveLength(0);
   expect(bars.every((b) => b.h > 0)).toBe(true);
+  const silentHasPixels = await page
+    .getByLabel("音声波形", { exact: true })
+    .evaluate((node) => {
+      const canvas = node as HTMLCanvasElement;
+      const ratio = canvas.height / 88;
+      const data = canvas
+        .getContext("2d")!
+        .getImageData(
+          0,
+          0,
+          Math.min(canvas.width, Math.floor(70 * ratio)),
+          canvas.height,
+        ).data;
+      return data.some((value, i) => i % 4 === 3 && value > 0);
+    });
+  expect(silentHasPixels).toBe(false);
 });
