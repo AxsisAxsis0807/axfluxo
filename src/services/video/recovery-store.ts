@@ -130,7 +130,15 @@ async function putAssets(tx: IDBTransaction, project: LocalProjectData) {
   if (project.coverFile)
     assets.push([assetKey(project, project.coverId), project.coverFile]);
   for (const [key, file] of assets) {
-    if (!(await request(store.getKey(key)))) store.put(file, key);
+    if (!(await request(store.getKey(key))))
+      store.put(
+        {
+          blob: file.slice(0, file.size, file.type),
+          name: file.name,
+          lastModified: file.lastModified,
+        },
+        key,
+      );
   }
 }
 /** Advisory only: actual transaction failures remain authoritative on Safari. */
@@ -219,11 +227,25 @@ export async function hydrate(data: StoredProject): Promise<LocalProjectData> {
   const files = await Promise.all(
     keys.map(
       (key) =>
-        request(tx.objectStore("assets").get(key)) as Promise<File | undefined>,
+        request(tx.objectStore("assets").get(key)) as Promise<
+          Blob | { blob: Blob; name: string; lastModified: number } | undefined
+        >,
     ),
   );
-  if (files.some((file) => !(file instanceof Blob)))
+  const restored = files.map((value, index) => {
+    if (value instanceof Blob)
+      return value instanceof File
+        ? value
+        : new File([value], data.sources[index]?.id ?? "cover", {
+            type: value.type,
+          });
+    if (value?.blob instanceof Blob && typeof value.name === "string")
+      return new File([value.blob], value.name, {
+        type: value.blob.type,
+        lastModified: value.lastModified,
+      });
     throw Error("保存済み素材が見つかりません。元の素材を再選択してください。");
+  });
   const created: string[] = [];
   const url = (file: File) => {
     const value = URL.createObjectURL(file);
@@ -233,10 +255,10 @@ export async function hydrate(data: StoredProject): Promise<LocalProjectData> {
   try {
     const sources = data.sources.map((s, i) => ({
       ...s,
-      file: files[i]!,
-      url: url(files[i]!),
+      file: restored[i],
+      url: url(restored[i]),
     }));
-    const coverFile = data.coverId ? files.at(-1) : undefined;
+    const coverFile = data.coverId ? restored.at(-1) : undefined;
     return {
       ...data,
       sources,

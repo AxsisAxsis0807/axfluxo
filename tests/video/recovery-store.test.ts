@@ -62,6 +62,7 @@ it("automatically restores assets and settings and isolates tools and projects",
   const restored = await s.loadLocalProject(a.mode);
   expect(restored?.id).toBe(a.id);
   expect(await restored?.sources[0].file.text()).toBe("media");
+  expect(restored?.sources[0].file.name).toBe("source.mp4");
   expect(restored?.sources[0].url).not.toBe("blob:old");
   expect((await s.loadLocalProject(b.mode))?.id).toBe(b.id);
   await s.saveLocalProject(c);
