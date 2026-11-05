@@ -40,7 +40,7 @@ jobs:
           fi
       - run: npm test
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium chrome
       - name: Test the Pages artifact at its production subpath
         run: |
           npm start > /tmp/axfluxo-server.log 2>&1 &
@@ -88,7 +88,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium chrome
       - name: Verify live Supabase public authentication settings
         run: node scripts/check-auth.mjs
       - name: Verify the public HTTPS site
