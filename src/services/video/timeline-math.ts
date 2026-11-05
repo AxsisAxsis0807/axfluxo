@@ -24,3 +24,11 @@ export function waveformHeight(amplitude: number, gain = 1) {
   // IEEE decoded +0/-0 alone are silent. No epsilon gate or minimum bar height.
   return amplitude === 0 ? 0 : Math.min(1, Math.abs(amplitude) * gain) * 60;
 }
+
+/** 1/2/5 scale steps keep full microsecond time labels legible at every zoom. */
+export function tickInterval(pps: number, spacing = 120) {
+  const base = 10 ** Math.floor(Math.log10(spacing / pps));
+  return [1, 2, 5, 10]
+    .map((value) => value * base)
+    .find((step) => step * pps >= spacing)!;
+}

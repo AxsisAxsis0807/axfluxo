@@ -12,6 +12,7 @@ import {
   centerTime,
   snapMarker,
   waveformHeight,
+  tickInterval,
 } from "../../services/video/timeline-math";
 export type TimelineItem = {
   id: string;
@@ -487,7 +488,7 @@ export function Timeline({
     minTime,
     maxTime,
   ]);
-  const tickSeconds = 10 ** Math.floor(Math.log10(100 / pps));
+  const tickSeconds = tickInterval(pps);
   const firstTick = Math.ceil(
     Math.max(minTime, origin + ((scroll - padding) / pps) * 1e6) /
       1e6 /
