@@ -59,3 +59,21 @@ it("keeps time labels spaced apart when zoom crosses a decimal scale boundary", 
     expect(tickInterval(pps) * pps).toBeLessThanOrEqual(300);
   }
 });
+
+it("keeps trim edges around Version boundaries and within source endpoints", async () => {
+  const { trimEdgeLimits } =
+    await import("../../../src/services/video/timeline-math");
+  const item = { startUs: 0, endUs: 8e6 };
+  expect(trimEdgeLimits(item, 8e6, 16667, [2e6, 6e6])).toEqual({
+    startMin: 0,
+    startMax: 1999999,
+    endMin: 6000001,
+    endMax: 8e6,
+  });
+  expect(trimEdgeLimits(item, 8e6, 16667, [])).toEqual({
+    startMin: 0,
+    startMax: 7983333,
+    endMin: 16667,
+    endMax: 8e6,
+  });
+});

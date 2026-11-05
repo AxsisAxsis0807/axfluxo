@@ -13,6 +13,7 @@ import {
   snapMarker,
   waveformHeight,
   tickInterval,
+  trimEdgeLimits,
 } from "../../services/video/timeline-math";
 export type TimelineItem = {
   id: string;
@@ -368,10 +369,16 @@ export function Timeline({
       snap.value - (d.kind === "end" ? base.endUs : base.startUs);
     let start = base.startUs,
       end = base.endUs;
+    const limits = trimEdgeLimits(
+      base,
+      durationUs,
+      frameTimeUs(1),
+      mode === "all-versions" && onMarkerEdit ? markers : [],
+    );
     if (d.kind === "start")
-      start = clamp(start + snappedDelta, min, end - frameTimeUs(1));
+      start = clamp(start + snappedDelta, limits.startMin, limits.startMax);
     if (d.kind === "end")
-      end = clamp(end + snappedDelta, start + frameTimeUs(1), max);
+      end = clamp(end + snappedDelta, limits.endMin, limits.endMax);
     if (d.kind === "move") {
       start = clamp(start + delta, min, max - (end - start));
       end = start + (base.endUs - base.startUs);
@@ -528,7 +535,15 @@ export function Timeline({
           ? "左右のツマミをドラッグして切り取り範囲を調整"
           : "タップでシーク・ドラッグで移動・2本指で拡大。矢印キーで微調整。"}
       </p>
-      <output aria-live="polite" style={{ fontSize: 12 }}>
+      <output
+        aria-live="polite"
+        style={{
+          fontSize: 12,
+          display: "block",
+          minHeight: "3em",
+          lineHeight: 1.5,
+        }}
+      >
         {draft
           ? `開始 ${formatTime(draft.startUs)} ／ 終了 ${formatTime(draft.endUs)} ／ 長さ ${formatTime(draft.endUs - draft.startUs)}`
           : ""}
@@ -652,7 +667,10 @@ export function Timeline({
               </span>
             ))}
           {display.map((item, index) => {
-            if (item.endUs < origin || item.startUs > origin + spanUs)
+            if (
+              (item.endUs < origin || item.startUs > origin + spanUs) &&
+              drag.current?.id !== item.id
+            )
               return null;
             const left = padding + ((item.startUs - origin) / 1_000_000) * pps,
               right = padding + ((item.endUs - origin) / 1_000_000) * pps,
@@ -713,8 +731,14 @@ export function Timeline({
                     {item.label}
                   </span>
                 </div>
-                {editing &&
-                  (["start", "end"] as const).map((edge) => (
+                {(["start", "end"] as const)
+                  .filter((edge) => {
+                    const x = edge === "start" ? left : right;
+                    // Never let a marker outside the virtual track enlarge scrollWidth.
+                    // Half-viewport padding still permits re-expanding a trimmed edge.
+                    return x >= 22 && x <= trackWidth - 22;
+                  })
+                  .map((edge) => (
                     <button
                       key={edge}
                       type="button"
@@ -732,55 +756,55 @@ export function Timeline({
                         const delta =
                           (event.key === "ArrowLeft" ? -1 : 1) *
                           frameTimeUs(event.shiftKey ? 10 : 1);
+                        const limits = trimEdgeLimits(
+                          item,
+                          durationUs,
+                          frameTimeUs(1),
+                          mode === "all-versions" && onMarkerEdit
+                            ? markers
+                            : [],
+                        );
                         const start =
                           edge === "start"
                             ? clamp(
                                 item.startUs + delta,
-                                item.minUs ?? 0,
-                                item.endUs - frameTimeUs(1),
+                                limits.startMin,
+                                limits.startMax,
                               )
                             : item.startUs;
                         const end =
                           edge === "end"
                             ? clamp(
                                 item.endUs + delta,
-                                item.startUs + frameTimeUs(1),
-                                item.maxUs ?? durationUs,
+                                limits.endMin,
+                                limits.endMax,
                               )
                             : item.endUs;
                         onEdit(item.id, Math.round(start), Math.round(end));
                       }}
                       style={{
                         position: "absolute",
-                        left: clamp(
-                          (edge === "start" ? laneLeft : laneRight) - 22,
-                          scroll,
-                          scroll + width - 44,
-                        ),
-                        top,
+                        // Marker geometry must use source time, never viewport clamping.
+                        left: (edge === "start" ? left : right) - 22,
+                        // Separate hit regions when a short range projects to <44px.
+                        top:
+                          top + (right - left < 44 && edge === "end" ? 44 : 0),
                         width: 44,
-                        height: 88,
+                        height: right - left < 44 ? 44 : 88,
                         minWidth: 44,
                         padding: 0,
                         border: 0,
                         borderRadius: 8,
                         background: "transparent",
-                        color: "#513361",
+                        color: edge === "start" ? "#123b2e" : "#512421",
                         cursor: "ew-resize",
                         touchAction: "none",
                         userSelect: "none",
                         zIndex:
                           drag.current?.id === item.id &&
                           drag.current.kind === edge
-                            ? 4
-                            : 2,
-                        visibility: (
-                          edge === "start"
-                            ? item.startUs < origin
-                            : item.endUs > origin + spanUs
-                        )
-                          ? "hidden"
-                          : "visible",
+                            ? 6
+                            : 5,
                       }}
                     >
                       <span
@@ -789,20 +813,13 @@ export function Timeline({
                           position: "absolute",
                           inset: "0 12px",
                           borderRadius: 6,
-                          background: "#f5f1f7",
+                          background: edge === "start" ? "#91f0c2" : "#ffb4a8",
                           display: "grid",
                           placeItems: "center",
                           boxShadow: "0 1px 4px #0004",
                         }}
                       >
-                        <span
-                          style={{
-                            width: 3,
-                            height: 28,
-                            borderRadius: 2,
-                            background: "currentColor",
-                          }}
-                        />
+                        {edge === "start" ? "始" : "終"}
                       </span>
                     </button>
                   ))}
@@ -900,6 +917,7 @@ export function Timeline({
               height:
                 mode === "fnf" ? Math.max(240, items.length * 148 + 60) : 170,
               borderLeft: "2px solid white",
+              zIndex: 4,
               pointerEvents: "none",
             }}
           />
