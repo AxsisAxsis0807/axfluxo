@@ -32,3 +32,19 @@ export function tickInterval(pps: number, spacing = 120) {
     .map((value) => value * base)
     .find((step) => step * pps >= spacing)!;
 }
+
+/** Keep trim edges ordered around existing Version boundaries (integer µs). */
+export function trimEdgeLimits(
+  item: { startUs: number; endUs: number; minUs?: number; maxUs?: number },
+  durationUs: number,
+  minimumUs: number,
+  markers: number[],
+) {
+  const inside = markers.filter((m) => m > item.startUs && m < item.endUs);
+  return {
+    startMin: item.minUs ?? 0,
+    startMax: Math.min(item.endUs - minimumUs, ...inside.map((m) => m - 1)),
+    endMin: Math.max(item.startUs + minimumUs, ...inside.map((m) => m + 1)),
+    endMax: item.maxUs ?? durationUs,
+  };
+}
