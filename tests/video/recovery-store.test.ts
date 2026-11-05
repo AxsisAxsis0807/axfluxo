@@ -50,6 +50,7 @@ async function records(name: string) {
 }
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 it("automatically restores assets and settings and isolates tools and projects", async () => {
   const s = await store(),
@@ -221,6 +222,15 @@ it("caps repeated crash recovery and never re-encodes completed artifacts", asyn
   expect(entry.state).toBe("failed");
   expect(entry.error).toContain("3回");
   expect(entry.input).toBeDefined();
+});
+it("treats a zero Safari quota estimate as unknown and lets the transaction decide", async () => {
+  vi.stubGlobal("navigator", {
+    storage: { estimate: async () => ({ quota: 0, usage: 0 }) },
+  });
+  const s = await store(),
+    p = project();
+  await expect(s.saveLocalProject(p)).resolves.toBeUndefined();
+  expect((await s.loadLocalProject(p.mode))?.id).toBe(p.id);
 });
 it("fences a stale writer when another tab owns the lease", async () => {
   const s = await store();

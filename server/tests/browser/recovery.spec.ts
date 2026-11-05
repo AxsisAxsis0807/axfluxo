@@ -53,7 +53,9 @@ async function open(page: Page) {
   });
 }
 async function durable(page: Page) {
-  await expect(page.getByText(/^この端末に自動保存済み/)).toBeVisible();
+  await expect(page.getByTestId("local-save-status")).toContainText(
+    "この端末に自動保存済み",
+  );
   await page.evaluate(async () => {
     await (
       window as unknown as { flushExportRecovery: () => Promise<void> }
@@ -128,7 +130,7 @@ test("durable queued jobs restart once; finished videos survive reload until eac
       .click();
     await expect(
       page.getByText(
-        /このSafari／ブラウザーは対応する|Canvasの動画書き出しに対応していません/,
+        /このブラウザーは端末内エンコードに対応していません|Canvasの動画書き出しに対応していません/,
       ),
     ).toBeVisible();
     expect(

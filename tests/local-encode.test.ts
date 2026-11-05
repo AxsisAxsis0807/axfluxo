@@ -1,4 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { validateLocalOutput } from "../src/services/video/local-output";
+vi.mock("../src/services/video/local-output", () => ({
+  validateLocalOutput: vi.fn(async () => {}),
+}));
 import { encodeLocal } from "../src/services/video/local-encode";
 afterEach(() => {
   vi.useRealTimers();
@@ -8,7 +12,7 @@ for (const cancelDuringRest of [false, true])
   it(`pauses recording and playback during rest (cancel=${cancelDuringRest})`, async () => {
     vi.useFakeTimers();
     const states: string[] = [],
-      tracks = [{ stop: vi.fn() }];
+      tracks = [{ stop: vi.fn(), requestFrame: vi.fn() }];
     let position = 0,
       started = 0,
       playing = false;
@@ -34,7 +38,11 @@ for (const cancelDuringRest of [false, true])
       get: () => position + (playing ? (Date.now() - started) / 1000 : 0),
     });
     const ctx = {};
-    const stream = { addTrack: vi.fn(), getTracks: () => tracks };
+    const stream = {
+      addTrack: vi.fn(),
+      getTracks: () => tracks,
+      getVideoTracks: () => tracks,
+    };
     const canvas = {
       width: 0,
       height: 0,
@@ -118,6 +126,8 @@ for (const cancelDuringRest of [false, true])
     expect(states.at(-1)).toBe("pause");
     await vi.advanceTimersByTimeAsync(2_000);
     expect((await result).filename).toBe("test.mp4");
+    expect(tracks[0].requestFrame).toHaveBeenCalled();
+    expect(validateLocalOutput).toHaveBeenCalled();
     expect(states.at(-1)).toBe("stop");
     expect(
       (media as unknown as HTMLVideoElement).currentTime,

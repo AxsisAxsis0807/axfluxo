@@ -153,6 +153,7 @@ async function checkCapacity(assets: readonly (readonly [string, Blob])[]) {
   }
   if (
     estimate.quota !== undefined &&
+    estimate.quota > 0 &&
     estimate.usage !== undefined &&
     estimate.usage + bytes > estimate.quota
   )
