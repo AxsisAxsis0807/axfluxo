@@ -79,6 +79,10 @@ async function visibleHandle(handle: Locator) {
       hit: n.contains(document.elementFromPoint(x, y)),
       gripWidth: grip.width,
       gripHeight: grip.height,
+      opacity: getComputedStyle(n).opacity,
+      gripOpacity: getComputedStyle(n.querySelector("span")!).opacity,
+      gripBackground: getComputedStyle(n.querySelector("span")!)
+        .backgroundColor,
     };
   });
   expect(result.inside).toBe(true);
@@ -87,6 +91,9 @@ async function visibleHandle(handle: Locator) {
   expect(result.height).toBeGreaterThanOrEqual(44);
   expect(result.gripWidth).toBeGreaterThan(0);
   expect(result.gripHeight).toBeGreaterThan(0);
+  expect(result.opacity).toBe("1");
+  expect(result.gripOpacity).toBe("1");
+  expect(result.gripBackground).not.toBe("rgba(0, 0, 0, 0)");
 }
 for (const mode of ["all", "fnf"]) {
   test(`${mode}: trim handles are visible on import and both endpoints are usable`, async ({
