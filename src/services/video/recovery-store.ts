@@ -10,8 +10,9 @@ export type StoredProject = Omit<
 };
 type StoredEntry = Omit<
   ExportEntry,
-  "input" | "recovery" | "persistedRecipe"
+  "input" | "recovery" | "persistedRecipe" | "result"
 > & {
+  result?: { filename: string };
   order: number;
   recipe?: { project: StoredProject; index: number };
 };
@@ -59,9 +60,13 @@ const request = <T>(r: IDBRequest<T>) =>
   });
 function done(tx: IDBTransaction) {
   return new Promise<void>((resolve, reject) => {
+    let failure: DOMException | null = null;
     tx.oncomplete = () => resolve();
-    tx.onabort = () => reject(tx.error ?? Error("保存を中断しました。"));
-    tx.onerror = () => {}; // onabort reports the transaction failure.
+    tx.onabort = () =>
+      reject(failure ?? tx.error ?? Error("保存を中断しました。"));
+    tx.onerror = (event) => {
+      failure = (event.target as IDBRequest).error ?? tx.error;
+    };
   });
 }
 export function recoveryMessage(error: unknown) {
@@ -122,33 +127,131 @@ function stored(project: LocalProjectData): StoredProject {
     }),
   };
 }
-async function putAssets(tx: IDBTransaction, project: LocalProjectData) {
-  const store = tx.objectStore("assets");
-  const assets = project.sources.map(
-    (s) => [assetKey(project, s.id), s.file] as const,
-  );
-  if (project.coverFile)
-    assets.push([assetKey(project, project.coverId), project.coverFile]);
-  for (const [key, file] of assets) {
-    if (!(await request(store.getKey(key))))
-      store.put(
-        {
-          blob: file.slice(0, file.size, file.type),
-          name: file.name,
-          lastModified: file.lastModified,
-        },
-        key,
-      );
+const CHUNK_BYTES = 4 * 1024 * 1024;
+const stagingKey = (key: string) => `staging:${key}`;
+const chunkKey = (key: string, index: number) => `chunk:${key}:${index}`;
+type ChunkAsset = {
+  storage: "chunks-v1";
+  size: number;
+  count: number;
+  type: string;
+  name?: string;
+  lastModified?: number;
+};
+async function checksum(bytes: ArrayBuffer) {
+  return Array.from(
+    new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+    (value) => value.toString(16).padStart(2, "0"),
+  ).join("");
+}
+/** Read Blob bytes outside IDB transactions. Only one 4 MiB chunk is prepared at
+ * a time; published metadata never refers to a half-written asset. */
+async function prepareAsset(key: string, blob: Blob) {
+  const db = await open();
+  if (await request(db.transaction("assets").objectStore("assets").getKey(key)))
+    return;
+  const count = Math.ceil(blob.size / CHUNK_BYTES);
+  const stage = async (tx: IDBTransaction) => {
+    tx.objectStore("meta").put(
+      { key, until: Date.now() + 120_000 },
+      stagingKey(key),
+    );
+  };
+  await write(stage);
+  for (let index = 0; index < count; index++) {
+    const bytes = await blob
+      .slice(
+        index * CHUNK_BYTES,
+        Math.min(blob.size, (index + 1) * CHUNK_BYTES),
+      )
+      .arrayBuffer();
+    const hash = await checksum(bytes);
+    await write(async (tx) => {
+      tx.objectStore("assets").put({ bytes, hash }, chunkKey(key, index));
+      await stage(tx);
+    });
   }
+  const manifest: ChunkAsset = {
+    storage: "chunks-v1",
+    size: blob.size,
+    count,
+    type: blob.type,
+    ...(blob instanceof File
+      ? { name: blob.name, lastModified: blob.lastModified }
+      : {}),
+  };
+  await write(async (tx) => {
+    tx.objectStore("assets").put(manifest, key);
+    await stage(tx);
+  });
+}
+async function publishAssets(tx: IDBTransaction, project: LocalProjectData) {
+  for (const [key] of projectAssets(project)) {
+    if (!(await request(tx.objectStore("assets").getKey(key))))
+      throw Error("素材の保存が完了していません。");
+    tx.objectStore("meta").delete(stagingKey(key));
+  }
+}
+async function readAsset(
+  key: string,
+): Promise<{ blob: Blob; name?: string; lastModified?: number }> {
+  const db = await open();
+  const value: unknown = await request(
+    db.transaction("assets").objectStore("assets").get(key),
+  );
+  // Compatible with original v1 File/Blob and portable Blob+metadata records.
+  if (value instanceof Blob)
+    return {
+      blob: value,
+      ...(value instanceof File
+        ? { name: value.name, lastModified: value.lastModified }
+        : {}),
+    };
+  if (!value || typeof value !== "object")
+    throw Error("保存済み素材が見つかりません。元の素材を保持してください。");
+  if ("blob" in value && value.blob instanceof Blob)
+    return {
+      blob: value.blob,
+      name: (value as { name?: string }).name,
+      lastModified: (value as { lastModified?: number }).lastModified,
+    };
+  const manifest = value as ChunkAsset;
+  if (
+    manifest.storage !== "chunks-v1" ||
+    !Number.isSafeInteger(manifest.size) ||
+    manifest.size < 0 ||
+    manifest.count !== Math.ceil(manifest.size / CHUNK_BYTES)
+  )
+    throw Error("保存素材の情報が不正です。データは保持しました。");
+  let blob = new Blob([], { type: manifest.type });
+  for (let index = 0; index < manifest.count; index++) {
+    const part = (await request(
+      db.transaction("assets").objectStore("assets").get(chunkKey(key, index)),
+    )) as { bytes: ArrayBuffer; hash: string } | undefined;
+    const expected = Math.min(CHUNK_BYTES, manifest.size - index * CHUNK_BYTES);
+    if (
+      !(part?.bytes instanceof ArrayBuffer) ||
+      part.bytes.byteLength !== expected ||
+      (await checksum(part.bytes)) !== part.hash
+    )
+      throw Error(
+        "保存素材の一部が欠けるか破損しています。データは保持しました。",
+      );
+    blob = new Blob([blob, part.bytes], { type: manifest.type });
+  }
+  return { blob, name: manifest.name, lastModified: manifest.lastModified };
 }
 /** Advisory only: actual transaction failures remain authoritative on Safari. */
 async function checkCapacity(assets: readonly (readonly [string, Blob])[]) {
   if (typeof navigator === "undefined" || !navigator.storage?.estimate) return;
   const db = await open();
-  const tx = db.transaction("assets");
+  const tx = db.transaction(["assets", "meta"]);
   const missing = await Promise.all(
     assets.map(async ([key, blob]) =>
-      (await request(tx.objectStore("assets").getKey(key))) ? 0 : blob.size,
+      (await request(tx.objectStore("assets").getKey(key))) ||
+      (await request(tx.objectStore("meta").getKey(stagingKey(key))))
+        ? 0
+        : blob.size,
     ),
   );
   const bytes = missing.reduce((sum, size) => sum + size, 0);
@@ -184,8 +287,10 @@ function projectAssets(project: LocalProjectData): [string, Blob][] {
 }
 async function writeLocalProject(project: LocalProjectData) {
   await checkCapacity(projectAssets(project));
+  for (const [key, blob] of projectAssets(project))
+    await prepareAsset(key, blob);
   await write(async (tx) => {
-    await putAssets(tx, project);
+    await publishAssets(tx, project);
     tx.objectStore("projects").put(
       stored(project),
       `${project.mode}:${project.id}`,
@@ -218,34 +323,20 @@ export async function hydrate(data: StoredProject): Promise<LocalProjectData> {
     throw Error(
       "保存データのバージョンに対応していません。データは保持しました。",
     );
-  const db = await open();
-  const tx = db.transaction("assets", "readonly");
   const keys = [
-    ...data.sources.map((s) => assetKey(data, s.id)),
+    ...data.sources.map((source) => assetKey(data, source.id)),
     ...(data.coverId ? [assetKey(data, data.coverId)] : []),
   ];
-  const files = await Promise.all(
-    keys.map(
-      (key) =>
-        request(tx.objectStore("assets").get(key)) as Promise<
-          Blob | { blob: Blob; name: string; lastModified: number } | undefined
-        >,
-    ),
-  );
-  const restored = files.map((value, index) => {
-    if (value instanceof Blob)
-      return value instanceof File
-        ? value
-        : new File([value], data.sources[index]?.id ?? "cover", {
-            type: value.type,
-          });
-    if (value?.blob instanceof Blob && typeof value.name === "string")
-      return new File([value.blob], value.name, {
-        type: value.blob.type,
-        lastModified: value.lastModified,
-      });
-    throw Error("保存済み素材が見つかりません。元の素材を再選択してください。");
-  });
+  const restored: File[] = [];
+  for (let index = 0; index < keys.length; index++) {
+    const asset = await readAsset(keys[index]);
+    restored.push(
+      new File([asset.blob], asset.name ?? data.sources[index]?.id ?? "cover", {
+        type: asset.blob.type,
+        lastModified: asset.lastModified,
+      }),
+    );
+  }
   const created: string[] = [];
   const url = (file: File) => {
     const value = URL.createObjectURL(file);
@@ -290,9 +381,24 @@ async function collectAssets(tx: IDBTransaction) {
     if (project.coverId) referenced.add(assetKey(project, project.coverId));
   }
   rows.filter((r) => r.result).forEach((r) => referenced.add(`output:${r.id}`));
+  const meta = tx.objectStore("meta");
+  for (const key of await request(meta.getAllKeys())) {
+    if (!String(key).startsWith("staging:")) continue;
+    const stage = (await request(meta.get(key))) as {
+      key: string;
+      until: number;
+    };
+    if (stage.until > Date.now()) referenced.add(stage.key);
+    else meta.delete(key);
+  }
   const assets = tx.objectStore("assets");
-  for (const key of await request(assets.getAllKeys()))
-    if (!referenced.has(String(key))) assets.delete(key);
+  for (const key of await request(assets.getAllKeys())) {
+    const text = String(key);
+    const owner = text.startsWith("chunk:")
+      ? text.slice(6, text.lastIndexOf(":"))
+      : text;
+    if (!referenced.has(owner)) assets.delete(key);
+  }
 }
 /** Blob assets and completed results are written once; progress writes only metadata. */
 export async function saveExportEntries(entries: ExportEntry[]) {
@@ -306,6 +412,7 @@ export async function saveExportEntries(entries: ExportEntry[]) {
     if (entry.result) assets.set(`output:${entry.id}`, entry.result.blob);
   }
   await checkCapacity([...assets]);
+  for (const [key, blob] of assets) await prepareAsset(key, blob);
   await write(async (tx) => {
     const jobs = tx.objectStore("jobs");
     const previous = (await request(jobs.getAll())) as StoredEntry[];
@@ -339,7 +446,7 @@ export async function saveExportEntries(entries: ExportEntry[]) {
     for (const entry of entries) {
       const { input, result, recovery, persistedRecipe, ...metadata } = entry;
       const recipe = recovery ?? input?.recovery;
-      if (recipe) await putAssets(tx, recipe.project);
+      if (recipe) await publishAssets(tx, recipe.project);
       const row: StoredEntry = {
         ...metadata,
         order: entries.indexOf(entry),
@@ -350,9 +457,8 @@ export async function saveExportEntries(entries: ExportEntry[]) {
       // Keep the durable result even when a progress-only record is refreshed.
       if (result) {
         const outputKey = `output:${entry.id}`;
-        if (!(await request(tx.objectStore("assets").getKey(outputKey))))
-          tx.objectStore("assets").put(result.blob, outputKey);
-        row.result = { filename: result.filename, blob: new Blob() }; // output lives separately
+        tx.objectStore("meta").delete(stagingKey(outputKey));
+        row.result = { filename: result.filename };
       }
       jobs.put(row, entry.id);
     }
@@ -368,15 +474,10 @@ export async function loadExportEntries(): Promise<ExportEntry[]> {
   const { buildLocalJobs } = await import("./local-project");
   const entries: ExportEntry[] = [];
   for (const row of rows.sort((a, b) => a.order - b.order)) {
-    const { recipe, order: _order, ...entry } = row;
+    const { recipe, order: _order, result: savedResult, ...entry } = row;
     void _order;
-    if (entry.result) {
-      const blob = (await request(
-        db
-          .transaction("assets")
-          .objectStore("assets")
-          .get(`output:${entry.id}`),
-      )) as Blob | undefined;
+    if (savedResult) {
+      const { blob } = await readAsset(`output:${entry.id}`);
       if (!blob?.size)
         throw Error("完成動画を読み込めません。データを保持しました。");
       entries.push({
