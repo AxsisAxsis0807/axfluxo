@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Timeline, type TimelineItem } from "../video-common/Timeline";
 import { useLocalWaveform } from "../video-common/useLocalWaveform";
 import {
@@ -11,6 +11,7 @@ import {
   clampToTrim,
   trimRanges,
 } from "../../services/video/trim-playback";
+import type { TimelineState } from "../../services/video/local-project";
 export default function LocalTimeline({
   file,
   duration,
@@ -19,18 +20,39 @@ export default function LocalTimeline({
   markers,
   fnf,
   onEdit,
+  onMarkerEdit,
+  timeline,
+  onTimelineState,
 }: {
+  timeline?: TimelineState;
+  onTimelineState?: (state: TimelineState) => void;
   file: File;
   duration: number;
   media: () => HTMLVideoElement | null;
   items: TimelineItem[];
   markers: number[];
+  onMarkerEdit?: (index: number, us: number) => void;
   fnf: boolean;
   onEdit: (id: string, start: number, end: number) => void;
 }) {
-  const [current, setCurrent] = useState(0);
-  const [editing, setEditing] = useState(false);
-  const [selected, setSelected] = useState("");
+  const [current, setCurrent] = useState(timeline?.currentUs ?? 0);
+  const [editing, setEditing] = useState(timeline?.editing ?? false);
+  const [selected, setSelected] = useState(timeline?.selected ?? "");
+  const initial = useRef(timeline);
+  const [display, setDisplay] = useState({
+    zoom: timeline?.zoom ?? 80,
+    gain: timeline?.gain ?? 1,
+  });
+  const updateDisplay = useCallback(
+    (zoom: number, gain: number) =>
+      setDisplay((old) =>
+        old.zoom === zoom && old.gain === gain ? old : { zoom, gain },
+      ),
+    [],
+  );
+  useEffect(() => {
+    onTimelineState?.({ currentUs: current, editing, selected, ...display });
+  }, [current, editing, selected, display, onTimelineState]);
   const [view, setView] = useState<VisibleWindow>();
   const visible = useCallback(
     (next: VisibleWindow) =>
@@ -83,6 +105,18 @@ export default function LocalTimeline({
         : undefined,
     [analysis.waveform, analysis.analyzedUntilUs, detail.waveform],
   );
+  useEffect(() => {
+    const video = media();
+    if (!video || !initial.current) return;
+    const target = initial.current.currentUs / 1e6;
+    const restore = () => {
+      video.currentTime = target;
+      initial.current = undefined;
+    };
+    if (video.readyState >= 1) restore();
+    else video.addEventListener("loadedmetadata", restore, { once: true });
+    return () => video.removeEventListener("loadedmetadata", restore);
+  }, [media]);
   const rangeKey = JSON.stringify(ranges);
   useEffect(() => {
     const video = media();
@@ -154,6 +188,10 @@ export default function LocalTimeline({
       </p>
       <p role="status">{detail.status}</p>
       <Timeline
+        onMarkerEdit={onMarkerEdit}
+        initialZoom={timeline?.zoom}
+        initialGain={timeline?.gain}
+        onDisplayChange={updateDisplay}
         bounds={bounds}
         editing={editing}
         media={media}

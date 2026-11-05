@@ -49,4 +49,8 @@ export const waveformSchema = z.strictObject({
     .max(3),
 });
 export type PreviewInfo = z.infer<typeof previewInfoSchema>;
-export type Waveform = z.infer<typeof waveformSchema>;
+// Remote v1 data keeps its 8 kHz schema. Device analysis retains the decoded
+// source sample rate and uses the same peak representation without that wire limit.
+export type Waveform = Omit<z.infer<typeof waveformSchema>, "sampleRate"> & {
+  sampleRate: number;
+};

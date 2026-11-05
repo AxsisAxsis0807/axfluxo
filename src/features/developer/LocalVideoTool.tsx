@@ -3,61 +3,29 @@ import { useEffect, useRef, useState } from "react";
 import LocalCompositionPreview from "./LocalCompositionPreview";
 import LocalTimeline from "./LocalTimeline";
 import { LocalExport } from "../video-common/LocalExport";
-import {
-  imageForEncode,
-  type LocalEncodeJob,
-} from "../../services/video/local-encode";
+import { type LocalEncodeJob } from "../../services/video/local-encode";
 import { isUnlocked } from "../../services/developer/local-lock";
-import { fnfFilenames, FNF_HEADING } from "../../domain/video/fnf-showcase";
 
-type Source = {
-  id: string;
-  file: File;
-  url: string;
-  duration: number;
-  width: number;
-  height: number;
-  start: number;
-  end: number;
-  markers: string;
-};
-type Range = { id: string; start: number; end: number; name: string };
-export function localIntervals(
-  sources: Pick<Source, "start" | "end" | "duration" | "markers">[],
-) {
-  let offset = 0;
-  return sources.flatMap((s) => {
-    if (
-      ![s.start, s.end, s.duration].every(Number.isFinite) ||
-      s.start < 0 ||
-      s.end <= s.start ||
-      s.end > s.duration
-    )
-      throw Error("開始・終了時刻を素材の長さの範囲内で指定してください。");
-    const markers = s.markers.trim()
-      ? s.markers.split(",").map((v) => Number(v.trim()))
-      : [];
-    if (
-      markers.some(
-        (m, i) =>
-          !Number.isFinite(m) ||
-          m <= s.start ||
-          m >= s.end ||
-          (i > 0 && m <= markers[i - 1]),
-      )
-    )
-      throw Error(
-        "version境界は区間内の秒数を昇順・カンマ区切りで指定してください。",
-      );
-    const bounds = [s.start, ...markers, s.end];
-    const result = bounds.slice(0, -1).map((value, i) => ({
-      start: offset + value - s.start,
-      end: offset + bounds[i + 1] - s.start,
-    }));
-    offset += s.end - s.start;
-    return result;
-  });
-}
+import {
+  buildLocalJobs,
+  localProjectIssue,
+  type Source,
+  type Range,
+  type LocalProjectData,
+} from "../../services/video/local-project";
+import {
+  loadLocalProject,
+  saveLocalProject,
+  renewRecoveryLease,
+  releaseProjectUrls,
+  recoveryMessage,
+  RecoveryLeaseError,
+} from "../../services/video/recovery-store";
+import {
+  initializeExportRecovery,
+  localExportQueue,
+} from "../../services/video/local-export-runtime";
+export { localIntervals } from "../../services/video/local-project";
 function metadata(file: File, url: string): Promise<Source> {
   return new Promise((resolve, reject) => {
     const media = document.createElement("video");
@@ -101,30 +69,19 @@ function metadata(file: File, url: string): Promise<Source> {
     media.src = url;
   });
 }
-function line(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  y: number,
-  max: number,
-  size = 56,
-) {
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  do {
-    ctx.font = `700 ${size--}px sans-serif`;
-  } while (ctx.measureText(text).width > max && size > 10);
-  ctx.lineWidth = 6;
-  ctx.strokeStyle = "black";
-  ctx.fillStyle = "white";
-  ctx.strokeText(text, ctx.canvas.width / 2, y, max);
-  ctx.fillText(text, ctx.canvas.width / 2, y, max);
-}
 export default function LocalVideoTool({
   mode,
 }: {
   mode: "all-versions" | "fnf-showcase";
   ownerId: string;
 }) {
+  const [rest, setRest] = useState(true);
+  const [ready, setReady] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("保存データを確認中…");
+  const saveTail = useRef(Promise.resolve());
+  const [projectId, setProjectId] = useState("");
+  const [coverFile, setCoverFile] = useState<File>();
+  const [coverId, setCoverId] = useState("");
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewJobs, setPreviewJobs] = useState<LocalEncodeJob[]>([]);
   const [sources, setSources] = useState<Source[]>([]),
@@ -250,137 +207,153 @@ export default function LocalVideoTool({
   async function prepare(): Promise<LocalEncodeJob[]> {
     if (!isUnlocked(sessionStorage))
       throw Error("簡易ロックを解除してください。");
-    if (!sources.length) throw Error("素材を選択してください。");
-    if (fnf) {
-      const source = sources[0];
-      if (!/^@\S+$/.test(username))
-        throw Error("@から始まるユーザー名を入力してください。");
-      if (
-        ![cropTop, cropBottom].every((v) => Number.isInteger(v) && v >= 0) ||
-        cropTop + cropBottom >= source.height
-      )
-        throw Error("crop後に映像が残る値を指定してください。");
-      if (
-        !ranges.length ||
-        ranges.some(
-          (r) =>
-            !r.name.trim() ||
-            ![r.start, r.end].every(Number.isFinite) ||
-            r.start < 0 ||
-            r.end <= r.start ||
-            r.end > source.duration,
-        )
-      )
-        throw Error("各rangeの譜面名と開始・終了時刻を確認してください。");
-      const ordered = [...ranges].sort((a, b) => a.start - b.start),
-        filenames = fnfFilenames(ordered.map((r) => r.name));
-      const cropped = source.height - cropTop - cropBottom,
-        scale =
-          Math.min(1080 / source.width, 1400 / cropped) *
-          Math.min(2, Math.max(0.1, scaleFactor)),
-        w = source.width * scale,
-        h = cropped * scale;
-      return ordered.map((range, i) => ({
-        filename: filenames[i],
-        width: 1080,
-        height: 1920,
-        pieces: [
-          {
-            file: source.file,
-            url: async () => source.url,
-            start: range.start,
-            end: range.end,
-          },
-        ],
-        draw: (ctx, media) => {
-          ctx.fillStyle = "black";
-          ctx.fillRect(0, 0, 1080, 1920);
-          ctx.drawImage(
-            media,
-            0,
-            cropTop,
-            source.width,
-            cropped,
-            (1080 - w) / 2,
-            (1920 - h) / 2,
-            w,
-            h,
-          );
-          line(ctx, FNF_HEADING, 130, 1000, 46);
-          line(ctx, range.name, 240, 1000, 44);
-          line(ctx, username, 1770, 1000, 64);
-        },
-      }));
-    }
-    const intervals = localIntervals(sources),
-      labels = names.replace(/\r\n?/g, "\n").split("\n");
-    if (labels.length !== intervals.length || labels.some((v) => !v.trim()))
-      throw Error(
-        `名前をversion数（${intervals.length}）と同じ行数で入力してください。`,
-      );
-    if (!cover) throw Error("カバー画像を選択してください。");
-    const image = await imageForEncode(cover);
-    return [
-      {
-        filename: "All Versions.mp4",
-        width: 1920,
-        height: 1080,
-        pieces: sources.map((s) => ({
-          file: s.file,
-          url: async () => s.url,
-          start: s.start,
-          end: s.end,
-        })),
-        draw: (ctx, _media, seconds) => {
-          ctx.fillStyle = "black";
-          ctx.fillRect(0, 0, 1920, 1080);
-          ctx.save();
-          ctx.globalAlpha = 0.65;
-          ctx.filter = "blur(24px)";
-          const scale = Math.max(2080 / image.width, 1200 / image.height);
-          ctx.drawImage(
-            image,
-            (1920 - image.width * scale) / 2,
-            (1080 - image.height * scale) / 2,
-            image.width * scale,
-            image.height * scale,
-          );
-          ctx.restore();
-          const crop = Math.min(image.width, image.height);
-          ctx.drawImage(
-            image,
-            (image.width - crop) / 2,
-            (image.height - crop) / 2,
-            crop,
-            crop,
-            660,
-            130,
-            600,
-            600,
-          );
-          const i = intervals.findIndex(
-            (v) => seconds >= v.start && seconds < v.end,
-          );
-          if (i >= 0) {
-            ctx.save();
-            ctx.globalAlpha = Math.max(
-              0,
-              Math.min(
-                1,
-                (seconds - intervals[i].start) / 0.15,
-                (intervals[i].end - seconds) / 0.15,
-              ),
+    if (!ready) throw Error("自動復旧用の保存領域を確認してください。");
+    await saveTail.current;
+    return buildLocalJobs(projectData());
+  }
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    void (async () => {
+      try {
+        let saved: LocalProjectData | undefined;
+        for (let attempt = 0; ; attempt++) {
+          if (disposed) return;
+          try {
+            saved = await loadLocalProject(mode);
+            break;
+          } catch (error) {
+            if (!(error instanceof RecoveryLeaseError) || attempt >= 25)
+              throw error;
+            setSaveStatus(
+              "前のタブの処理終了を確認中… 自動復旧まで最大約20秒お待ちください。",
             );
-            line(ctx, labels[i], 920, 1728, 80);
-            ctx.restore();
+            await new Promise((resolve) => setTimeout(resolve, 1000));
           }
-        },
-      },
-    ];
+        }
+        if (disposed) {
+          if (saved) releaseProjectUrls(saved);
+          return;
+        }
+        if (saved) {
+          urls.current.push(
+            ...saved.sources.map((s) => s.url),
+            ...(saved.cover ? [saved.cover] : []),
+          );
+          setProjectId(saved.id);
+          setSources(saved.sources);
+          setCover(saved.cover);
+          setCoverFile(saved.coverFile);
+          setCoverId(saved.coverId);
+          setNames(saved.names);
+          setRest(saved.rest ?? true);
+          setRanges(saved.ranges);
+          setUsername(saved.username);
+          setScaleFactor(saved.scaleFactor);
+          setCropTop(saved.cropTop);
+          setCropBottom(saved.cropBottom);
+        } else setProjectId(crypto.randomUUID());
+        await initializeExportRecovery();
+        if (disposed) return;
+        setReady(true);
+        setSaveStatus(
+          saved
+            ? "編集内容と書き出しを自動復元しました。"
+            : "変更はこの端末に自動保存します。",
+        );
+        timer = setInterval(() => {
+          void renewRecoveryLease().catch((e) => {
+            localExportQueue.pause(true);
+            setReady(false);
+            setSaveStatus(recoveryMessage(e));
+          });
+        }, 5000);
+      } catch (e) {
+        if (!disposed) setSaveStatus(recoveryMessage(e));
+      }
+    })();
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, [mode]);
+  useEffect(() => {
+    if (!ready || !projectId) return;
+    const snapshot: LocalProjectData = {
+      rest,
+      id: projectId,
+      mode,
+      sources,
+      cover,
+      coverFile,
+      coverId,
+      names,
+      ranges,
+      username,
+      scaleFactor,
+      cropTop,
+      cropBottom,
+    };
+    setSaveStatus("自動保存中…");
+    // Ordered writes survive unmount. No unload handler is relied on for durability.
+    let latest = true;
+    saveTail.current = saveLocalProject(snapshot);
+    void saveTail.current
+      .then(() => {
+        if (latest)
+          setSaveStatus(
+            "この端末に自動保存済み。Safariによる保存領域の削除に備え、元の素材も保持してください。",
+          );
+      })
+      .catch((e) => {
+        if (latest) setSaveStatus(recoveryMessage(e));
+      });
+    return () => {
+      latest = false;
+    };
+  }, [
+    ready,
+    rest,
+    projectId,
+    mode,
+    sources,
+    cover,
+    coverFile,
+    coverId,
+    names,
+    ranges,
+    username,
+    scaleFactor,
+    cropTop,
+    cropBottom,
+  ]);
+  function projectData(): LocalProjectData {
+    return {
+      rest,
+      id: projectId,
+      mode,
+      sources,
+      cover,
+      coverFile,
+      coverId,
+      names,
+      ranges,
+      username,
+      scaleFactor,
+      cropTop,
+      cropBottom,
+    };
   }
   function patch(id: string, value: Partial<Source>) {
     setSources((old) => old.map((s) => (s.id === id ? { ...s, ...value } : s)));
   }
+  if (!ready)
+    return (
+      <main style={{ maxWidth: 1000, margin: "auto", padding: 16 }}>
+        <h1>{fnf ? "FNF Showcase Maker" : "All Versions Video Maker"}</h1>
+        <p role="status">{saveStatus}</p>
+      </main>
+    );
   return (
     <main
       className="local-video-tool"
@@ -390,9 +363,7 @@ export default function LocalVideoTool({
       <p>
         端末の素材を選択して制作します。素材・動画のアップロードは行いません。端末内機能はログイン・動画APIなしで利用できます。
       </p>
-      <p>
-        編集中の内容はこの画面内に保持されます。移動・再読み込みの前に完成動画を保存してください。
-      </p>
+      <p>{saveStatus}</p>
       <button onClick={() => template(true)}>テンプレートを端末に保存</button>
       <button onClick={() => template(false)}>
         端末のテンプレートを読み込む
@@ -426,6 +397,11 @@ export default function LocalVideoTool({
           />
           <LocalTimeline
             file={s.file}
+            timeline={s.timeline}
+            onTimelineState={(state) => {
+              if (JSON.stringify(s.timeline) !== JSON.stringify(state))
+                patch(s.id, { timeline: state });
+            }}
             duration={s.duration}
             media={() =>
               document.getElementById(
@@ -450,6 +426,15 @@ export default function LocalVideoTool({
                     },
                   ]
             }
+            onMarkerEdit={
+              fnf
+                ? undefined
+                : (index, us) => {
+                    const markers = s.markers.split(",").map(Number);
+                    markers[index] = us / 1e6;
+                    patch(s.id, { markers: markers.join(",") });
+                  }
+            }
             markers={s.markers
               .split(",")
               .filter((v) => v.trim() && Number.isFinite(Number(v)))
@@ -459,7 +444,16 @@ export default function LocalVideoTool({
                 ? setRanges((old) =>
                     old.map((r) => (r.id === id ? { ...r, start, end } : r)),
                   )
-                : patch(id, { start, end })
+                : patch(id, {
+                    start,
+                    end,
+                    markers: s.markers
+                      .split(",")
+                      .filter(
+                        (v) => v.trim() && Number(v) > start && Number(v) < end,
+                      )
+                      .join(","),
+                  })
             }
           />
           {!fnf && (
@@ -621,7 +615,11 @@ export default function LocalVideoTool({
               accept="image/*"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) setCover(objectUrl(f));
+                if (f) {
+                  setCover(objectUrl(f));
+                  setCoverFile(f);
+                  setCoverId(crypto.randomUUID());
+                }
               }}
             />
           </label>
@@ -670,7 +668,13 @@ export default function LocalVideoTool({
           />
         </>
       )}
-      <LocalExport prepare={prepare} disabled={loading || !sources.length} />
+      <p role="status">{localProjectIssue(projectData())}</p>
+      <LocalExport
+        prepare={prepare}
+        disabled={loading || !ready}
+        rest={rest}
+        onRestChange={setRest}
+      />
       <style>{`.local-video-tool button,.local-video-tool input,.local-video-tool a{min-height:44px}.local-video-tool label{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.local-video-tool input,.local-video-tool textarea{max-width:100%;font-size:16px}.local-video-tool fieldset{min-width:0;margin:16px 0}.local-video-tool textarea{width:100%}.local-video-tool{overflow-wrap:anywhere}`}</style>
     </main>
   );

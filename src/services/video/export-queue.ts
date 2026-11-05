@@ -3,11 +3,18 @@ export type ExportState =
   "queued" | "preparing" | "rendering" | "completed" | "failed" | "cancelled";
 export type ExportEntry = {
   id: string;
+  interrupted?: boolean;
+  recoveryAttempts?: number;
+  persistedRecipe?: {
+    project: import("./recovery-store").StoredProject;
+    index: number;
+  };
   filename: string;
   state: ExportState;
   progress: number;
   message: string;
   input?: LocalEncodeJob;
+  recovery?: LocalEncodeJob["recovery"];
   rest: boolean;
   result?: { blob: Blob; filename: string };
   error?: string;
@@ -39,6 +46,14 @@ export class ExportQueue {
   };
   getSnapshot = () => this.snapshot;
   isRunning = () => Boolean(this.running);
+  restore(entries: ExportEntry[]) {
+    if (this.running || this.entries.length)
+      throw Error("キューは既に開始しています。");
+    this.entries = entries;
+    this.snapshot = { entries: this.entries, paused: true };
+    this.publish();
+  }
+
   private publish() {
     this.snapshot = { ...this.snapshot, entries: [...this.entries] };
     this.listeners.forEach((l) => l());
@@ -64,6 +79,7 @@ export class ExportQueue {
       progress: 0,
       message: "予約待ち",
       rest,
+      recovery: job.recovery,
       input: { ...job, pieces: job.pieces.map((p) => ({ ...p })) },
     }));
     this.entries = [...this.entries, ...additions];
@@ -91,6 +107,8 @@ export class ExportQueue {
       state: "queued",
       progress: 0,
       error: undefined,
+      interrupted: false,
+      recoveryAttempts: 0,
       message: "再試行待ち",
     });
     void this.pump();
@@ -126,6 +144,17 @@ export class ExportQueue {
       );
   }
   resume() {
+    this.entries = this.entries.map((entry) =>
+      entry.state === "failed" && entry.interrupted && entry.input
+        ? {
+            ...entry,
+            state: "queued" as const,
+            interrupted: false,
+            progress: 0,
+            error: undefined,
+          }
+        : entry,
+    );
     this.snapshot = { ...this.snapshot, paused: false };
     this.publish();
     void this.pump();
@@ -178,6 +207,7 @@ export class ExportQueue {
       if (this.entries.find((j) => j.id === entry.id)?.state !== "cancelled")
         this.change(entry.id, {
           state: "failed",
+          interrupted: control.signal.aborted,
           message: "失敗",
           error:
             error instanceof Error ? error.message : "書き出しに失敗しました。",

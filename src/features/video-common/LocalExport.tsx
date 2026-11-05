@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   recorderType,
   type LocalEncodeJob,
@@ -12,25 +12,35 @@ import {
 export function LocalExport({
   prepare,
   disabled,
+  rest: savedRest,
+  onRestChange,
 }: {
   prepare: () => Promise<LocalEncodeJob[]>;
   disabled: boolean;
+  rest?: boolean;
+  onRestChange?: (rest: boolean) => void;
 }) {
-  const [rest, setRest] = useState(true),
+  const adding = useRef(false);
+  const [localRest, setRest] = useState(true),
     [preparing, setPreparing] = useState(false),
     [status, setStatus] = useState("");
+  const rest = savedRest ?? localRest;
   async function add() {
-    if (preparing) return;
-    if (!recorderType()) {
-      setStatus("このブラウザーは端末内エンコードに対応していません。");
-      return;
-    }
-    // Safari activation must happen before asynchronous cover-image preparation.
-    void allowExportAudio().catch(() =>
-      setStatus("下部の詳細から音声処理を許可してください。"),
-    );
+    if (adding.current) return;
+    adding.current = true;
     setPreparing(true);
+    setStatus("入力内容と出力形式を確認しています…");
     try {
+      if (!recorderType())
+        throw Error(
+          "このSafari／ブラウザーは対応するMP4・WebM出力形式を利用できません。別の対応ブラウザーでお試しください。",
+        );
+      if (typeof HTMLCanvasElement.prototype.captureStream !== "function")
+        throw Error("このブラウザーはCanvasの動画書き出しに対応していません。");
+      // Called during the tap, before cover loading or storage awaits.
+      void allowExportAudio().catch(() =>
+        setStatus("下部の詳細から音声処理を許可してください。"),
+      );
       const snapshot = prepare();
       localExportQueue.enqueue(await snapshot, rest);
       setStatus(
@@ -39,6 +49,7 @@ export function LocalExport({
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "予約できません。");
     } finally {
+      adding.current = false;
       setPreparing(false);
       releaseIdleExportAudio();
     }
@@ -53,7 +64,10 @@ export function LocalExport({
         <input
           type="checkbox"
           checked={rest}
-          onChange={(e) => setRest(e.target.checked)}
+          onChange={(e) => {
+            setRest(e.target.checked);
+            onRestChange?.(e.target.checked);
+          }}
         />
         10分処理・4分休憩モード
       </label>

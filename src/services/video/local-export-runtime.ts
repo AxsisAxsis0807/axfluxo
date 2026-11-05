@@ -4,9 +4,17 @@ import { isUnlocked } from "../developer/local-lock";
 let audio: AudioContext | undefined;
 const budget = { processing: 0 };
 /** Call synchronously from a tap to unlock Web Audio on Safari. */
-export function allowExportAudio() {
-  audio ??= new AudioContext();
-  return audio.resume();
+export function allowExportAudio(): Promise<void> {
+  try {
+    if (typeof AudioContext === "undefined")
+      return Promise.reject(
+        Error("このブラウザーは音声処理に対応していません。"),
+      );
+    audio ??= new AudioContext();
+    return audio.resume();
+  } catch (error) {
+    return Promise.reject(error);
+  }
 }
 export const localExportQueue = new ExportQueue(
   async (job, signal, rest, update) => {
@@ -14,6 +22,8 @@ export const localExportQueue = new ExportQueue(
       localExportQueue.pause();
       throw Error("簡易ロックを解除して再試行してください。");
     }
+    await flushExportRecovery();
+    signal.throwIfAborted();
     const urls: string[] = [];
     try {
       audio ??= new AudioContext();
@@ -41,6 +51,7 @@ export const localExportQueue = new ExportQueue(
         });
       }
       signal.throwIfAborted();
+      if (persistenceEnabled) await renewRecoveryLease();
       const owned = {
         ...job,
         pieces: job.pieces.map((p) => {
@@ -53,7 +64,7 @@ export const localExportQueue = new ExportQueue(
       let message = "端末内で処理中",
         progress = 0,
         lastUpdate = 0;
-      return await encodeLocal(
+      const result = await encodeLocal(
         owned,
         audio,
         signal,
@@ -72,6 +83,9 @@ export const localExportQueue = new ExportQueue(
           progress = value;
         },
       );
+      if (persistenceEnabled) await renewRecoveryLease();
+      signal.throwIfAborted();
+      return result;
     } finally {
       urls.forEach(URL.revokeObjectURL);
     }
@@ -99,3 +113,67 @@ export function releaseIdleExportAudio() {
   });
 }
 localExportQueue.subscribe(releaseIdleExportAudio);
+
+// Start only from a mounted, unlocked tool. Hydration must finish before admission.
+let initialized: Promise<void> | undefined;
+let persistenceTail = Promise.resolve();
+let persistenceEnabled = false;
+let recoveryFailure = "";
+const recoveryListeners = new Set<() => void>();
+export const subscribeRecovery = (listener: () => void) => {
+  recoveryListeners.add(listener);
+  return () => {
+    recoveryListeners.delete(listener);
+  };
+};
+export const getRecoveryError = () => recoveryFailure;
+function reportRecoveryFailure(error: unknown) {
+  recoveryFailure = recoveryMessage(error);
+  recoveryListeners.forEach((listener) => listener());
+}
+export function flushExportRecovery() {
+  return persistenceTail;
+}
+export function initializeExportRecovery() {
+  return (initialized ??= (async () => {
+    localExportQueue.pause();
+    const entries = await loadExportEntries();
+    localExportQueue.restore(entries);
+    persistenceEnabled = true;
+    localExportQueue.resume();
+  })().catch((error) => {
+    initialized = undefined;
+    reportRecoveryFailure(error);
+    throw error;
+  }));
+}
+localExportQueue.subscribe(() => {
+  if (!persistenceEnabled) return;
+  const entries = localExportQueue.getSnapshot().entries;
+  persistenceTail = persistenceTail
+    .catch(() => {})
+    .then(() => saveExportEntries(entries));
+  void persistenceTail.catch((error) => {
+    // Do not recursively publish more failed writes.
+    persistenceEnabled = false;
+    reportRecoveryFailure(error);
+    localExportQueue.pause(true);
+  });
+});
+import {
+  loadExportEntries,
+  saveExportEntries,
+  recoveryMessage,
+  renewRecoveryLease,
+} from "./recovery-store";
+
+export async function retryRecoveryPersistence() {
+  if (!recoveryFailure) return;
+  await persistenceTail.catch(() => {});
+  await renewRecoveryLease();
+  await saveExportEntries(localExportQueue.getSnapshot().entries);
+  persistenceTail = Promise.resolve();
+  persistenceEnabled = true;
+  recoveryFailure = "";
+  recoveryListeners.forEach((listener) => listener());
+}

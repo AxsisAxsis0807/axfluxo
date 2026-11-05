@@ -147,7 +147,7 @@ export async function analyzeLocalWaveform(
             versionId,
             hash: "a".repeat(64),
             originUs: Math.round(start * 1e6),
-            sampleRate: 8000,
+            sampleRate: config.sampleRate,
             levels: [
               {
                 stepUs: accumulator.step * 1e6,
@@ -194,7 +194,7 @@ export async function analyzeLocalWaveform(
         }
       } else if (codec === "aac" || codec === "mp3") {
         context = new AudioContext({
-          sampleRate: window ? config.sampleRate : 8000,
+          sampleRate: config.sampleRate,
         });
         const sink = new EncodedPacketSink(track);
         let packet =
