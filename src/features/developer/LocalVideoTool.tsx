@@ -204,11 +204,11 @@ export default function LocalVideoTool({
       );
     }
   }
-  async function prepare(): Promise<LocalEncodeJob[]> {
+  async function prepare(durable = true): Promise<LocalEncodeJob[]> {
     if (!isUnlocked(sessionStorage))
       throw Error("簡易ロックを解除してください。");
     if (!ready) throw Error("自動復旧用の保存領域を確認してください。");
-    await saveTail.current;
+    if (durable) await saveTail.current;
     return buildLocalJobs(projectData());
   }
   useEffect(() => {
@@ -363,7 +363,9 @@ export default function LocalVideoTool({
       <p>
         端末の素材を選択して制作します。素材・動画のアップロードは行いません。端末内機能はログイン・動画APIなしで利用できます。
       </p>
-      <p>{saveStatus}</p>
+      <p role="status" data-testid="local-save-status">
+        {saveStatus}
+      </p>
       <button onClick={() => template(true)}>テンプレートを端末に保存</button>
       <button onClick={() => template(false)}>
         端末のテンプレートを読み込む
@@ -636,7 +638,7 @@ export default function LocalVideoTool({
       <button
         disabled={loading || !sources.length}
         onClick={() =>
-          void prepare()
+          void prepare(false)
             .then(setPreviewJobs)
             .catch((e) =>
               setError(

@@ -33,7 +33,7 @@ export function LocalExport({
     try {
       if (!recorderType())
         throw Error(
-          "このSafari／ブラウザーは対応するMP4・WebM出力形式を利用できません。別の対応ブラウザーでお試しください。",
+          "このブラウザーは端末内エンコードに対応していません。Safari／ブラウザーで利用可能なMP4・WebM形式がありません。別の対応ブラウザーでお試しください。",
         );
       if (typeof HTMLCanvasElement.prototype.captureStream !== "function")
         throw Error("このブラウザーはCanvasの動画書き出しに対応していません。");

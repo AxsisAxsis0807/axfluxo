@@ -3,6 +3,7 @@ import {
   centerTime,
   snapMarker,
   waveformHeight,
+  tickInterval,
 } from "../../../src/services/video/timeline-math";
 import { PeakAccumulator } from "../../../src/services/video/local-waveform";
 it("renders no height at exact zero and preserves every nonzero decoded value without a floor", () => {
@@ -50,4 +51,11 @@ it("increases temporal information with finer analysis instead of stretching coa
   expect(fine.peaks[1]).toBe(0);
   expect(fine.peaks[3]).toBeCloseTo(0.1);
   expect(fine.peaks[5]).toBeCloseTo(0.9);
+});
+
+it("keeps time labels spaced apart when zoom crosses a decimal scale boundary", () => {
+  for (const pps of [0.2, 80, 100, 120, 8000, 192000]) {
+    expect(tickInterval(pps) * pps).toBeGreaterThanOrEqual(120);
+    expect(tickInterval(pps) * pps).toBeLessThanOrEqual(300);
+  }
 });

@@ -1,3 +1,4 @@
+import { validateLocalOutput } from "./local-output";
 import type { LocalProjectData } from "./local-project";
 export type LocalEncodeJob = {
   recovery?: { project: LocalProjectData; index: number };
@@ -211,6 +212,14 @@ export async function encodeLocal(
       throw error;
     }
   })();
+  const drawFrame = (seconds: number) => {
+    job.draw(ctx, media, seconds);
+    // Some engines drop the pre-start frame while the recorder is paused.
+    // Explicitly request a fresh frame after resume, including static artwork.
+    const track = stream.getVideoTracks()[0] as
+      CanvasCaptureMediaStreamTrack | undefined;
+    track?.requestFrame?.();
+  };
   const chunks: BlobPart[] = [];
   recorder.ondataavailable = (e) => {
     if (e.data.size) chunks.push(e.data);
@@ -250,7 +259,7 @@ export async function encodeLocal(
         media.currentTime = piece.start;
         await seek;
       }
-      job.draw(ctx, media, elapsed);
+      drawFrame(elapsed);
       if (recorder.state === "inactive") {
         recorder.start(1000);
         recordingStarted = true;
@@ -258,6 +267,7 @@ export async function encodeLocal(
       }
       await playForEncode(media, signal, status);
       recorder.resume();
+      drawFrame(elapsed);
       let last = media.currentTime,
         stalled = performance.now();
       while (media.currentTime < piece.end - 1 / 120) {
@@ -274,7 +284,7 @@ export async function encodeLocal(
         if (delta > 0) stalled = performance.now();
         if (performance.now() - stalled > 30_000)
           throw Error("再生が停止しました。接続を確認して再試行してください。");
-        job.draw(ctx, media, elapsed + current - piece.start);
+        drawFrame(elapsed + current - piece.start);
         last = current;
         if (rest && budget.processing >= 600) {
           media.pause();
@@ -301,8 +311,10 @@ export async function encodeLocal(
     await stopped;
     signal.throwIfAborted();
     if (recordError) throw recordError;
+    const blob = new Blob(chunks, { type: mimeType });
+    await validateLocalOutput(blob, signal);
     return {
-      blob: new Blob(chunks, { type: mimeType }),
+      blob,
       filename:
         job.filename.replace(/\.(mp4|webm)$/i, "") +
         (mimeType.startsWith("video/mp4") ? ".mp4" : ".webm"),

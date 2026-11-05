@@ -34,12 +34,13 @@ const project = (
 async function store() {
   return import("../../src/services/video/recovery-store");
 }
-async function records(name: string) {
+async function records(name: string, keysOnly = false) {
   return new Promise<unknown[]>((resolve, reject) => {
     const req = indexedDB.open("axfluxo.local-video-recovery", 1);
     req.onsuccess = () => {
       const db = req.result;
-      const read = db.transaction(name).objectStore(name).getAll();
+      const store = db.transaction(name).objectStore(name);
+      const read = keysOnly ? store.getAllKeys() : store.getAll();
       read.onsuccess = () => {
         resolve(read.result);
         db.close();
@@ -50,6 +51,7 @@ async function records(name: string) {
 }
 beforeEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 it("automatically restores assets and settings and isolates tools and projects", async () => {
   const s = await store(),
@@ -61,6 +63,7 @@ it("automatically restores assets and settings and isolates tools and projects",
   const restored = await s.loadLocalProject(a.mode);
   expect(restored?.id).toBe(a.id);
   expect(await restored?.sources[0].file.text()).toBe("media");
+  expect(restored?.sources[0].file.name).toBe("source.mp4");
   expect(restored?.sources[0].url).not.toBe("blob:old");
   expect((await s.loadLocalProject(b.mode))?.id).toBe(b.id);
   await s.saveLocalProject(c);
@@ -147,8 +150,8 @@ it("keeps unsaved siblings and other projects, deleting only confirmed output an
   expect(await s.loadLocalProject(p.mode)).toBeUndefined();
   expect((await s.loadLocalProject(other.mode))?.id).toBe(other.id);
   expect(
-    (await records("assets")).some(
-      (value) => value instanceof Blob && value.size === 1,
+    (await records("assets", true)).some((key) =>
+      String(key).includes("output:"),
     ),
   ).toBe(false);
 });
@@ -221,6 +224,91 @@ it("caps repeated crash recovery and never re-encodes completed artifacts", asyn
   expect(entry.state).toBe("failed");
   expect(entry.error).toContain("3回");
   expect(entry.input).toBeDefined();
+});
+it("treats a zero Safari quota estimate as unknown and lets the transaction decide", async () => {
+  vi.stubGlobal("navigator", {
+    storage: { estimate: async () => ({ quota: 0, usage: 0 }) },
+  });
+  const s = await store(),
+    p = project();
+  await expect(s.saveLocalProject(p)).resolves.toBeUndefined();
+  expect((await s.loadLocalProject(p.mode))?.id).toBe(p.id);
+});
+it("stores large files in bounded binary chunks, restores names and rejects corrupt chunks", async () => {
+  const s = await store(),
+    p = project();
+  const bytes = new Uint8Array(4 * 1024 * 1024 + 17).fill(7);
+  p.sources[0].file = new File([bytes], "large.mp4", {
+    type: "video/mp4",
+    lastModified: 1234,
+  });
+  await s.saveLocalProject(p);
+  const restored = await s.loadLocalProject(p.mode);
+  expect(restored?.sources[0].file.size).toBe(bytes.length);
+  expect(restored?.sources[0].file.name).toBe("large.mp4");
+  expect(restored?.sources[0].file.lastModified).toBe(1234);
+  const raw = await records("assets");
+  expect(raw.some((item) => item instanceof Blob)).toBe(false);
+  const chunks = raw.filter(
+    (item): item is { bytes: ArrayBuffer; hash: string } =>
+      !!item && typeof item === "object" && "bytes" in item,
+  );
+  expect(chunks.every((item) => item.bytes.byteLength <= 4 * 1024 * 1024)).toBe(
+    true,
+  );
+  await new Promise<void>((resolve, reject) => {
+    const req = indexedDB.open("axfluxo.local-video-recovery", 1);
+    req.onsuccess = () => {
+      const db = req.result,
+        tx = db.transaction("assets", "readwrite"),
+        assets = tx.objectStore("assets");
+      const key = `chunk:${p.mode}:${p.id}:source:0`,
+        get = assets.get(key);
+      get.onsuccess = () => {
+        const part = get.result as { bytes: ArrayBuffer; hash: string };
+        new Uint8Array(part.bytes)[0] ^= 1;
+        assets.put(part, key);
+      };
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onabort = () => reject(tx.error);
+    };
+  });
+  await expect(s.loadLocalProject(p.mode)).rejects.toThrow("破損");
+});
+it("does not publish new settings when saving a later asset chunk fails", async () => {
+  const s = await store(),
+    p = project();
+  await s.saveLocalProject(p);
+  const next = {
+    ...p,
+    names: "unsaved",
+    sources: [
+      {
+        ...p.sources[0],
+        id: "replacement",
+        file: new File([new Uint8Array(4 * 1024 * 1024 + 1)], "big.mp4"),
+      },
+    ],
+  };
+  const original = IDBObjectStore.prototype.put;
+  const spy = vi
+    .spyOn(IDBObjectStore.prototype, "put")
+    .mockImplementation(function (
+      this: IDBObjectStore,
+      ...args: Parameters<IDBObjectStore["put"]>
+    ) {
+      if (this.name === "assets" && String(args[1]).endsWith(":replacement:1"))
+        throw new DOMException("chunk full", "QuotaExceededError");
+      return original.apply(this, args);
+    });
+  await expect(s.saveLocalProject(next)).rejects.toThrow("chunk full");
+  spy.mockRestore();
+  const restored = await s.loadLocalProject(p.mode);
+  expect(restored?.names).toBe("one");
+  expect(await restored?.sources[0].file.text()).toBe("media");
 });
 it("fences a stale writer when another tab owns the lease", async () => {
   const s = await store();
