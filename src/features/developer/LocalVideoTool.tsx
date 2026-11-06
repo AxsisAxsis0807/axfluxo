@@ -432,6 +432,27 @@ export default function LocalVideoTool({
                     },
                   ]
             }
+            onMarkerAdd={
+              fnf
+                ? undefined
+                : (us) => {
+                    const markers = s.markers
+                      .split(",")
+                      .filter((v) => v.trim())
+                      .map(Number);
+                    if (
+                      markers.some((m) => !Number.isFinite(m)) ||
+                      us <= s.start * 1e6 ||
+                      us >= s.end * 1e6
+                    )
+                      return;
+                    patch(s.id, {
+                      markers: [...new Set([...markers, us / 1e6])]
+                        .sort((a, b) => a - b)
+                        .join(","),
+                    });
+                  }
+            }
             onMarkerEdit={
               fnf
                 ? undefined

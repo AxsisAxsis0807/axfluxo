@@ -76,6 +76,13 @@ export async function analyzeLocalWaveform(
   signal: AbortSignal,
   update: (result: WaveformResult) => void,
   window?: { start: number; end: number; step: number },
+  pcm?: (
+    channels: Float32Array[],
+    rate: number,
+    timestamp: number,
+    from: number,
+    until: number,
+  ) => Promise<void>,
 ): Promise<WaveformResult> {
   if (!Number.isFinite(duration) || duration <= 0)
     throw Error("INVALID_DURATION");
@@ -129,10 +136,14 @@ export async function analyzeLocalWaveform(
         config.sampleRate > 96000
       )
         throw Error("UNSUPPORTED_AUDIO");
-      const accumulator = new PeakAccumulator(
-        endTime - start,
-        window ? Math.max(window.step, 1 / config.sampleRate) : undefined,
-      );
+      // A PCM consumer owns its analysis in a Worker. Do not repeat display
+      // peak extraction or allocate unused waveform snapshots on the UI thread.
+      const accumulator = pcm
+        ? undefined
+        : new PeakAccumulator(
+            endTime - start,
+            window ? Math.max(window.step, 1 / config.sampleRate) : undefined,
+          );
       const versionId = crypto.randomUUID();
       let lastPublish = 0;
       let analyzed = start;
@@ -142,19 +153,21 @@ export async function analyzeLocalWaveform(
           status: complete ? "complete" : "analyzing",
           progress: complete ? 1 : (analyzed - start) / (endTime - start),
           analyzedUntilUs: Math.round(analyzed * 1e6),
-          waveform: {
-            schemaVersion: 1,
-            versionId,
-            hash: "a".repeat(64),
-            originUs: Math.round(start * 1e6),
-            sampleRate: config.sampleRate,
-            levels: [
-              {
-                stepUs: accumulator.step * 1e6,
-                peaks: accumulator.peaks.slice(),
-              },
-            ],
-          },
+          waveform: accumulator
+            ? {
+                schemaVersion: 1,
+                versionId,
+                hash: "a".repeat(64),
+                originUs: Math.round(start * 1e6),
+                sampleRate: config.sampleRate,
+                levels: [
+                  {
+                    stepUs: accumulator.step * 1e6,
+                    peaks: accumulator.peaks.slice(),
+                  },
+                ],
+              }
+            : undefined,
         };
         if (complete || performance.now() - lastPublish > 200) {
           signal.throwIfAborted();
@@ -163,7 +176,7 @@ export async function analyzeLocalWaveform(
         }
         return result;
       };
-      const consume = (
+      const consume = async (
         buffer: AudioBuffer,
         timestamp: number,
         from?: number,
@@ -173,7 +186,14 @@ export async function analyzeLocalWaveform(
           { length: buffer.numberOfChannels },
           (_, i) => buffer.getChannelData(i),
         );
-        accumulator.add(
+        await pcm?.(
+          channels,
+          buffer.sampleRate,
+          timestamp,
+          Math.max(start, from ?? start),
+          Math.min(endTime, until ?? endTime),
+        );
+        accumulator?.add(
           channels,
           buffer.sampleRate,
           timestamp - start,
@@ -188,7 +208,7 @@ export async function analyzeLocalWaveform(
           track,
         ).buffers(start, endTime)) {
           signal.throwIfAborted();
-          consume(buffer, timestamp);
+          await consume(buffer, timestamp);
           publish(timestamp + buffer.duration);
           await yieldUI();
         }
@@ -251,7 +271,7 @@ export async function analyzeLocalWaveform(
             // Refuse codecs/platforms that silently trim or shift chunk durations.
             if (Math.abs(decoded.duration - (end - first)) > 0.06)
               throw Error("AUDIO_TIMING_UNSUPPORTED");
-            consume(decoded, first, freshStart, end);
+            await consume(decoded, first, freshStart, end);
           } finally {
             if (output.state !== "finalized")
               await output.cancel().catch(() => {});
@@ -267,7 +287,7 @@ export async function analyzeLocalWaveform(
           track,
         ).buffers(start, endTime)) {
           signal.throwIfAborted();
-          consume(buffer, timestamp);
+          await consume(buffer, timestamp);
           publish(timestamp + buffer.duration);
           await yieldUI();
         }
