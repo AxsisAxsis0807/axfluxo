@@ -136,10 +136,14 @@ export async function analyzeLocalWaveform(
         config.sampleRate > 96000
       )
         throw Error("UNSUPPORTED_AUDIO");
-      const accumulator = new PeakAccumulator(
-        endTime - start,
-        window ? Math.max(window.step, 1 / config.sampleRate) : undefined,
-      );
+      // A PCM consumer owns its analysis in a Worker. Do not repeat display
+      // peak extraction or allocate unused waveform snapshots on the UI thread.
+      const accumulator = pcm
+        ? undefined
+        : new PeakAccumulator(
+            endTime - start,
+            window ? Math.max(window.step, 1 / config.sampleRate) : undefined,
+          );
       const versionId = crypto.randomUUID();
       let lastPublish = 0;
       let analyzed = start;
@@ -149,19 +153,21 @@ export async function analyzeLocalWaveform(
           status: complete ? "complete" : "analyzing",
           progress: complete ? 1 : (analyzed - start) / (endTime - start),
           analyzedUntilUs: Math.round(analyzed * 1e6),
-          waveform: {
-            schemaVersion: 1,
-            versionId,
-            hash: "a".repeat(64),
-            originUs: Math.round(start * 1e6),
-            sampleRate: config.sampleRate,
-            levels: [
-              {
-                stepUs: accumulator.step * 1e6,
-                peaks: accumulator.peaks.slice(),
-              },
-            ],
-          },
+          waveform: accumulator
+            ? {
+                schemaVersion: 1,
+                versionId,
+                hash: "a".repeat(64),
+                originUs: Math.round(start * 1e6),
+                sampleRate: config.sampleRate,
+                levels: [
+                  {
+                    stepUs: accumulator.step * 1e6,
+                    peaks: accumulator.peaks.slice(),
+                  },
+                ],
+              }
+            : undefined,
         };
         if (complete || performance.now() - lastPublish > 200) {
           signal.throwIfAborted();
@@ -187,7 +193,7 @@ export async function analyzeLocalWaveform(
           Math.max(start, from ?? start),
           Math.min(endTime, until ?? endTime),
         );
-        accumulator.add(
+        accumulator?.add(
           channels,
           buffer.sampleRate,
           timestamp - start,
