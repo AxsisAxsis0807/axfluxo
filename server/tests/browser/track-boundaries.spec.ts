@@ -300,6 +300,16 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
   );
   await expect
     .poll(() =>
+      page
+        .locator("video")
+        .first()
+        .evaluate((n) =>
+          Math.floor((n as HTMLVideoElement).currentTime * 8000 + 1e-7),
+        ),
+    )
+    .toBe(42 * 8000 - 1);
+  await expect
+    .poll(() =>
       timeline.evaluate(
         (n) =>
           n.scrollLeft -

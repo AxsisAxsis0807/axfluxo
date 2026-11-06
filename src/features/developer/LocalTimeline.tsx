@@ -68,12 +68,15 @@ export default function LocalTimeline({
   const [boundaryError, setBoundaryError] = useState("");
   // Editing time includes the closed out-point; native decoders expose samples
   // in [0, duration) and may reset to zero when asked to seek exactly to EOF.
-  const cursorSeek = useRef<{ us: number; pending: boolean } | null>(null);
+  const cursorSeek = useRef<{ us: number; pending: boolean } | null>(
+    timeline ? { us: timeline.currentUs, pending: false } : null,
+  );
   const writeMediaSeek = useCallback(
     (video: HTMLVideoElement, us: number) => {
       const physical = Math.max(0, Math.min(us, duration * 1e6 - 1)) / 1e6;
       const pending = Math.abs(video.currentTime - physical) > 0.0000005;
       cursorSeek.current = { us, pending };
+      setCurrent(us);
       if (pending) video.currentTime = physical;
     },
     [duration],
@@ -171,12 +174,20 @@ export default function LocalTimeline({
     if (!video || !initial.current) return;
     const target = initial.current.currentUs;
     const restore = () => {
-      writeMediaSeek(video, target);
-      initial.current = undefined;
+      if (!initial.current) return;
+      const hasFrame = video.readyState >= 2;
+      writeMediaSeek(video, cursorSeek.current?.us ?? target);
+      // Safari can discard a seek issued at metadata-only readiness. Reapply
+      // once the first frame is ready before accepting native seek echoes.
+      if (hasFrame) initial.current = undefined;
     };
+    video.addEventListener("loadedmetadata", restore, { once: true });
+    video.addEventListener("loadeddata", restore, { once: true });
     if (video.readyState >= 1) restore();
-    else video.addEventListener("loadedmetadata", restore, { once: true });
-    return () => video.removeEventListener("loadedmetadata", restore);
+    return () => {
+      video.removeEventListener("loadedmetadata", restore);
+      video.removeEventListener("loadeddata", restore);
+    };
   }, [media, writeMediaSeek]);
   const rangeKey = JSON.stringify(
     editing ? [{ start: 0, end: duration }] : ranges,
@@ -191,13 +202,15 @@ export default function LocalTimeline({
           : video.currentTime * 1e6,
       );
     const seeking = () => {
-      if (!cursorSeek.current?.pending) cursorSeek.current = null;
+      if (!cursorSeek.current?.pending && !initial.current)
+        cursorSeek.current = null;
     };
     const seeked = () => {
       if (cursorSeek.current) cursorSeek.current.pending = false;
       update();
     };
     const nativeControl = () => {
+      initial.current = undefined;
       cursorSeek.current = null;
     };
     const play = () => {
