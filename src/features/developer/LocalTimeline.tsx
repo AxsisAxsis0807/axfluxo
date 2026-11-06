@@ -1,5 +1,13 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import SmartBoundaries from "./SmartBoundaries";
+import {
+  DEFAULT_BOUNDARY_SETTINGS,
+  recommendedBoundary,
+  sourceKey,
+  BOUNDARY_ALGORITHM,
+} from "../../services/video/track-boundaries";
+import { formatTime } from "../../services/video/time";
 import { Timeline, type TimelineItem } from "../video-common/Timeline";
 import { useLocalWaveform } from "../video-common/useLocalWaveform";
 import {
@@ -20,6 +28,7 @@ export default function LocalTimeline({
   markers,
   fnf,
   onEdit,
+  onMarkerAdd,
   onMarkerEdit,
   timeline,
   onTimelineState,
@@ -31,13 +40,32 @@ export default function LocalTimeline({
   media: () => HTMLVideoElement | null;
   items: TimelineItem[];
   markers: number[];
+  onMarkerAdd?: (us: number) => void;
   onMarkerEdit?: (index: number, us: number) => void;
   fnf: boolean;
   onEdit: (id: string, start: number, end: number) => void;
 }) {
+  const [navigation, setNavigation] = useState<{
+    us: number;
+    revision: number;
+  }>();
   const [current, setCurrent] = useState(timeline?.currentUs ?? 0);
   const [editing, setEditing] = useState(timeline?.editing ?? false);
   const [selected, setSelected] = useState(timeline?.selected ?? "");
+  const [boundarySettings, setBoundarySettings] = useState(
+    timeline?.boundarySettings ??
+      timeline?.detection?.settings ??
+      DEFAULT_BOUNDARY_SETTINGS,
+  );
+  const [boundaryPlacement, setBoundaryPlacement] = useState(
+    timeline?.boundaryPlacement ?? "middle",
+  );
+  const [detection, setDetection] = useState(timeline?.detection);
+  const [selectedBoundary, setSelectedBoundary] = useState(
+    timeline?.selectedBoundary ?? "",
+  );
+  const [snapEnabled, setSnapEnabled] = useState(timeline?.snapEnabled ?? true);
+  const [boundaryError, setBoundaryError] = useState("");
   const initial = useRef(timeline);
   const [display, setDisplay] = useState({
     zoom: timeline?.zoom ?? 80,
@@ -51,8 +79,29 @@ export default function LocalTimeline({
     [],
   );
   useEffect(() => {
-    onTimelineState?.({ currentUs: current, editing, selected, ...display });
-  }, [current, editing, selected, display, onTimelineState]);
+    onTimelineState?.({
+      currentUs: current,
+      editing,
+      selected,
+      ...display,
+      detection,
+      boundarySettings,
+      boundaryPlacement,
+      selectedBoundary,
+      snapEnabled,
+    });
+  }, [
+    current,
+    editing,
+    selected,
+    display,
+    detection,
+    boundaryPlacement,
+    selectedBoundary,
+    snapEnabled,
+    onTimelineState,
+    boundarySettings,
+  ]);
   const [view, setView] = useState<VisibleWindow>();
   const visible = useCallback(
     (next: VisibleWindow) =>
@@ -117,7 +166,9 @@ export default function LocalTimeline({
     else video.addEventListener("loadedmetadata", restore, { once: true });
     return () => video.removeEventListener("loadedmetadata", restore);
   }, [media]);
-  const rangeKey = JSON.stringify(ranges);
+  const rangeKey = JSON.stringify(
+    editing ? [{ start: 0, end: duration }] : ranges,
+  );
   useEffect(() => {
     const video = media();
     if (!video) return;
@@ -130,6 +181,72 @@ export default function LocalTimeline({
       video.removeEventListener("timeupdate", update);
     };
   }, [media, rangeKey]);
+  const mediaRef = useRef(media);
+  mediaRef.current = media;
+  useEffect(() => {
+    if (!navigation) return;
+    const video = mediaRef.current();
+    if (video) video.currentTime = navigation.us / 1e6;
+  }, [navigation]);
+  function seek(us: number) {
+    const video = media();
+    const target = editing
+      ? Math.max(0, Math.min(duration, us / 1e6))
+      : clampToTrim(us / 1e6, ranges);
+    if (video) video.currentTime = target;
+    setCurrent(target * 1e6);
+  }
+  function applyBoundary(us: number) {
+    setBoundaryError("");
+    if (selectedBoundary.startsWith("marker:")) {
+      const index = Number(selectedBoundary.slice(7));
+      const lower = markers[index - 1] ?? items[0]?.startUs ?? 0;
+      const upper = markers[index + 1] ?? items.at(-1)?.endUs ?? duration * 1e6;
+      if (markers[index] !== undefined && us > lower && us < upper) {
+        onMarkerEdit?.(index, us);
+        return;
+      }
+    } else {
+      const edge = selectedBoundary.endsWith(":start") ? "start" : "end";
+      const item = items.find((i) => `${i.id}:${edge}` === selectedBoundary);
+      if (
+        item &&
+        us >= 0 &&
+        us <= duration * 1e6 &&
+        (edge === "start" ? us < item.endUs - 16667 : us > item.startUs + 16667)
+      ) {
+        if (
+          !fnf &&
+          markers.some((m) => (edge === "start" ? m <= us : m >= us))
+        ) {
+          setBoundaryError("既存のVersion境界を越える適用はできません。");
+          return;
+        }
+        onEdit(
+          item.id,
+          (edge === "start" ? us : item.startUs) / 1e6,
+          (edge === "end" ? us : item.endUs) / 1e6,
+        );
+        return;
+      }
+    }
+    setBoundaryError(
+      "境界ハンドルを選択し、隣接境界・切り取り範囲内の候補を適用してください。",
+    );
+  }
+  const validDetection =
+    detection?.sourceKey === sourceKey(file) &&
+    detection.algorithm === BOUNDARY_ALGORITHM
+      ? detection
+      : undefined;
+  const selectedTime = selectedBoundary.startsWith("marker:")
+    ? markers[Number(selectedBoundary.slice(7))]
+    : items
+        .flatMap((i) => [
+          { id: `${i.id}:start`, time: i.startUs },
+          { id: `${i.id}:end`, time: i.endUs },
+        ])
+        .find((i) => i.id === selectedBoundary)?.time;
   const busy = analysis.status === "queued" || analysis.status === "analyzing";
   const messages = {
     queued: "音声波形の解析待ち…",
@@ -187,7 +304,56 @@ export default function LocalTimeline({
           : "通常操作は選択したトリミング範囲内に制限されます。"}
       </p>
       <p role="status">{detail.status}</p>
+      {!fnf && onMarkerAdd && (
+        <button
+          onClick={() => {
+            if (
+              current <= bounds.startUs ||
+              current >= bounds.endUs ||
+              markers.includes(current)
+            ) {
+              setBoundaryError(
+                "切り取り範囲内で、既存境界と異なる位置に移動してください。",
+              );
+              return;
+            }
+            onMarkerAdd(Math.round(current));
+            setSelectedBoundary(
+              `marker:${markers.filter((m) => m < current).length}`,
+            );
+          }}
+        >
+          中央にVersion境界追加
+        </button>
+      )}
+      <label>
+        <input
+          type="checkbox"
+          checked={snapEnabled}
+          onChange={(e) => setSnapEnabled(e.target.checked)}
+        />
+        境界の吸着（中央・曲間候補）
+      </label>
+      <p style={{ minHeight: "3em" }}>
+        選択中：
+        {selectedBoundary.startsWith("marker:")
+          ? `Version境界 ${Number(selectedBoundary.slice(7)) + 1}`
+          : items.find((i) => selectedBoundary.startsWith(`${i.id}:`))?.label
+            ? `${items.find((i) => selectedBoundary.startsWith(`${i.id}:`))!.label} ${selectedBoundary.endsWith(":start") ? "開始" : "終了"}`
+            : "境界をタップしてください"}{" "}
+        {selectedTime === undefined ? "" : formatTime(selectedTime)}
+        。吸着を解除して微調整できます。
+      </p>
+      {boundaryError && <p role="alert">{boundaryError}</p>}
       <Timeline
+        navigation={navigation}
+        selectedBoundary={selectedBoundary}
+        onBoundarySelect={setSelectedBoundary}
+        snapEnabled={snapEnabled}
+        candidates={validDetection?.candidates.map((c) => ({
+          ...c,
+          timeUs: recommendedBoundary(c, boundaryPlacement),
+        }))}
         onMarkerEdit={onMarkerEdit}
         initialZoom={timeline?.zoom}
         initialGain={timeline?.gain}
@@ -202,13 +368,27 @@ export default function LocalTimeline({
         items={items}
         markers={markers}
         waveform={waveform}
-        onSeek={(us) => {
-          const video = media();
-          const target = clampToTrim(us / 1e6, ranges);
-          if (video) video.currentTime = target;
-          setCurrent(target * 1e6);
-        }}
+        onSeek={seek}
         onEdit={(id, start, end) => onEdit(id, start / 1e6, end / 1e6)}
+      />
+      <SmartBoundaries
+        settings={boundarySettings}
+        onSettings={setBoundarySettings}
+        placement={boundaryPlacement}
+        onPlacement={setBoundaryPlacement}
+        file={file}
+        duration={duration}
+        analysis={validDetection}
+        onChange={setDetection}
+        currentUs={current}
+        onSeek={(us) => {
+          if (us < bounds.startUs || us > bounds.endUs) setEditing(true);
+          setCurrent(us);
+          setNavigation({ us, revision: performance.now() });
+        }}
+        onApply={applyBoundary}
+        media={media}
+        bounds={bounds}
       />
     </section>
   );

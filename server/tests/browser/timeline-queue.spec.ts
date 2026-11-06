@@ -262,6 +262,14 @@ test("running cancellation releases media before next job, failure continues and
   await page
     .getByRole("button", { name: "端末内で書き出す", exact: true })
     .click();
+  // Project recovery persists the recipe asynchronously. Wait for the user's
+  // reservation before injecting later jobs, so they cannot overtake it.
+  await expect(
+    page.getByText(
+      "現在の設定で予約しました。下部の書き出しキューで確認できます。",
+      { exact: true },
+    ),
+  ).toBeVisible();
   await page.evaluate(() => {
     const api = window as unknown as {
       localExportQueue: import("../../../src/services/video/export-queue").ExportQueue;

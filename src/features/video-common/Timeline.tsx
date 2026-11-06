@@ -6,6 +6,7 @@ import {
   useState,
   type PointerEvent,
 } from "react";
+import type { BoundaryCandidate } from "../../services/video/track-boundaries";
 import type { Waveform } from "../../domain/video/preview";
 import { formatTime, frameTimeUs } from "../../services/video/time";
 import {
@@ -141,10 +142,20 @@ export function Timeline({
   media,
   onVisibleWindow,
   onMarkerEdit,
+  navigation,
+  selectedBoundary,
+  onBoundarySelect,
+  candidates = [],
+  snapEnabled = true,
   initialZoom = 80,
   initialGain = 1,
   onDisplayChange,
 }: {
+  navigation?: { us: number; revision: number };
+  selectedBoundary?: string;
+  onBoundarySelect?: (id: string) => void;
+  candidates?: BoundaryCandidate[];
+  snapEnabled?: boolean;
   initialZoom?: number;
   initialGain?: number;
   onDisplayChange?: (zoom: number, gain: number) => void;
@@ -199,6 +210,9 @@ export function Timeline({
     return () => observer.disconnect();
   }, []);
   useLayoutEffect(() => {
+    if (navigation) manualUntil.current = 0;
+  }, [navigation]);
+  useLayoutEffect(() => {
     const node = viewport.current;
     if (!node) return;
     if (origin < minTime || origin + spanUs > maxTime) {
@@ -209,6 +223,9 @@ export function Timeline({
       node.scrollLeft = pendingScroll.current;
       autoScroll.current = node.scrollLeft;
       pendingScroll.current = null;
+      setScroll(node.scrollLeft);
+      if (head.current)
+        head.current.style.left = `${node.scrollLeft + width / 2}px`;
       return;
     }
     if (points.current.size || performance.now() < manualUntil.current) return;
@@ -229,23 +246,26 @@ export function Timeline({
     }
   }, [
     currentUs,
+    navigation,
     origin,
     spanUs,
     durationUs,
     pps,
     mode,
+    width,
     padding,
     minTime,
     maxTime,
     bounds,
     media,
   ]);
-  function changeZoom(next: number) {
+  function changeZoom(next: number, fixedAnchor?: number) {
     const node = viewport.current;
     if (!node) return;
     manualUntil.current = Infinity;
     const anchorX = width / 2;
     const anchorUs =
+        fixedAnchor ??
         origin + ((node.scrollLeft + anchorX - padding) / pps) * 1_000_000,
       newZoom = clamp(next, 0.2, 192000),
       newSpan = Math.min(maxTime - minTime, (8_000_000 / newZoom) * 1_000_000),
@@ -275,12 +295,16 @@ export function Timeline({
       drag.current = null;
       pendingDraft.current = null;
       setDraft(null);
-      const [a, b] = Array.from(points.current.values()),
-        mid = (a.x + b.x) / 2 - node.getBoundingClientRect().left;
+      const [a, b] = Array.from(points.current.values());
       pinch.current = {
-        distance: Math.max(1, Math.abs(a.x - b.x)),
+        distance: Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)),
         zoom,
-        anchor: mid,
+        anchor:
+          Math.abs(
+            ((origin + (node.scrollLeft / pps) * 1e6 - currentUs) / 1e6) * pps,
+          ) < 1.5
+            ? currentUs
+            : origin + (node.scrollLeft / pps) * 1e6,
       };
       return;
     }
@@ -289,6 +313,10 @@ export function Timeline({
         "[data-action]",
       ),
       item = items.find((i) => i.id === target?.dataset.id);
+    if (target?.dataset.action === "marker")
+      onBoundarySelect?.(`marker:${target.dataset.index}`);
+    else if (item && ["start", "end"].includes(target?.dataset.action ?? ""))
+      onBoundarySelect?.(`${item.id}:${target!.dataset.action}`);
     drag.current = {
       kind: target?.dataset.action ?? "pan",
       id: item?.id ?? "",
@@ -306,14 +334,28 @@ export function Timeline({
       delta: 0,
     };
   }
+  function snapToTarget(
+    value: number,
+    center: number,
+    latched: boolean,
+    bypass: boolean,
+  ) {
+    if (!snapEnabled || bypass) return { value, snapped: false };
+    const targets = [center, ...candidates.map((c) => c.timeUs)];
+    const closest = targets.reduce((a, b) =>
+      Math.abs(b - value) < Math.abs(a - value) ? b : a,
+    );
+    return snapMarker(value, closest, pps, latched);
+  }
   function move(event: PointerEvent<HTMLDivElement>) {
     if (!points.current.has(event.pointerId)) return;
     points.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pinch.current && points.current.size >= 2) {
       const [a, b] = Array.from(points.current.values());
       changeZoom(
-        (pinch.current.zoom * Math.max(1, Math.abs(a.x - b.x))) /
+        (pinch.current.zoom * Math.max(1, Math.hypot(a.x - b.x, a.y - b.y))) /
           pinch.current.distance,
+        pinch.current.anchor,
       );
       return;
     }
@@ -346,24 +388,27 @@ export function Timeline({
       maxTime,
     );
     if (d.kind === "marker") {
-      const snap = snapMarker(
+      const snap = snapToTarget(
         base.startUs + delta,
         center,
-        pps,
         Boolean(d.snapped),
+        event.altKey,
       );
       d.snapped = snap.snapped;
       const index = Number(base.id);
       const lower = markers[index - 1] ?? items[0]?.startUs ?? minTime;
       const upper = markers[index + 1] ?? items.at(-1)?.endUs ?? maxTime;
-      if (snap.value > lower && snap.value < upper) {
-        pendingDraft.current = { ...base, startUs: Math.round(snap.value) };
+      if (upper - lower > 1) {
+        pendingDraft.current = {
+          ...base,
+          startUs: Math.round(clamp(snap.value, lower + 1, upper - 1)),
+        };
         setDraft(pendingDraft.current);
       }
       return;
     }
     const raw = (d.kind === "end" ? base.endUs : base.startUs) + delta;
-    const snap = snapMarker(raw, center, pps, Boolean(d.snapped));
+    const snap = snapToTarget(raw, center, Boolean(d.snapped), event.altKey);
     d.snapped = snap.snapped;
     const snappedDelta =
       snap.value - (d.kind === "end" ? base.endUs : base.startUs);
@@ -411,7 +456,10 @@ export function Timeline({
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
     if (isPinch) {
-      if (!points.current.size) clear(event.currentTarget);
+      if (!points.current.size) {
+        onSeek(Math.round(pinch.current!.anchor));
+        clear(event.currentTarget);
+      }
       return;
     }
     if (d && finalDraft) {
@@ -545,7 +593,9 @@ export function Timeline({
         }}
       >
         {draft
-          ? `開始 ${formatTime(draft.startUs)} ／ 終了 ${formatTime(draft.endUs)} ／ 長さ ${formatTime(draft.endUs - draft.startUs)}`
+          ? drag.current?.kind === "marker"
+            ? `Version境界 ${Number(draft.id) + 1}：${formatTime(draft.startUs)}${drag.current.snapped ? " 吸着中" : ""}`
+            : `開始 ${formatTime(draft.startUs)} ／ 終了 ${formatTime(draft.endUs)} ／ 長さ ${formatTime(draft.endUs - draft.startUs)}${drag.current?.snapped ? " 吸着中" : ""}`
           : ""}
       </output>
       <div
@@ -745,6 +795,8 @@ export function Timeline({
                       data-action={edge}
                       data-id={item.id}
                       aria-label={`${item.label} ${edge === "start" ? "開始" : "終了"}handle`}
+                      onFocus={() => onBoundarySelect?.(`${item.id}:${edge}`)}
+                      onClick={() => onBoundarySelect?.(`${item.id}:${edge}`)}
                       title={`${edge === "start" ? "開始" : "終了"}位置をドラッグして調整`}
                       onKeyDown={(event) => {
                         if (
@@ -793,7 +845,10 @@ export function Timeline({
                         height: right - left < 44 ? 44 : 88,
                         minWidth: 44,
                         padding: 0,
-                        border: 0,
+                        border:
+                          selectedBoundary === `${item.id}:${edge}`
+                            ? "2px solid white"
+                            : 0,
                         borderRadius: 8,
                         background: "transparent",
                         color: edge === "start" ? "#123b2e" : "#512421",
@@ -851,25 +906,65 @@ export function Timeline({
               </div>
             );
           })}
-          {markers
-            .filter((m) => m >= origin && m <= origin + spanUs)
-            .map((m, i) => (
+          {candidates
+            .filter((c) => c.endUs >= origin && c.startUs <= origin + spanUs)
+            .map((c) => (
               <div
+                key={c.id}
+                title={`${formatTime(c.timeUs)} ${c.confidence}`}
+                style={{
+                  position: "absolute",
+                  pointerEvents: "none",
+                  left:
+                    padding +
+                    ((Math.max(origin, c.startUs) - origin) / 1e6) * pps,
+                  width: Math.max(
+                    2,
+                    ((Math.min(origin + spanUs, c.endUs) -
+                      Math.max(origin, c.startUs)) /
+                      1e6) *
+                      pps,
+                  ),
+                  top: 35,
+                  height: 125,
+                  background: "#42c9cf30",
+                  zIndex: 2,
+                }}
+              >
+                <span
+                  style={{
+                    position: "absolute",
+                    left:
+                      ((c.timeUs - Math.max(origin, c.startUs)) / 1e6) * pps,
+                    color: "#60efff",
+                  }}
+                >
+                  ◆
+                </span>
+              </div>
+            ))}
+          {markers
+            .map((m, i) => ({ m, i }))
+            .filter(({ m }) => m >= origin && m <= origin + spanUs)
+            .map(({ m, i }) => (
+              <button
+                type="button"
                 key={`${m}:${i}`}
                 title={formatTime(m)}
-                data-action={onMarkerEdit && editing ? "marker" : undefined}
-                data-index={markers.indexOf(m)}
+                data-action={onMarkerEdit ? "marker" : undefined}
+                data-index={i}
                 data-time={m}
-                role={onMarkerEdit && editing ? "slider" : undefined}
+                role={onMarkerEdit ? "slider" : undefined}
+                onFocus={() => onBoundarySelect?.(`marker:${i}`)}
+                onClick={() => onBoundarySelect?.(`marker:${i}`)}
                 aria-label={`Version境界 ${i + 1}`}
                 aria-valuenow={m / 1e6}
                 aria-valuemin={minTime / 1e6}
                 aria-valuemax={maxTime / 1e6}
-                tabIndex={onMarkerEdit && editing ? 0 : undefined}
+                tabIndex={onMarkerEdit ? 0 : undefined}
                 onKeyDown={(event) => {
                   if (
                     !onMarkerEdit ||
-                    !editing ||
                     !["ArrowLeft", "ArrowRight"].includes(event.key)
                   )
                     return;
@@ -900,12 +995,19 @@ export function Timeline({
                   width: 44,
                   top: 0,
                   height: 160,
+                  padding: 0,
+                  border:
+                    selectedBoundary === `marker:${i}` ? "2px solid #fff" : 0,
+                  color: "#f7bb54",
+                  touchAction: "none",
                   background:
                     "linear-gradient(to right, transparent 21px, #f7bb54 21px, #f7bb54 23px, transparent 23px)",
-                  pointerEvents: onMarkerEdit && editing ? "auto" : "none",
+                  pointerEvents: onMarkerEdit ? "auto" : "none",
                   zIndex: 3,
                 }}
-              />
+              >
+                ↔
+              </button>
             ))}
           <div
             ref={head}

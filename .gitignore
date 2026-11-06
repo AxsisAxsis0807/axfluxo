@@ -7,3 +7,5 @@ work/
 *.tsbuildinfo
 playwright-report/
 test-results/
+
+/public/workers/track-boundary-v1.js

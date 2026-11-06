@@ -1,6 +1,11 @@
 import { imageForEncode, type LocalEncodeJob } from "./local-encode";
 import { fnfFilenames, FNF_HEADING } from "../../domain/video/fnf-showcase";
 export type TimelineState = {
+  boundarySettings?: import("./track-boundaries").BoundarySettings;
+  boundaryPlacement?: import("./track-boundaries").BoundaryPlacement;
+  detection?: import("./track-boundaries").BoundaryAnalysis;
+  selectedBoundary?: string;
+  snapEnabled?: boolean;
   currentUs: number;
   zoom: number;
   gain: number;

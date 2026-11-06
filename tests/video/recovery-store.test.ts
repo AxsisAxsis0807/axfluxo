@@ -310,6 +310,51 @@ it("does not publish new settings when saving a later asset chunk fails", async 
   expect(restored?.names).toBe("one");
   expect(await restored?.sources[0].file.text()).toBe("media");
 });
+it("round-trips boundary suggestions, manual deletions and selected edits without rewriting media", async () => {
+  const s = await store();
+  const p = project("all-versions");
+  const { sourceKey, DEFAULT_BOUNDARY_SETTINGS, BOUNDARY_ALGORITHM } =
+    await import("../../src/services/video/track-boundaries");
+  p.sources[0].markers = "1";
+  p.sources[0].timeline = {
+    currentUs: 1e6,
+    zoom: 160,
+    gain: 1,
+    selected: "",
+    editing: true,
+    selectedBoundary: "marker:0",
+    snapEnabled: false,
+    boundaryPlacement: "end",
+    detection: {
+      sourceKey: sourceKey(p.sources[0].file),
+      algorithm: BOUNDARY_ALGORITHM,
+      complete: true,
+      settings: DEFAULT_BOUNDARY_SETTINGS,
+      deleted: ["silence:100:200"],
+      candidates: [
+        {
+          id: "manual",
+          startUs: 1e6,
+          endUs: 1e6,
+          timeUs: 1e6,
+          reason: "manual",
+          confidence: "low",
+        },
+      ],
+    },
+  };
+  await s.saveLocalProject(p);
+  const restored = await s.loadLocalProject(p.mode);
+  expect(restored!.sources[0].timeline).toEqual(p.sources[0].timeline);
+  expect(restored!.sources[0].markers).toBe("1");
+  expect(sourceKey(restored!.sources[0].file)).toBe(
+    p.sources[0].timeline.detection!.sourceKey,
+  );
+  expect(sourceKey(new File(["different"], "other.wav"))).not.toBe(
+    p.sources[0].timeline.detection!.sourceKey,
+  );
+});
+
 it("fences a stale writer when another tab owns the lease", async () => {
   const s = await store();
   await s.renewRecoveryLease();

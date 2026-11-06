@@ -76,6 +76,13 @@ export async function analyzeLocalWaveform(
   signal: AbortSignal,
   update: (result: WaveformResult) => void,
   window?: { start: number; end: number; step: number },
+  pcm?: (
+    channels: Float32Array[],
+    rate: number,
+    timestamp: number,
+    from: number,
+    until: number,
+  ) => Promise<void>,
 ): Promise<WaveformResult> {
   if (!Number.isFinite(duration) || duration <= 0)
     throw Error("INVALID_DURATION");
@@ -163,7 +170,7 @@ export async function analyzeLocalWaveform(
         }
         return result;
       };
-      const consume = (
+      const consume = async (
         buffer: AudioBuffer,
         timestamp: number,
         from?: number,
@@ -172,6 +179,13 @@ export async function analyzeLocalWaveform(
         const channels = Array.from(
           { length: buffer.numberOfChannels },
           (_, i) => buffer.getChannelData(i),
+        );
+        await pcm?.(
+          channels,
+          buffer.sampleRate,
+          timestamp,
+          Math.max(start, from ?? start),
+          Math.min(endTime, until ?? endTime),
         );
         accumulator.add(
           channels,
@@ -188,7 +202,7 @@ export async function analyzeLocalWaveform(
           track,
         ).buffers(start, endTime)) {
           signal.throwIfAborted();
-          consume(buffer, timestamp);
+          await consume(buffer, timestamp);
           publish(timestamp + buffer.duration);
           await yieldUI();
         }
@@ -251,7 +265,7 @@ export async function analyzeLocalWaveform(
             // Refuse codecs/platforms that silently trim or shift chunk durations.
             if (Math.abs(decoded.duration - (end - first)) > 0.06)
               throw Error("AUDIO_TIMING_UNSUPPORTED");
-            consume(decoded, first, freshStart, end);
+            await consume(decoded, first, freshStart, end);
           } finally {
             if (output.state !== "finalized")
               await output.cancel().catch(() => {});
@@ -267,7 +281,7 @@ export async function analyzeLocalWaveform(
           track,
         ).buffers(start, endTime)) {
           signal.throwIfAborted();
-          consume(buffer, timestamp);
+          await consume(buffer, timestamp);
           publish(timestamp + buffer.duration);
           await yieldUI();
         }

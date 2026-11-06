@@ -4,7 +4,13 @@ import ts from "eslint-config-next/typescript";
 export default defineConfig([
   ...next,
   ...ts,
-  globalIgnores(["out/**", ".next/**", "work/**", "next-env.d.ts"]),
+  globalIgnores([
+    "out/**",
+    ".next/**",
+    "work/**",
+    "next-env.d.ts",
+    "public/workers/track-boundary-v1.js",
+  ]),
   {
     rules: {
       "react-hooks/set-state-in-effect": "off",
