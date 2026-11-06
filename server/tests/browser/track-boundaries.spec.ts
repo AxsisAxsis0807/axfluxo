@@ -187,6 +187,7 @@ test("PCM analysis, candidate navigation, selected-boundary application, auditio
 test("repeated off-center pinches retain time, page scale and true endpoints", async ({
   page,
 }) => {
+  test.setTimeout(90000);
   // Reproduce WebKit's integer scrollLeft setter in Chromium as well. The
   // physical scroll + painted translation must still preserve the exact time.
   await page.addInitScript(() => {
@@ -273,15 +274,41 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
         ),
       )
       .toBeCloseTo(42 * 80, 0);
+    await expect(page.getByLabel("中央プレイヘッド時刻")).toHaveText(
+      "42.000000 秒",
+    );
     await expect
       .poll(() =>
         page
           .locator("video")
           .first()
-          .evaluate((n) => (n as HTMLVideoElement).currentTime),
+          .evaluate((n) =>
+            Math.floor((n as HTMLVideoElement).currentTime * 8000 + 1e-7),
+          ),
       )
-      .toBe(42);
+      .toBe(42 * 8000 - 1);
   }
+  await expect(page.getByTestId("local-save-status")).toContainText(
+    "この端末に自動保存済み",
+  );
+  await page.reload();
+  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
+    timeout: 35000,
+  });
+  await expect(page.getByLabel("中央プレイヘッド時刻")).toHaveText(
+    "42.000000 秒",
+  );
+  await expect
+    .poll(() =>
+      timeline.evaluate(
+        (n) =>
+          n.scrollLeft -
+          new DOMMatrixReadOnly(
+            getComputedStyle(n.firstElementChild!).transform,
+          ).m41,
+      ),
+    )
+    .toBeCloseTo(42 * 80, 0);
   await timeline.focus();
   await timeline.press("Home");
   await pinch(page, 2);

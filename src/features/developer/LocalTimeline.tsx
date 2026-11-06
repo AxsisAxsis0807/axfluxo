@@ -66,6 +66,18 @@ export default function LocalTimeline({
   );
   const [snapEnabled, setSnapEnabled] = useState(timeline?.snapEnabled ?? true);
   const [boundaryError, setBoundaryError] = useState("");
+  // Editing time includes the closed out-point; native decoders expose samples
+  // in [0, duration) and may reset to zero when asked to seek exactly to EOF.
+  const cursorSeek = useRef<{ us: number; pending: boolean } | null>(null);
+  const writeMediaSeek = useCallback(
+    (video: HTMLVideoElement, us: number) => {
+      const physical = Math.max(0, Math.min(us, duration * 1e6 - 1)) / 1e6;
+      const pending = Math.abs(video.currentTime - physical) > 0.0000005;
+      cursorSeek.current = { us, pending };
+      if (pending) video.currentTime = physical;
+    },
+    [duration],
+  );
   const initial = useRef(timeline);
   const [display, setDisplay] = useState({
     zoom: timeline?.zoom ?? 80,
@@ -157,43 +169,85 @@ export default function LocalTimeline({
   useEffect(() => {
     const video = media();
     if (!video || !initial.current) return;
-    const target = initial.current.currentUs / 1e6;
+    const target = initial.current.currentUs;
     const restore = () => {
-      video.currentTime = target;
+      writeMediaSeek(video, target);
       initial.current = undefined;
     };
     if (video.readyState >= 1) restore();
     else video.addEventListener("loadedmetadata", restore, { once: true });
     return () => video.removeEventListener("loadedmetadata", restore);
-  }, [media]);
+  }, [media, writeMediaSeek]);
   const rangeKey = JSON.stringify(
     editing ? [{ start: 0, end: duration }] : ranges,
   );
   useEffect(() => {
     const video = media();
     if (!video) return;
-    const update = () => setCurrent(video.currentTime * 1e6);
-    const release = bindTrimPlayback(video, JSON.parse(rangeKey));
+    const update = () =>
+      setCurrent(
+        (video.paused || video.ended) && cursorSeek.current
+          ? cursorSeek.current.us
+          : video.currentTime * 1e6,
+      );
+    const seeking = () => {
+      if (!cursorSeek.current?.pending) cursorSeek.current = null;
+    };
+    const seeked = () => {
+      if (cursorSeek.current) cursorSeek.current.pending = false;
+      update();
+    };
+    const nativeControl = () => {
+      cursorSeek.current = null;
+    };
+    const play = () => {
+      nativeControl();
+      update();
+    };
+    const ended = () => {
+      cursorSeek.current = { us: duration * 1e6, pending: false };
+      update();
+    };
+    const playbackRanges = JSON.parse(rangeKey);
+    if (!editing && cursorSeek.current) {
+      const target =
+        clampToTrim(cursorSeek.current.us / 1e6, playbackRanges) * 1e6;
+      if (Math.abs(target - cursorSeek.current.us) > 0.5)
+        writeMediaSeek(video, target);
+    }
+    const release = bindTrimPlayback(video, playbackRanges);
     video.addEventListener("timeupdate", update);
+    video.addEventListener("seeking", seeking);
+    video.addEventListener("seeked", seeked);
+    video.addEventListener("play", play);
+    video.addEventListener("ended", ended);
+    video.addEventListener("pointerdown", nativeControl);
+    video.addEventListener("keydown", nativeControl);
     update();
     return () => {
       release();
       video.removeEventListener("timeupdate", update);
+      video.removeEventListener("seeking", seeking);
+      video.removeEventListener("seeked", seeked);
+      video.removeEventListener("play", play);
+      video.removeEventListener("ended", ended);
+      video.removeEventListener("pointerdown", nativeControl);
+      video.removeEventListener("keydown", nativeControl);
     };
-  }, [media, rangeKey]);
+  }, [media, rangeKey, duration, editing, writeMediaSeek]);
   const mediaRef = useRef(media);
   mediaRef.current = media;
   useEffect(() => {
     if (!navigation) return;
     const video = mediaRef.current();
-    if (video) video.currentTime = navigation.us / 1e6;
-  }, [navigation]);
+    if (video) writeMediaSeek(video, navigation.us);
+  }, [navigation, writeMediaSeek]);
   function seek(us: number) {
     const video = media();
     const target = editing
       ? Math.max(0, Math.min(duration, us / 1e6))
       : clampToTrim(us / 1e6, ranges);
-    if (video) video.currentTime = target;
+    if (video) writeMediaSeek(video, target * 1e6);
     setCurrent(target * 1e6);
   }
   function applyBoundary(us: number) {
@@ -304,6 +358,9 @@ export default function LocalTimeline({
           : "通常操作は選択したトリミング範囲内に制限されます。"}
       </p>
       <p role="status">{detail.status}</p>
+      <output aria-label="中央プレイヘッド時刻">
+        {(current / 1e6).toFixed(6)} 秒
+      </output>
       {!fnf && onMarkerAdd && (
         <button
           onClick={() => {
@@ -383,6 +440,7 @@ export default function LocalTimeline({
         currentUs={current}
         onSeek={(us) => {
           if (us < bounds.startUs || us > bounds.endUs) setEditing(true);
+          cursorSeek.current = { us, pending: true };
           setCurrent(us);
           setNavigation({ us, revision: performance.now() });
         }}
