@@ -211,8 +211,18 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
     .locator("video")
     .first()
     .evaluate((n) => {
-      (n as HTMLVideoElement).currentTime = 12.345678;
+      (n as HTMLVideoElement).currentTime = 12.345625;
     });
+  // 98765 / 8000 is a real sample position. WebKit exposes currentTime on
+  // this PCM sample grid; keep the same 0.5 microsecond assertion before/after.
+  await expect
+    .poll(() =>
+      page
+        .locator("video")
+        .first()
+        .evaluate((n) => (n as HTMLVideoElement).currentTime),
+    )
+    .toBeCloseTo(12.345625, 6);
   await expect
     .poll(() =>
       timeline.evaluate(
@@ -223,7 +233,7 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
           ).m41,
       ),
     )
-    .toBeCloseTo(12.345678 * 80, 0);
+    .toBeCloseTo(12.345625 * 80, 0);
   for (let i = 0; i < 6; i++) {
     await pinch(page, 1.7);
     await pinch(page, 1 / 1.7);
@@ -237,7 +247,7 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
             ).m41,
         ),
       )
-      .toBeCloseTo(12.345678 * 80, 0);
+      .toBeCloseTo(12.345625 * 80, 0);
     await expect
       .poll(() =>
         page
@@ -245,7 +255,7 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
           .first()
           .evaluate((n) => (n as HTMLVideoElement).currentTime),
       )
-      .toBeCloseTo(12.345678, 6);
+      .toBeCloseTo(12.345625, 6);
   }
   await timeline.focus();
   await timeline.press("End");
