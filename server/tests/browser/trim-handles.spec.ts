@@ -267,7 +267,15 @@ for (const mode of ["all", "fnf"]) {
       h = (await page.getByTestId("timeline-head").boundingBox())!;
     const zoom = 80 / 1.5 ** 2;
     const centralUs = await timeline.evaluate(
-      (n, pps) => Math.round((n.scrollLeft / pps) * 1e6),
+      (n, pps) =>
+        Math.round(
+          ((n.scrollLeft -
+            new DOMMatrixReadOnly(
+              getComputedStyle(n.firstElementChild!).transform,
+            ).m41) /
+            pps) *
+            1e6,
+        ),
       zoom,
     );
     await touchDrag(page, start, h.x - (s.x + s.width / 2) + 4);

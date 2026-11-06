@@ -187,6 +187,21 @@ test("PCM analysis, candidate navigation, selected-boundary application, auditio
 test("repeated off-center pinches retain time, page scale and true endpoints", async ({
   page,
 }) => {
+  // Reproduce WebKit's integer scrollLeft setter in Chromium as well. The
+  // physical scroll + painted translation must still preserve the exact time.
+  await page.addInitScript(() => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      "scrollLeft",
+    )!;
+    Object.defineProperty(Element.prototype, "scrollLeft", {
+      configurable: true,
+      get: descriptor.get,
+      set(value: number) {
+        descriptor.set!.call(this, Math.trunc(value));
+      },
+    });
+  });
   await open(page);
   await page
     .getByRole("button", { name: "トリミング範囲を編集", exact: true })
@@ -199,13 +214,29 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
       (n as HTMLVideoElement).currentTime = 12.345678;
     });
   await expect
-    .poll(() => timeline.evaluate((n) => n.scrollLeft))
+    .poll(() =>
+      timeline.evaluate(
+        (n) =>
+          n.scrollLeft -
+          new DOMMatrixReadOnly(
+            getComputedStyle(n.firstElementChild!).transform,
+          ).m41,
+      ),
+    )
     .toBeCloseTo(12.345678 * 80, 0);
   for (let i = 0; i < 6; i++) {
     await pinch(page, 1.7);
     await pinch(page, 1 / 1.7);
     await expect
-      .poll(() => timeline.evaluate((n) => n.scrollLeft))
+      .poll(() =>
+        timeline.evaluate(
+          (n) =>
+            n.scrollLeft -
+            new DOMMatrixReadOnly(
+              getComputedStyle(n.firstElementChild!).transform,
+            ).m41,
+        ),
+      )
       .toBeCloseTo(12.345678 * 80, 0);
     await expect
       .poll(() =>
@@ -222,8 +253,24 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
     await pinch(page, 1.7);
     await pinch(page, 1 / 1.7);
     await expect
-      .poll(() => timeline.evaluate((n) => n.scrollLeft))
+      .poll(() =>
+        timeline.evaluate(
+          (n) =>
+            n.scrollLeft -
+            new DOMMatrixReadOnly(
+              getComputedStyle(n.firstElementChild!).transform,
+            ).m41,
+        ),
+      )
       .toBeCloseTo(42 * 80, 0);
+    await expect
+      .poll(() =>
+        page
+          .locator("video")
+          .first()
+          .evaluate((n) => (n as HTMLVideoElement).currentTime),
+      )
+      .toBe(42);
   }
   await timeline.focus();
   await timeline.press("Home");

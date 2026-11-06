@@ -1,5 +1,6 @@
 "use client";
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -174,6 +175,8 @@ export function Timeline({
   onVisibleWindow?: (view: { start: number; end: number; pps: number }) => void;
 }) {
   const viewport = useRef<HTMLDivElement>(null),
+    track = useRef<HTMLDivElement>(null),
+    subpixel = useRef(0),
     points = useRef(new Map<number, { x: number; y: number }>()),
     drag = useRef<Drag | null>(null),
     pendingDraft = useRef<TimelineItem | null>(null),
@@ -195,6 +198,32 @@ export function Timeline({
   const manualUntil = useRef(0);
   const lastScrollPublish = useRef(0);
   const wasPlaying = useRef(false);
+  // WebKit truncates scrollLeft to whole CSS pixels. Keep its lost fraction in
+  // the painted track, and use the same logical coordinate for every operation.
+  const readScroll = useCallback(
+    (node: HTMLDivElement) => node.scrollLeft + subpixel.current,
+    [],
+  );
+  const placeScroll = useCallback(
+    (
+      node: HTMLDivElement,
+      target: number,
+      automatic = true,
+      publish = false,
+    ) => {
+      node.scrollLeft = target;
+      const fraction = target - node.scrollLeft;
+      subpixel.current = Math.abs(fraction) < 1.01 ? fraction : 0;
+      if (track.current)
+        track.current.style.transform = `translateX(${-subpixel.current}px)`;
+      const logical = readScroll(node);
+      autoScroll.current = automatic ? logical : null;
+      if (head.current) head.current.style.left = `${logical + width / 2}px`;
+      if (publish) setScroll(logical);
+    },
+    [readScroll, width],
+  );
+
   const minTime = bounds && !editing ? bounds.startUs : 0;
   const maxTime = bounds && !editing ? bounds.endUs : durationUs;
   const pps = zoom,
@@ -220,12 +249,8 @@ export function Timeline({
       return;
     }
     if (pendingScroll.current !== null) {
-      node.scrollLeft = pendingScroll.current;
-      autoScroll.current = node.scrollLeft;
+      placeScroll(node, pendingScroll.current, true, true);
       pendingScroll.current = null;
-      setScroll(node.scrollLeft);
-      if (head.current)
-        head.current.style.left = `${node.scrollLeft + width / 2}px`;
       return;
     }
     if (points.current.size || performance.now() < manualUntil.current) return;
@@ -241,12 +266,12 @@ export function Timeline({
     }
     {
       const target = ((currentUs - origin) / 1_000_000) * pps;
-      autoScroll.current = target;
-      node.scrollLeft = target;
+      placeScroll(node, target, true, true);
     }
   }, [
     currentUs,
     navigation,
+    placeScroll,
     origin,
     spanUs,
     durationUs,
@@ -266,7 +291,7 @@ export function Timeline({
     const anchorX = width / 2;
     const anchorUs =
         fixedAnchor ??
-        origin + ((node.scrollLeft + anchorX - padding) / pps) * 1_000_000,
+        origin + ((readScroll(node) + anchorX - padding) / pps) * 1_000_000,
       newZoom = clamp(next, 0.2, 192000),
       newSpan = Math.min(maxTime - minTime, (8_000_000 / newZoom) * 1_000_000),
       newOrigin = clamp(
@@ -301,10 +326,10 @@ export function Timeline({
         zoom,
         anchor:
           Math.abs(
-            ((origin + (node.scrollLeft / pps) * 1e6 - currentUs) / 1e6) * pps,
+            ((origin + (readScroll(node) / pps) * 1e6 - currentUs) / 1e6) * pps,
           ) < 1.5
             ? currentUs
-            : origin + (node.scrollLeft / pps) * 1e6,
+            : origin + (readScroll(node) / pps) * 1e6,
       };
       return;
     }
@@ -322,7 +347,7 @@ export function Timeline({
       id: item?.id ?? "",
       startX: event.clientX,
       startY: event.clientY,
-      scroll: node.scrollLeft,
+      scroll: readScroll(node),
       scrollY: node.scrollTop,
       pageY: window.scrollY,
       original: item ?? {
@@ -373,7 +398,7 @@ export function Timeline({
           window.scrollX,
           d.pageY + desired - event.currentTarget.scrollTop,
         );
-      } else event.currentTarget.scrollLeft = d.scroll - d.delta;
+      } else placeScroll(event.currentTarget, d.scroll - d.delta, false);
       return;
     }
     const delta = Math.round((d.delta / pps) * 1e6),
@@ -382,7 +407,7 @@ export function Timeline({
       max = base.maxUs ?? durationUs;
     const center = centerTime(
       origin,
-      event.currentTarget.scrollLeft,
+      readScroll(event.currentTarget),
       pps,
       minTime,
       maxTime,
@@ -470,11 +495,16 @@ export function Timeline({
       const x =
         event.clientX - event.currentTarget.getBoundingClientRect().left;
       const target = clamp(
-        origin + ((event.currentTarget.scrollLeft + x - padding) / pps) * 1e6,
+        origin + ((readScroll(event.currentTarget) + x - padding) / pps) * 1e6,
         minTime,
         maxTime,
       );
-      event.currentTarget.scrollLeft = ((target - origin) / 1e6) * pps;
+      placeScroll(
+        event.currentTarget,
+        ((target - origin) / 1e6) * pps,
+        false,
+        true,
+      );
       onSeek(Math.round(target));
     }
     clear(event.currentTarget);
@@ -503,7 +533,7 @@ export function Timeline({
           bounds.endUs,
         );
         const x = padding + ((time - origin) / 1e6) * pps;
-        head.current.style.left = `${node.scrollLeft + width / 2}px`;
+        head.current.style.left = `${readScroll(node) + width / 2}px`;
         if (
           !video.paused &&
           !points.current.size &&
@@ -522,9 +552,7 @@ export function Timeline({
             0,
             Math.max(0, trackWidth - width),
           );
-          autoScroll.current = target;
-          node.scrollLeft = target;
-          autoScroll.current = node.scrollLeft;
+          placeScroll(node, target);
         }
       }
       frame = requestAnimationFrame(draw);
@@ -542,6 +570,8 @@ export function Timeline({
     spanUs,
     minTime,
     maxTime,
+    placeScroll,
+    readScroll,
   ]);
   const tickSeconds = tickInterval(pps);
   const firstTick = Math.ceil(
@@ -649,7 +679,7 @@ export function Timeline({
             clear(e.currentTarget);
         }}
         onScroll={(e) => {
-          const x = e.currentTarget.scrollLeft;
+          const x = readScroll(e.currentTarget);
           if (head.current) head.current.style.left = `${x + width / 2}px`;
           if (!bounds || performance.now() - lastScrollPublish.current > 80) {
             setScroll(x);
@@ -687,6 +717,7 @@ export function Timeline({
         }}
       >
         <div
+          ref={track}
           style={{
             width: trackWidth,
             position: "relative",
@@ -845,10 +876,11 @@ export function Timeline({
                         height: right - left < 44 ? 44 : 88,
                         minWidth: 44,
                         padding: 0,
-                        border:
+                        border: 0,
+                        boxShadow:
                           selectedBoundary === `${item.id}:${edge}`
-                            ? "2px solid white"
-                            : 0,
+                            ? "inset 0 0 0 2px white"
+                            : undefined,
                         borderRadius: 8,
                         background: "transparent",
                         color: edge === "start" ? "#123b2e" : "#512421",
@@ -996,8 +1028,11 @@ export function Timeline({
                   top: 0,
                   height: 160,
                   padding: 0,
-                  border:
-                    selectedBoundary === `marker:${i}` ? "2px solid #fff" : 0,
+                  border: 0,
+                  boxShadow:
+                    selectedBoundary === `marker:${i}`
+                      ? "inset 0 0 0 2px white"
+                      : undefined,
                   color: "#f7bb54",
                   touchAction: "none",
                   background:
