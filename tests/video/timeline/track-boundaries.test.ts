@@ -135,3 +135,51 @@ describe("generated PCM track boundaries", () => {
     expect(result.length).toBe(10);
   });
 });
+
+it("rejects leading/trailing silence and fadeout without inventing a next track", () => {
+  expect(
+    fixture(42.013, (t) => (t < 2 || t > 38 ? 0 : tone(t))).detect(defaults),
+  ).toEqual([]);
+  expect(
+    fixture(
+      42.013,
+      (t) => tone(t) * Math.min(1, Math.max(0, (40 - t) / 6)),
+    ).detect(defaults),
+  ).toEqual([]);
+});
+it("requires complete surrounding evidence rather than a short tail restart", () => {
+  const result = fixture(42.013, (t) =>
+    t >= 40 && t < 41.4 ? 0 : tone(t, t < 40 ? 220 : 1400),
+  ).detect(defaults);
+  expect(result).toEqual([]);
+});
+it("retains a real inter-track gap near EOF when both evidence windows exist", () => {
+  expect(
+    fixture(42.013, (t) =>
+      t >= 37 && t < 38 ? 0 : tone(t, t < 37 ? 220 : 1400),
+    ).detect(defaults),
+  ).toContainEqual(expect.objectContaining({ startUs: 37e6, endUs: 38e6 }));
+});
+
+it.each([44100, 48000])(
+  "keeps partial hops and overlapping packet timestamps aligned at %i Hz",
+  (sampleRate) => {
+    const duration = 10.013;
+    const f = new TrackFeatures(duration);
+    for (let fresh = 0; fresh < duration; fresh += 4) {
+      const timestamp = Math.max(0, fresh - 0.2);
+      const end = Math.min(duration, fresh + 4);
+      const channel = Float32Array.from(
+        { length: Math.ceil((end - timestamp) * sampleRate) },
+        (_, i) => tone(timestamp + i / sampleRate),
+      );
+      f.add([channel], sampleRate, timestamp, fresh, end);
+    }
+    expect(f.frames.every((frame) => frame.count > 0)).toBe(true);
+    expect(f.frames.reduce((sum, frame) => sum + frame.count, 0)).toBeCloseTo(
+      Math.ceil(duration * sampleRate),
+      -1,
+    );
+    expect(f.detect(defaults)).toEqual([]);
+  },
+);

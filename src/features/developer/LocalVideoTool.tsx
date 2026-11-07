@@ -453,6 +453,18 @@ export default function LocalVideoTool({
                     });
                   }
             }
+            onMarkerDelete={
+              fnf
+                ? undefined
+                : (index) =>
+                    patch(s.id, {
+                      markers: s.markers
+                        .split(",")
+                        .filter((v) => v.trim())
+                        .filter((_, i) => i !== index)
+                        .join(","),
+                    })
+            }
             onMarkerEdit={
               fnf
                 ? undefined

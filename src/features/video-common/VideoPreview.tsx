@@ -164,6 +164,9 @@ export function VideoPreview({
       currentGeneration++;
       controller.current?.dispose();
       controller.current = null;
+      media.pause();
+      media.removeAttribute("src");
+      media.load();
     };
   }, [source, resolve, retry]);
   useEffect(() => {

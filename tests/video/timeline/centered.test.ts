@@ -77,3 +77,13 @@ it("keeps trim edges around Version boundaries and within source endpoints", asy
     endMax: 8e6,
   });
 });
+
+it("targets only the nearest Version marker with pixel tolerance and a time cap", async () => {
+  const { nearestBoundary } =
+    await import("../../../src/services/video/timeline-math");
+  expect(nearestBoundary([1e6, 1.08e6, 2e6], 1.06e6, 80)).toBe(1);
+  expect(nearestBoundary([1e6], 1.13e6, 0.2)).toBe(-1);
+  expect(nearestBoundary([1e6], 1e6 + (9 / 8000) * 1e6, 8000)).toBe(0);
+  expect(nearestBoundary([1e6], 1e6 + (11 / 8000) * 1e6, 8000)).toBe(-1);
+  expect(nearestBoundary([], 0, 80)).toBe(-1);
+});
