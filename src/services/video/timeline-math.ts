@@ -67,3 +67,10 @@ export function nearestBoundary(
   });
   return index;
 }
+
+/** Native decoders seek to duration - 1us at EOF. That sample is the closed
+ * out-point in the editor, not a useful new Version interval. */
+export function isInteriorBoundary(us: number, startUs: number, endUs: number) {
+  const time = Math.round(us);
+  return Number.isFinite(time) && time > startUs + 1 && time < endUs - 1;
+}

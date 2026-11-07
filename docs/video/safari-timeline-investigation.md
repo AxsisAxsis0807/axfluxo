@@ -18,6 +18,11 @@ Candidates outside the current trim are hidden and cannot be applied. Analysis
 never writes confirmed markers. Applying a candidate in All Versions adds a
 marker without moving the selected marker or a trim handle.
 
+Some native media decoders report the closed out-point as `duration - 1us`.
+Manual insertion checks now use rounded microseconds and exclude this physical
+EOF sample (and the corresponding start sample). This prevents a spurious
+one-microsecond Version without imposing a seconds-long end cutoff.
+
 PCM times remain source timestamps plus sample index / decoded sample rate;
 packet overlap is excluded by `freshStart`, and partial final hops keep their
 actual sample counts. Missing PCM is an analysis error, not synthesized silence.

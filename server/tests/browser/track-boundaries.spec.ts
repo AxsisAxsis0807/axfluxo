@@ -443,6 +443,22 @@ test("three direct boundaries persist through move, nearest deletion and reload"
       .click();
     await expect(field).toHaveValue("10,20,30");
   }
+  // Reproduce browsers exposing the physical final sample after an EOF seek.
+  await page
+    .locator("video")
+    .first()
+    .evaluate((video: HTMLVideoElement) => {
+      video.dispatchEvent(new Event("pointerdown"));
+      video.currentTime = 41.999999;
+      video.dispatchEvent(new Event("timeupdate"));
+    });
+  await expect(page.getByLabel("中央プレイヘッド時刻")).toHaveText(
+    "41.999999 秒",
+  );
+  await page
+    .getByRole("button", { name: "Version境界を追加", exact: true })
+    .click();
+  await expect(field).toHaveValue("10,20,30");
   await seek(20);
   const marker = timeline.locator('[data-action="marker"][data-index="1"]');
   const box = (await marker.boundingBox())!;

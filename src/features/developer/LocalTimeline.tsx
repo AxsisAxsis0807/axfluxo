@@ -1,6 +1,9 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { nearestBoundary } from "../../services/video/timeline-math";
+import {
+  isInteriorBoundary,
+  nearestBoundary,
+} from "../../services/video/timeline-math";
 import SmartBoundaries from "./SmartBoundaries";
 import {
   DEFAULT_BOUNDARY_SETTINGS,
@@ -389,8 +392,7 @@ export default function LocalTimeline({
               return;
             }
             if (
-              current <= bounds.startUs ||
-              current >= bounds.endUs ||
+              !isInteriorBoundary(current, bounds.startUs, bounds.endUs) ||
               markers.includes(current)
             ) {
               setBoundaryError(
