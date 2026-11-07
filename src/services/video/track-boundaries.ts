@@ -1,5 +1,5 @@
 /** Streaming PCM features: 20 ms hops, no decoded track retained. */
-export const BOUNDARY_ALGORITHM = 1;
+export const BOUNDARY_ALGORITHM = 2;
 export const HOP = 0.02;
 export type BoundaryCandidate = {
   id: string;
@@ -111,6 +111,8 @@ export class TrackFeatures {
     const activity = (start: number, end: number) => {
       const values = db.slice(Math.max(0, start), Math.min(db.length, end));
       return (
+        start >= 0 &&
+        end <= db.length &&
         values.length >= 25 &&
         values.filter((v) => v > threshold + 8).length / values.length > 0.7
       );

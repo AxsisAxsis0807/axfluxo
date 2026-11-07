@@ -12,6 +12,8 @@ import {
 } from "../../services/video/track-boundaries";
 import { formatTime } from "../../services/video/time";
 export default function SmartBoundaries({
+  allowManualCandidate = false,
+  onBusy,
   settings,
   onSettings,
   placement,
@@ -26,6 +28,8 @@ export default function SmartBoundaries({
   media,
   bounds,
 }: {
+  allowManualCandidate?: boolean;
+  onBusy?: (busy: boolean) => void;
   settings: BoundarySettings;
   onSettings: (s: BoundarySettings) => void;
   placement: BoundaryPlacement;
@@ -41,6 +45,9 @@ export default function SmartBoundaries({
   bounds: { startUs: number; endUs: number };
 }) {
   const [progress, setProgress] = useState<number | null>(null);
+  useEffect(() => {
+    onBusy?.(progress !== null);
+  }, [progress, onBusy]);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
   const [meter, setMeter] = useState(false);
@@ -56,12 +63,27 @@ export default function SmartBoundaries({
     },
     [file],
   );
+  useEffect(() => {
+    const hidden = () => {
+      if (document.hidden) {
+        control.current?.abort();
+        audition.current?.();
+        setProgress(null);
+      }
+    };
+    document.addEventListener("visibilitychange", hidden);
+    return () => document.removeEventListener("visibilitychange", hidden);
+  }, []);
   const valid =
     analysis?.sourceKey === sourceKey(file) &&
     analysis.algorithm === BOUNDARY_ALGORITHM
       ? analysis
       : undefined;
-  const candidates = valid?.candidates ?? [];
+  const candidates = (valid?.candidates ?? []).filter(
+    (c) =>
+      allowManualCandidate ||
+      (c.startUs > bounds.startUs && c.endUs < bounds.endUs),
+  );
   const at = (c: BoundaryCandidate) => recommendedBoundary(c, placement);
   async function run() {
     control.current?.abort();
@@ -99,7 +121,10 @@ export default function SmartBoundaries({
           `${e instanceof Error ? e.message : "解析に失敗しました。"} 素材を短く分割するか、対応形式に変換して再試行してください。既存の候補は保持しています。`,
         );
     } finally {
-      if (control.current === abort) setProgress(null);
+      if (control.current === abort) {
+        control.current = null;
+        setProgress(null);
+      }
     }
   }
   const stopPreview = () => {
@@ -222,30 +247,32 @@ export default function SmartBoundaries({
           <option value="high">高のみ</option>
         </select>
       </label>
-      <button
-        onClick={() =>
-          onChange({
-            sourceKey: sourceKey(file),
-            algorithm: BOUNDARY_ALGORITHM,
-            settings,
-            complete: valid?.complete,
-            deleted: valid?.deleted ?? [],
-            candidates: [
-              ...candidates,
-              {
-                id: crypto.randomUUID(),
-                startUs: Math.round(currentUs),
-                endUs: Math.round(currentUs),
-                timeUs: Math.round(currentUs),
-                confidence: "low" as const,
-                reason: "manual" as const,
-              },
-            ].sort((a, b) => a.timeUs - b.timeUs),
-          })
-        }
-      >
-        中央に手動マーカー追加
-      </button>
+      {allowManualCandidate && (
+        <button
+          onClick={() =>
+            onChange({
+              sourceKey: sourceKey(file),
+              algorithm: BOUNDARY_ALGORITHM,
+              settings,
+              complete: valid?.complete,
+              deleted: valid?.deleted ?? [],
+              candidates: [
+                ...candidates,
+                {
+                  id: crypto.randomUUID(),
+                  startUs: Math.round(currentUs),
+                  endUs: Math.round(currentUs),
+                  timeUs: Math.round(currentUs),
+                  confidence: "low" as const,
+                  reason: "manual" as const,
+                },
+              ].sort((a, b) => a.timeUs - b.timeUs),
+            })
+          }
+        >
+          中央に手動マーカー追加
+        </button>
+      )}
       <p>{candidates.length}件。候補の選択・移動では確定境界を変更しません。</p>
       <ol>
         {candidates
@@ -284,7 +311,7 @@ export default function SmartBoundaries({
                   stopPreview();
                   onChange({
                     ...valid!,
-                    candidates: candidates.filter((v) => v.id !== c.id),
+                    candidates: valid!.candidates.filter((v) => v.id !== c.id),
                     deleted: [...(valid?.deleted ?? []), c.id],
                   });
                 }}

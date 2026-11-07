@@ -77,3 +77,23 @@ it("keeps trim edges around Version boundaries and within source endpoints", asy
     endMax: 8e6,
   });
 });
+
+it("targets only the nearest Version marker with pixel tolerance and a time cap", async () => {
+  const { nearestBoundary } =
+    await import("../../../src/services/video/timeline-math");
+  expect(nearestBoundary([1e6, 1.08e6, 2e6], 1.06e6, 80)).toBe(1);
+  expect(nearestBoundary([1e6], 1.13e6, 0.2)).toBe(-1);
+  expect(nearestBoundary([1e6], 1e6 + (9 / 8000) * 1e6, 8000)).toBe(0);
+  expect(nearestBoundary([1e6], 1e6 + (11 / 8000) * 1e6, 8000)).toBe(-1);
+  expect(nearestBoundary([], 0, 80)).toBe(-1);
+});
+
+it("does not turn a native EOF sample or sub-microsecond rounding into a Version", async () => {
+  const { isInteriorBoundary } =
+    await import("../../../src/services/video/timeline-math");
+  for (const us of [0, 0.4, 1, 42e6, 42e6 - 1, 42e6 - 0.6])
+    expect(isInteriorBoundary(us, 0, 42e6)).toBe(false);
+  expect(isInteriorBoundary(20e6, 0, 42e6)).toBe(true);
+  expect(isInteriorBoundary(2e6 + 1, 2e6, 40e6)).toBe(false);
+  expect(isInteriorBoundary(40e6 - 1, 2e6, 40e6)).toBe(false);
+});

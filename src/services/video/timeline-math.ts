@@ -48,3 +48,29 @@ export function trimEdgeLimits(
     endMax: item.maxUs ?? durationUs,
   };
 }
+
+/** Nearest editable marker within 10 CSS pixels, capped at 120ms when zoomed out. */
+export function nearestBoundary(
+  markers: number[],
+  currentUs: number,
+  pps: number,
+) {
+  const tolerance = Math.min(120_000, (10 / pps) * 1e6);
+  let index = -1;
+  let distance = Infinity;
+  markers.forEach((marker, i) => {
+    const delta = Math.abs(marker - currentUs);
+    if (delta <= tolerance && delta < distance) {
+      index = i;
+      distance = delta;
+    }
+  });
+  return index;
+}
+
+/** Native decoders seek to duration - 1us at EOF. That sample is the closed
+ * out-point in the editor, not a useful new Version interval. */
+export function isInteriorBoundary(us: number, startUs: number, endUs: number) {
+  const time = Math.round(us);
+  return Number.isFinite(time) && time > startUs + 1 && time < endUs - 1;
+}

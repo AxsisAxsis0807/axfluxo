@@ -147,8 +147,15 @@ export async function analyzeLocalWaveform(
       const versionId = crypto.randomUUID();
       let lastPublish = 0;
       let analyzed = start;
+      let published: WaveformResult = {
+        status: "analyzing",
+        progress: 0,
+        analyzedUntilUs: 0,
+      };
       const publish = (until: number, complete = false): WaveformResult => {
         analyzed = Math.min(endTime, Math.max(analyzed, until));
+        if (!complete && performance.now() - lastPublish <= 200)
+          return published;
         const result: WaveformResult = {
           status: complete ? "complete" : "analyzing",
           progress: complete ? 1 : (analyzed - start) / (endTime - start),
@@ -174,6 +181,7 @@ export async function analyzeLocalWaveform(
           update(result);
           lastPublish = performance.now();
         }
+        published = result;
         return result;
       };
       const consume = async (

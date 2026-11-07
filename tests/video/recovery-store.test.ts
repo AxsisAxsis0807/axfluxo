@@ -355,6 +355,43 @@ it("round-trips boundary suggestions, manual deletions and selected edits withou
   );
 });
 
+it("coalesces rapid edits and restores boundaries, trim, names and timeline state", async () => {
+  const s = await store();
+  const p = project("all-versions");
+  p.sources[0] = { ...p.sources[0], duration: 50, end: 45, start: 2 };
+  const pending = Array.from({ length: 50 }, (_, i) =>
+    s.saveLocalProject({
+      ...p,
+      names: `edit ${i}`,
+      sources: [
+        {
+          ...p.sources[0],
+          markers: "10,20,30",
+          timeline: {
+            currentUs: i * 1e6,
+            zoom: 800,
+            gain: 2,
+            editing: true,
+            selected: "",
+            snapEnabled: false,
+          },
+        },
+      ],
+    }),
+  );
+  expect(new Set(pending).size).toBe(1);
+  await Promise.all(pending);
+  const restored = await s.loadLocalProject(p.mode);
+  expect(restored?.names).toBe("edit 49");
+  expect(restored?.sources[0]).toMatchObject({
+    start: 2,
+    end: 45,
+    markers: "10,20,30",
+    timeline: { currentUs: 49e6, zoom: 800, editing: true, snapEnabled: false },
+  });
+  s.releaseProjectUrls(restored!);
+});
+
 it("fences a stale writer when another tab owns the lease", async () => {
   const s = await store();
   await s.renewRecoveryLease();

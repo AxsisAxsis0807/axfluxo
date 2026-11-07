@@ -1,5 +1,9 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  isInteriorBoundary,
+  nearestBoundary,
+} from "../../services/video/timeline-math";
 import SmartBoundaries from "./SmartBoundaries";
 import {
   DEFAULT_BOUNDARY_SETTINGS,
@@ -29,6 +33,7 @@ export default function LocalTimeline({
   fnf,
   onEdit,
   onMarkerAdd,
+  onMarkerDelete,
   onMarkerEdit,
   timeline,
   onTimelineState,
@@ -41,6 +46,7 @@ export default function LocalTimeline({
   items: TimelineItem[];
   markers: number[];
   onMarkerAdd?: (us: number) => void;
+  onMarkerDelete?: (index: number) => void;
   onMarkerEdit?: (index: number, us: number) => void;
   fnf: boolean;
   onEdit: (id: string, start: number, end: number) => void;
@@ -117,6 +123,7 @@ export default function LocalTimeline({
     onTimelineState,
     boundarySettings,
   ]);
+  const [detecting, setDetecting] = useState(false);
   const [view, setView] = useState<VisibleWindow>();
   const visible = useCallback(
     (next: VisibleWindow) =>
@@ -151,7 +158,7 @@ export default function LocalTimeline({
     file,
     duration,
     view,
-    analysis.status === "complete",
+    analysis.status === "complete" && !detecting,
   );
   const waveform = useMemo(
     () =>
@@ -301,6 +308,7 @@ export default function LocalTimeline({
       "境界ハンドルを選択し、隣接境界・切り取り範囲内の候補を適用してください。",
     );
   }
+  const overlapping = nearestBoundary(markers, current, display.zoom);
   const validDetection =
     detection?.sourceKey === sourceKey(file) &&
     detection.algorithm === BOUNDARY_ALGORITHM
@@ -377,9 +385,14 @@ export default function LocalTimeline({
       {!fnf && onMarkerAdd && (
         <button
           onClick={() => {
+            setBoundaryError("");
+            if (overlapping >= 0 && onMarkerDelete) {
+              onMarkerDelete(overlapping);
+              setSelectedBoundary("");
+              return;
+            }
             if (
-              current <= bounds.startUs ||
-              current >= bounds.endUs ||
+              !isInteriorBoundary(current, bounds.startUs, bounds.endUs) ||
               markers.includes(current)
             ) {
               setBoundaryError(
@@ -393,7 +406,9 @@ export default function LocalTimeline({
             );
           }}
         >
-          中央にVersion境界追加
+          {overlapping >= 0 && onMarkerDelete
+            ? "Version境界を削除"
+            : "Version境界を追加"}
         </button>
       )}
       <label>
@@ -420,10 +435,15 @@ export default function LocalTimeline({
         selectedBoundary={selectedBoundary}
         onBoundarySelect={setSelectedBoundary}
         snapEnabled={snapEnabled}
-        candidates={validDetection?.candidates.map((c) => ({
-          ...c,
-          timeUs: recommendedBoundary(c, boundaryPlacement),
-        }))}
+        candidates={validDetection?.candidates
+          .filter(
+            (c) =>
+              fnf || (c.startUs > bounds.startUs && c.endUs < bounds.endUs),
+          )
+          .map((c) => ({
+            ...c,
+            timeUs: recommendedBoundary(c, boundaryPlacement),
+          }))}
         onMarkerEdit={onMarkerEdit}
         initialZoom={timeline?.zoom}
         initialGain={timeline?.gain}
@@ -442,6 +462,8 @@ export default function LocalTimeline({
         onEdit={(id, start, end) => onEdit(id, start / 1e6, end / 1e6)}
       />
       <SmartBoundaries
+        allowManualCandidate={fnf}
+        onBusy={setDetecting}
         settings={boundarySettings}
         onSettings={setBoundarySettings}
         placement={boundaryPlacement}
@@ -457,7 +479,18 @@ export default function LocalTimeline({
           setCurrent(us);
           setNavigation({ us, revision: performance.now() });
         }}
-        onApply={applyBoundary}
+        onApply={
+          fnf
+            ? applyBoundary
+            : (us) => {
+                if (
+                  us > bounds.startUs &&
+                  us < bounds.endUs &&
+                  !markers.includes(us)
+                )
+                  onMarkerAdd?.(us);
+              }
+        }
         media={media}
         bounds={bounds}
       />

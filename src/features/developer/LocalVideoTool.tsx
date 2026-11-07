@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { isInteriorBoundary } from "../../services/video/timeline-math";
 import LocalCompositionPreview from "./LocalCompositionPreview";
 import LocalTimeline from "./LocalTimeline";
 import { LocalExport } from "../video-common/LocalExport";
@@ -442,8 +443,7 @@ export default function LocalVideoTool({
                       .map(Number);
                     if (
                       markers.some((m) => !Number.isFinite(m)) ||
-                      us <= s.start * 1e6 ||
-                      us >= s.end * 1e6
+                      !isInteriorBoundary(us, s.start * 1e6, s.end * 1e6)
                     )
                       return;
                     patch(s.id, {
@@ -452,6 +452,18 @@ export default function LocalVideoTool({
                         .join(","),
                     });
                   }
+            }
+            onMarkerDelete={
+              fnf
+                ? undefined
+                : (index) =>
+                    patch(s.id, {
+                      markers: s.markers
+                        .split(",")
+                        .filter((v) => v.trim())
+                        .filter((_, i) => i !== index)
+                        .join(","),
+                    })
             }
             onMarkerEdit={
               fnf

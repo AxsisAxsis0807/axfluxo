@@ -300,12 +300,32 @@ async function writeLocalProject(project: LocalProjectData) {
   });
 }
 let projectWrites = Promise.resolve();
+// One active write and one latest snapshot per project. Playback cursor updates
+// must not retain an unbounded queue of old metadata and detection arrays.
+const pendingProjects = new Map<
+  string,
+  {
+    project: LocalProjectData;
+    promise: Promise<void>;
+  }
+>();
 export function saveLocalProject(project: LocalProjectData) {
-  const pending = projectWrites
+  const key = `${project.mode}:${project.id}`;
+  const existing = pendingProjects.get(key);
+  if (existing) {
+    existing.project = project;
+    return existing.promise;
+  }
+  const entry = { project, promise: Promise.resolve() };
+  entry.promise = projectWrites
     .catch(() => {})
-    .then(() => writeLocalProject(project));
-  projectWrites = pending;
-  return pending;
+    .then(async () => {
+      pendingProjects.delete(key);
+      await writeLocalProject(entry.project);
+    });
+  pendingProjects.set(key, entry);
+  projectWrites = entry.promise;
+  return entry.promise;
 }
 export async function loadLocalProject(mode: LocalProjectData["mode"]) {
   await projectWrites.catch(() => {});

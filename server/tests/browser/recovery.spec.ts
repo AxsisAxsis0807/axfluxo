@@ -69,6 +69,14 @@ test("editor files, trim, labels and timeline restore automatically and stay sep
   await open(page);
   await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
   await page.getByLabel("譜面名", { exact: true }).fill("RESTORED");
+  await page
+    .getByRole("button", { name: "中央に手動マーカー追加", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("region", { name: "Smart Track Boundary Detection" })
+      .locator("li"),
+  ).toContainText("manual");
   await page.getByLabel("開始秒", { exact: true }).fill("0.5");
   await page.getByLabel("終了秒", { exact: true }).fill("2");
   await page.getByRole("button", { name: "拡大", exact: true }).click();

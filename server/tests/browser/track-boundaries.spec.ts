@@ -56,7 +56,9 @@ function wav() {
 async function open(page: Page) {
   await page.route("https://boundaries.test/**", (r) =>
     r.fulfill(
-      r.request().url().endsWith("/workers/track-boundary-v1.js")
+      new URL(r.request().url()).pathname.endsWith(
+        "/workers/track-boundary-v1.js",
+      )
         ? { contentType: "application/javascript", body: worker }
         : {
             contentType: "text/html",
@@ -103,7 +105,7 @@ async function pinch(page: Page, factor: number) {
     });
   }
 }
-test("PCM analysis, candidate navigation, selected-boundary application, audition, deletion and recovery", async ({
+test("PCM analysis, candidate navigation, candidate addition, audition, deletion and recovery", async ({
   page,
 }) => {
   test.setTimeout(90000);
@@ -143,7 +145,7 @@ test("PCM analysis, candidate navigation, selected-boundary application, auditio
   await candidate
     .getByRole("button", { name: "境界として適用", exact: true })
     .click();
-  await expect(field).toHaveValue("20.5,30");
+  await expect(field).toHaveValue("18,20.5,30");
   await candidate.getByRole("button", { name: "試聴", exact: true }).click();
   await expect
     .poll(() =>
@@ -164,10 +166,7 @@ test("PCM analysis, candidate navigation, selected-boundary application, auditio
     .toBe(true);
   await candidate.getByRole("button", { name: "削除", exact: true }).click();
   await expect(smart).toContainText("0件。");
-  await smart
-    .getByRole("button", { name: "中央に手動マーカー追加", exact: true })
-    .click();
-  await expect(smart).toContainText("1件。");
+  await expect(smart.locator("li")).toHaveCount(0);
   await smart.locator("summary").click();
   await smart.getByLabel("候補の最小間隔（秒）").fill("12");
   await expect(page.getByTestId("local-save-status")).toContainText(
@@ -177,9 +176,9 @@ test("PCM analysis, candidate navigation, selected-boundary application, auditio
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
     timeout: 35000,
   });
-  await expect(field).toHaveValue("20.5,30");
+  await expect(field).toHaveValue("18,20.5,30");
   await expect(smart.getByLabel("候補の最小間隔（秒）")).toHaveValue("12");
-  await expect(smart.locator("li")).toContainText("manual");
+  await expect(smart.locator("li")).toHaveCount(0);
   await expect(
     smart.getByRole("button", { name: "曲間を自動検出", exact: true }),
   ).toBeDisabled();
@@ -342,16 +341,15 @@ test("cancellation preserves existing markers and can restart", async ({
   const smart = page.getByRole("region", {
     name: "Smart Track Boundary Detection",
   });
-  await smart
-    .getByRole("button", { name: "中央に手動マーカー追加", exact: true })
-    .click();
+  const field = page.getByLabel("version境界（素材内の秒、カンマ区切り）");
+  await field.fill("10,20,30");
   await smart
     .getByRole("button", { name: "曲間を自動検出", exact: true })
     .click();
   await smart
     .getByRole("button", { name: "曲間解析をキャンセル", exact: true })
     .click();
-  await expect(smart.locator("li")).toContainText("manual");
+  await expect(field).toHaveValue("10,20,30");
   await expect(
     smart.getByRole("button", { name: "曲間を自動検出", exact: true }),
   ).toBeEnabled();
@@ -407,4 +405,85 @@ test("Version handles snap in CSS pixels, release, disable snap and stay between
   await expect(field).toHaveValue("20.55,30");
   await dragBy(1000);
   await expect(field).toHaveValue("29.999999,30");
+});
+
+test("three direct boundaries persist through move, nearest deletion and reload", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await open(page);
+  const timeline = page.getByTestId("video-timeline");
+  const field = page.getByLabel("version境界（素材内の秒、カンマ区切り）");
+  await expect(
+    page.getByRole("button", { name: "中央に手動マーカー追加", exact: true }),
+  ).toHaveCount(0);
+  async function seek(seconds: number) {
+    await timeline.evaluate((n, seconds) => {
+      n.scrollLeft = seconds * 80;
+      n.dispatchEvent(new Event("scroll"));
+    }, seconds);
+    await expect(page.getByLabel("中央プレイヘッド時刻")).toHaveText(
+      `${seconds.toFixed(6)} 秒`,
+    );
+  }
+  for (const second of [10, 20, 30]) {
+    await seek(second);
+    await page
+      .getByRole("button", { name: "Version境界を追加", exact: true })
+      .click();
+    await expect(field).toHaveValue(
+      [10, 20, 30].filter((n) => n <= second).join(","),
+    );
+  }
+  await page
+    .getByRole("textbox", { name: "version名（1行に1つ）", exact: true })
+    .fill("one\ntwo\nthree\nfour");
+  for (const endpoint of [0, 42]) {
+    await seek(endpoint);
+    await page
+      .getByRole("button", { name: "Version境界を追加", exact: true })
+      .click();
+    await expect(field).toHaveValue("10,20,30");
+  }
+  await seek(20);
+  const marker = timeline.locator('[data-action="marker"][data-index="1"]');
+  const box = (await marker.boundingBox())!;
+  await marker.dispatchEvent("pointerdown", {
+    pointerId: 91,
+    pointerType: "touch",
+    button: 0,
+    clientX: box.x + 22,
+    clientY: box.y + 20,
+  });
+  await timeline.dispatchEvent("pointerup", {
+    pointerId: 91,
+    pointerType: "touch",
+    clientX: box.x + 102,
+    clientY: box.y + 20,
+    altKey: true,
+  });
+  await expect(field).toHaveValue("10,21,30");
+  await seek(21.05);
+  await page
+    .getByRole("button", { name: "Version境界を削除", exact: true })
+    .click();
+  await expect(field).toHaveValue("10,30");
+  await page
+    .getByRole("button", { name: "Version境界を追加", exact: true })
+    .click();
+  await expect(field).toHaveValue("10,21.05,30");
+  await expect(page.getByTestId("local-save-status")).toContainText(
+    "この端末に自動保存済み",
+  );
+  await page.reload();
+  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
+    timeout: 35000,
+  });
+  await expect(field).toHaveValue("10,21.05,30");
+  await expect(
+    page.getByRole("textbox", { name: "version名（1行に1つ）", exact: true }),
+  ).toHaveValue("one\ntwo\nthree\nfour");
+  await expect(
+    page.getByRole("button", { name: "Version境界を削除", exact: true }),
+  ).toBeVisible();
 });
