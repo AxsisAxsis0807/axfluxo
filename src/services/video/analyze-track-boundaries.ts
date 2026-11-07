@@ -1,5 +1,6 @@
 import { analyzeLocalWaveform } from "./local-waveform";
 import {
+  BOUNDARY_ALGORITHM,
   type BoundaryCandidate,
   type BoundarySettings,
 } from "./track-boundaries";
@@ -11,7 +12,7 @@ export async function analyzeTrackBoundaries(
   progress: (value: number) => void,
 ) {
   const worker = new Worker(
-    `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/workers/track-boundary-v1.js`,
+    `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/workers/track-boundary-v1.js?algorithm=${BOUNDARY_ALGORITHM}`,
     { type: "module" },
   );
   let rejectPending: ((error: Error) => void) | undefined;

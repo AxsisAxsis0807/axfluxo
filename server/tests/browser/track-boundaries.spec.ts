@@ -56,7 +56,9 @@ function wav() {
 async function open(page: Page) {
   await page.route("https://boundaries.test/**", (r) =>
     r.fulfill(
-      r.request().url().endsWith("/workers/track-boundary-v1.js")
+      new URL(r.request().url()).pathname.endsWith(
+        "/workers/track-boundary-v1.js",
+      )
         ? { contentType: "application/javascript", body: worker }
         : {
             contentType: "text/html",
