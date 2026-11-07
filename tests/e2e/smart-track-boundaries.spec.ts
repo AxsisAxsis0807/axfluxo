@@ -40,13 +40,11 @@ test("published worker detects local PCM and creates a Version boundary without 
     .getByRole("link", { name: "All Versions Video Maker", exact: true })
     .click();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled();
-  await page
-    .getByLabel("端末の素材", { exact: true })
-    .setInputFiles({
-      name: "two-tracks.wav",
-      mimeType: "audio/wav",
-      buffer: pcm,
-    });
+  await page.getByLabel("端末の素材", { exact: true }).setInputFiles({
+    name: "two-tracks.wav",
+    mimeType: "audio/wav",
+    buffer: pcm,
+  });
   await page
     .getByRole("button", { name: "曲間を自動検出", exact: true })
     .click();
@@ -57,7 +55,7 @@ test("published worker detects local PCM and creates a Version boundary without 
   await expect(smart.locator("li")).toContainText("高信頼度");
   await smart.getByRole("button", { name: "移動", exact: true }).click();
   await page
-    .getByRole("button", { name: "中央にVersion境界追加", exact: true })
+    .getByRole("button", { name: "Version境界を追加", exact: true })
     .click();
   const field = page.getByLabel("version境界（素材内の秒、カンマ区切り）");
   await expect(field).toHaveValue("20.5");
@@ -65,5 +63,13 @@ test("published worker detects local PCM and creates a Version boundary without 
   await smart
     .getByRole("button", { name: "境界として適用", exact: true })
     .click();
+  await expect(field).toHaveValue("20,20.5");
+  await page
+    .getByRole("button", { name: "Version境界を削除", exact: true })
+    .click();
   await expect(field).toHaveValue("20");
+  await page
+    .getByRole("button", { name: "Version境界を追加", exact: true })
+    .click();
+  await expect(field).toHaveValue("20,20.5");
 });
