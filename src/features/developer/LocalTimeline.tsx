@@ -434,7 +434,10 @@ export default function LocalTimeline({
         onBoundarySelect={setSelectedBoundary}
         snapEnabled={snapEnabled}
         candidates={validDetection?.candidates
-          .filter((c) => c.startUs > bounds.startUs && c.endUs < bounds.endUs)
+          .filter(
+            (c) =>
+              fnf || (c.startUs > bounds.startUs && c.endUs < bounds.endUs),
+          )
           .map((c) => ({
             ...c,
             timeUs: recommendedBoundary(c, boundaryPlacement),
@@ -457,6 +460,7 @@ export default function LocalTimeline({
         onEdit={(id, start, end) => onEdit(id, start / 1e6, end / 1e6)}
       />
       <SmartBoundaries
+        allowManualCandidate={fnf}
         onBusy={setDetecting}
         settings={boundarySettings}
         onSettings={setBoundarySettings}

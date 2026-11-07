@@ -412,6 +412,9 @@ test("three direct boundaries persist through move, nearest deletion and reload"
   await open(page);
   const timeline = page.getByTestId("video-timeline");
   const field = page.getByLabel("version境界（素材内の秒、カンマ区切り）");
+  await expect(
+    page.getByRole("button", { name: "中央に手動マーカー追加", exact: true }),
+  ).toHaveCount(0);
   async function seek(seconds: number) {
     await timeline.evaluate((n, seconds) => {
       n.scrollLeft = seconds * 80;
@@ -431,7 +434,7 @@ test("three direct boundaries persist through move, nearest deletion and reload"
     );
   }
   await page
-    .getByLabel("version名（1行に1つ）", { exact: true })
+    .getByRole("textbox", { name: "version名（1行に1つ）", exact: true })
     .fill("one\ntwo\nthree\nfour");
   for (const endpoint of [0, 42]) {
     await seek(endpoint);
@@ -476,7 +479,7 @@ test("three direct boundaries persist through move, nearest deletion and reload"
   });
   await expect(field).toHaveValue("10,21.05,30");
   await expect(
-    page.getByLabel("version名（1行に1つ）", { exact: true }),
+    page.getByRole("textbox", { name: "version名（1行に1つ）", exact: true }),
   ).toHaveValue("one\ntwo\nthree\nfour");
   await expect(
     page.getByRole("button", { name: "Version境界を削除", exact: true }),

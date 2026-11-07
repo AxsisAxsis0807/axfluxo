@@ -12,6 +12,7 @@ import {
 } from "../../services/video/track-boundaries";
 import { formatTime } from "../../services/video/time";
 export default function SmartBoundaries({
+  allowManualCandidate = false,
   onBusy,
   settings,
   onSettings,
@@ -27,6 +28,7 @@ export default function SmartBoundaries({
   media,
   bounds,
 }: {
+  allowManualCandidate?: boolean;
   onBusy?: (busy: boolean) => void;
   settings: BoundarySettings;
   onSettings: (s: BoundarySettings) => void;
@@ -78,7 +80,9 @@ export default function SmartBoundaries({
       ? analysis
       : undefined;
   const candidates = (valid?.candidates ?? []).filter(
-    (c) => c.startUs > bounds.startUs && c.endUs < bounds.endUs,
+    (c) =>
+      allowManualCandidate ||
+      (c.startUs > bounds.startUs && c.endUs < bounds.endUs),
   );
   const at = (c: BoundaryCandidate) => recommendedBoundary(c, placement);
   async function run() {
@@ -243,6 +247,32 @@ export default function SmartBoundaries({
           <option value="high">高のみ</option>
         </select>
       </label>
+      {allowManualCandidate && (
+        <button
+          onClick={() =>
+            onChange({
+              sourceKey: sourceKey(file),
+              algorithm: BOUNDARY_ALGORITHM,
+              settings,
+              complete: valid?.complete,
+              deleted: valid?.deleted ?? [],
+              candidates: [
+                ...candidates,
+                {
+                  id: crypto.randomUUID(),
+                  startUs: Math.round(currentUs),
+                  endUs: Math.round(currentUs),
+                  timeUs: Math.round(currentUs),
+                  confidence: "low" as const,
+                  reason: "manual" as const,
+                },
+              ].sort((a, b) => a.timeUs - b.timeUs),
+            })
+          }
+        >
+          中央に手動マーカー追加
+        </button>
+      )}
       <p>{candidates.length}件。候補の選択・移動では確定境界を変更しません。</p>
       <ol>
         {candidates
