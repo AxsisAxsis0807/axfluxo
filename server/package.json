@@ -17,7 +17,9 @@
     "build:render": "esbuild worker/render/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/render.mjs",
     "render": "node ../work/video-server/render.mjs",
     "build:deletion": "esbuild worker/deletion/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/deletion.mjs",
-    "build:notifications": "esbuild worker/notifications/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/notifications.mjs"
+    "build:notifications": "esbuild worker/notifications/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/notifications.mjs",
+    "build:worker": "esbuild worker/runtime/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/worker.mjs",
+    "worker": "node ../work/video-server/worker.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1161.0",

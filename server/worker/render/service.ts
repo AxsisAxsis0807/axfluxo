@@ -22,7 +22,7 @@ import {
 } from "../../../src/domain/video/fnf-showcase";
 import { prepareFnf, encodeFnfSegment } from "../templates/fnf-showcase/render";
 import { renderPlan, RENDER_VERSION } from "./plan";
-import { probe } from "./process";
+import { probe, mediaProcess } from "./process";
 import { encodeSegment, assemble, type Input } from "./encode";
 import { validateVideo } from "../validation/output";
 import { download, storeObject, type RenderStorage } from "./objects";
@@ -58,6 +58,7 @@ export async function executeRender(
   storage: RenderStorage,
   c: Claim,
   limits: RenderLimits,
+  signal?: AbortSignal,
 ) {
   let dir: string;
   try {
@@ -68,6 +69,9 @@ export async function executeRender(
     return { state: "stopped" as const, code };
   }
   const stop = new AbortController();
+  const relay = () => stop.abort();
+  signal?.addEventListener("abort", relay, { once: true });
+  if (signal?.aborted) stop.abort();
   let active = true,
     beating = false,
     stopCode: RenderError | undefined;
@@ -95,6 +99,7 @@ export async function executeRender(
       });
   }, 15000);
   try {
+    stop.signal.throwIfAborted();
     if (storage.renderNamespace === "outputs-v1")
       await fenced(db, c, async (sql) => {
         const minimum = Number(
@@ -115,23 +120,10 @@ export async function executeRender(
       ? projectPlan(c.project, c.snapshot, limits.segmentFrames)
       : renderPlan(c.snapshot, c.rangeIndex, c.mode, limits.segmentFrames);
     // Encoder build changes invalidate checkpoints. Bounded textual ffmpeg version is part of plan.
-    const { execFile } = await import("node:child_process");
-    const version = await new Promise<string>((resolve, reject) =>
-      execFile(
-        "ffmpeg",
-        ["-version"],
-        {
-          maxBuffer: 65536,
-          env: {
-            PATH: process.env.PATH ?? "/usr/bin:/bin",
-            LANG: "C",
-            NODE_ENV: "production",
-          },
-        },
-        (err, out) =>
-          err ? reject(new RenderError("INPUT_UNSUPPORTED")) : resolve(out),
-      ),
-    );
+    const version = await mediaProcess("ffmpeg", ["-version"], {
+      signal: stop.signal,
+      timeoutMs: 30000,
+    });
     plan.hash = digest({
       plan: plan.hash,
       version: RENDER_VERSION,
@@ -339,6 +331,7 @@ export async function executeRender(
       { ...common, kind: "output" },
       stop.signal,
     );
+    stop.signal.throwIfAborted();
     const output = await publish(
       db,
       c,
@@ -361,12 +354,15 @@ export async function executeRender(
     );
     return { state: "succeeded" as const, output };
   } catch (error) {
-    let code = stopCode?.code ?? codeOf(error);
+    let code = signal?.aborted
+      ? ("LEASE_LOST" as const)
+      : (stopCode?.code ?? codeOf(error));
     if ((await memoryKills()) > oomBefore) code = "OUT_OF_MEMORY";
     if (code !== "LEASE_LOST")
       await finishFailure(db, c, code).catch(() => undefined);
     return { state: "stopped" as const, code };
   } finally {
+    signal?.removeEventListener("abort", relay);
     active = false;
     clearInterval(timer);
     stop.abort();

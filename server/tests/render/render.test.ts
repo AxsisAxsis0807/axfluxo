@@ -368,6 +368,21 @@ it("renders, validates, survives upload failure and reuses hash-verified video c
     )
   ).rows;
   expect(segments).toHaveLength(2);
+  // Phase 1 shutdown never reclassifies an interrupted execution as success,
+  // and must leave already committed checkpoint objects available.
+  const shutdown = new AbortController();
+  shutdown.abort();
+  expect(
+    await executeRender(worker(), storage, c, limits(), shutdown.signal),
+  ).toMatchObject({ state: "stopped", code: "LEASE_LOST" });
+  expect(
+    (
+      await engine.query(
+        "SELECT id FROM axfluxo_video.render_objects WHERE job_id=$1 AND kind='segment' AND ready",
+        [c.job],
+      )
+    ).rows,
+  ).toHaveLength(2);
   expect(
     (
       await engine.query(

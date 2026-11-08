@@ -22,7 +22,9 @@ export function cloudConfiguration(env: Record<string, string | undefined>) {
     previewUnitsPerSecond: env.CLOUD_PREVIEW_UNITS_PER_SECOND
       ? Number(env.CLOUD_PREVIEW_UNITS_PER_SECOND)
       : undefined,
-    previewEnabled: () => env.CLOUD_PREVIEW_ENABLED === "true",
-    uploadsEnabled: () => env.CLOUD_UPLOADS_ENABLED === "true",
+    previewEnabled: () =>
+      Boolean(original) && env.CLOUD_PREVIEW_ENABLED === "true",
+    uploadsEnabled: () =>
+      Boolean(original) && env.CLOUD_UPLOADS_ENABLED === "true",
   };
 }

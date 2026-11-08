@@ -20,9 +20,12 @@ export function postgresDatabase(
     ].includes(role)
   )
     throw Error("Invalid role");
+  const max = config.max ?? (role === "axfluxo_video_api" ? 2 : 1);
+  if (!Number.isInteger(max) || max < 1 || max > 10)
+    throw Error("Invalid database pool maximum");
   const pool = new Pool({
     ...config,
-    max: 10,
+    max,
     connectionTimeoutMillis: 5000,
     statement_timeout: 10000,
     idle_in_transaction_session_timeout: 10000,

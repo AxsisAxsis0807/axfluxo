@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnMedia as spawn } from "../runtime/process";
 import { isAbsolute } from "node:path";
 import { RenderError } from "../jobs/errors";
 export function localPath(path: string) {
@@ -41,11 +41,12 @@ export async function mediaProcess(
       line = "",
       stderr = "",
       timed = false;
+    let failure: unknown;
     const timer = setTimeout(() => {
       timed = true;
       child.kill("SIGKILL");
     }, options.timeoutMs ?? 86_400_000);
-    child.stdout.on("data", (b: Buffer) => {
+    child.stdout!.on("data", (b: Buffer) => {
       if (options.chunk) {
         options.chunk(b);
         return;
@@ -58,21 +59,21 @@ export async function mediaProcess(
           for (const l of lines) options.line(l);
         } catch (e) {
           child.kill("SIGKILL");
-          reject(e);
+          failure = e;
         }
         if (line.length > 65536) {
           child.kill("SIGKILL");
-          reject(new RenderError("VALIDATION_FAILED"));
+          failure = new RenderError("VALIDATION_FAILED");
         }
       } else {
         text += b.toString();
         if (text.length > 1024 * 1024) {
           child.kill("SIGKILL");
-          reject(new RenderError("VALIDATION_FAILED"));
+          failure = new RenderError("VALIDATION_FAILED");
         }
       }
     });
-    child.stderr.on("data", (b: Buffer) => {
+    child.stderr!.on("data", (b: Buffer) => {
       stderr = (stderr + b.toString()).slice(-16384);
     });
     child.on("error", () => {
@@ -85,6 +86,7 @@ export async function mediaProcess(
     });
     child.on("close", (code, signal) => {
       clearTimeout(timer);
+      if (failure) return reject(failure);
       if (options.signal?.aborted) return reject(new RenderError("LEASE_LOST"));
       if (timed) return reject(new RenderError("PROCESS_TIMEOUT"));
       if (code !== 0)

@@ -14,6 +14,7 @@ export async function verifyUpload(
   id: string,
   signal?: AbortSignal,
 ): Promise<boolean> {
+  signal?.throwIfAborted();
   const claim = await service.claim(owner, id, ["verifying"]);
   if (!claim) return false;
   const dir = await mkdtemp(join(tmpdir(), "axfluxo-probe-")),
@@ -61,7 +62,9 @@ export async function verifyUpload(
       claim.row.declared_mime,
       signal,
     );
+    signal?.throwIfAborted();
     await scoped(service.db, owner, async (sql) => {
+      signal?.throwIfAborted();
       const row = await sessionRow(sql, owner, id);
       if (row.lease_token !== claim.token || row.state !== "verifying")
         throw new ApiError(409, "UPLOAD_BUSY");

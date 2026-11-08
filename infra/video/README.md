@@ -2,7 +2,7 @@
 
 これらはreview用です。cloud/DB/cluster/bucketを作成せず、migrationやdeployも行いません。
 
-DockerfileはNode 24.19.0とDebianのffmpeg/libx264/zscale/tonemapを使用。秘密をimageへコピーしません。managed環境では既存proxyとCAを維持し、buildに`--secret id=proxy_ca,src=/etc/ssl/certs/ca-certificates.crt`等のcombined CA bundleを渡してください。Docker認証設定は変更しません。通常の非proxy環境でもsecretは信頼するsystem CA bundleを渡せます。配布時にはbase image/ffmpegの対応source・licenseを確認してください（Debian package copyrightはimage内`/usr/share/doc/ffmpeg/copyright`）。この作業でimageの公開はしていません。
+DockerfileはNode 24.19.0とDebianのffmpeg/libx264/zscale/tonemapを使用。秘密をimageへコピーしません。managed環境では既存proxyとCAを維持し、buildに`--secret id=proxy_ca,src=/etc/ssl/certs/ca-certificates.crt`等のcombined CA bundleを渡してください。Docker認証設定は変更しません。通常の非proxy環境ではsecretなしでsystem CAを使用します。配布時にはbase image/ffmpegの対応source・licenseを確認してください（Debian package copyrightはimage内`/usr/share/doc/ffmpeg/copyright`）。この作業でimageの公開はしていません。
 
 Composeは初期並列1、CPU2/RAM4GiB/PID128、非root、capなし、readonly、diskは既存seek可能bind mount、restart=no、内部networkのみ。既定flagはOFF。diskはjob/checkpoint復帰調査のため保持し、tmpfsをmedia diskに使わないでください。ホストdiskのsizeを自動変更する機能はありません。
 
@@ -18,3 +18,40 @@ V7の[保存・削除・通知](../../docs/video/v7.md)は専用output bucketと
 `output-workers.compose.yaml`は既定OFFのレビュー用で、DB login、bucket、VAPIDを作成しません。
 削除workerに原本bucket権限を与えず、通知workerにobject storage資格情報を与えないでください。
 更新Dockerfileはrender/deletion/notificationsの3entrypointをbundleします。V7でimageの公開・deployはしません。
+
+## Phase 1: portable API and sequential worker (local validation only)
+
+No migration, provisioning or deployment runs at startup. The existing render image
+(default target) and compose resource settings remain available. New targets:
+
+```
+docker build --target api -f infra/video/Dockerfile -t axfluxo-video-api .
+docker build --target worker -f infra/video/Dockerfile -t axfluxo-video-worker .
+```
+
+The build context is the repository root. `proxy_ca` is optional. In a proxy
+with a private CA, supply `--secret id=proxy_ca,src=<combined-CA-bundle>`; npm
+uses the mounted additional trust and apt uses that bundle. Verification stays
+on. Build-only CA files are not copied to the runtime. API/worker targets use
+`ENTRYPOINT ["node"]`, with `/app/api.mjs` or `/app/worker.mjs` as CMD. For an
+individual worker, replace CMD with `/app/probe.mjs`, `/app/derivatives.mjs`,
+`/app/render.mjs`, `/app/deletion.mjs` or `/app/notifications.mjs`.
+The legacy default target retains `ENTRYPOINT ["node","/app/render.mjs"]`.
+Do not append an API filename to that legacy entrypoint.
+
+`blitz/compose.yaml` is an isolated low-resource experiment, **not** evidence
+that blitz.cloud accepts this configuration or can render 1080p60. API and
+worker have no shared volume; only worker owns `/work`. The worker sets
+`TMPDIR=/work` so verification/preview media is not staged in the small `/tmp`
+tmpfs. The mounted folder must be writable by UID 1000. All work/admission
+flags default OFF. It does not provision a database or inject secrets. The
+example deliberately fails API startup until authentication, origin and test DB
+settings are provided. It has no external route. A real storage adapter is still
+required to enable work; no disk storage or internal upload listener is implemented.
+
+New API/worker targets cap the JS heap at 128 MiB as an experimental setting,
+not a measured total memory requirement. Native Canvas, FFmpeg, buffers and
+process overhead also consume RAM. The old render heap remains 512 MiB. The
+worker example has a 512 MiB container limit; production feasibility, elapsed
+time and memory at 1080p60 require measurement. No output profile was changed.
+The 25-second example stop grace is a local choice, not a provider guarantee.
