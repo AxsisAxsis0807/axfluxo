@@ -1,6 +1,6 @@
 // Standalone Node service. Never imported by src/ or by a Next route.
-import { createServer } from "node:http";
-import { Readable } from "node:stream";
+import { createHttpServer, httpConfiguration } from "./http";
+import { isEntrypoint, runService } from "../runtime/lifecycle";
 import { postgresDatabase } from "../db/postgres";
 import { createVideoApi } from "./app";
 import { supabaseVerifier } from "./auth";
@@ -11,96 +11,86 @@ import { projectsRouter } from "./projects/router";
 import { renderRouter } from "./render";
 import { outputsRouter, outputAvailable } from "./outputs/router";
 import { serverConfig } from "./config";
-function start() {
-  const config = serverConfig(process.env);
+import { ConfigurationError } from "../runtime/config";
+export async function startApi(env = process.env) {
+  const config = serverConfig(env);
+  const cloud = cloudConfiguration(env);
+  const verify = supabaseVerifier(config.issuer, config.audience);
   const db = postgresDatabase({
     connectionString: config.databaseUrl,
+    max: config.poolMax,
     ssl: config.production ? { rejectUnauthorized: true } : undefined,
   });
-  const cloud = cloudConfiguration(process.env);
-  const handler = createVideoApi({
-    ...config,
-    db,
-    outputs:
-      process.env.VIDEO_OUTPUTS_ENABLED === "true"
-        ? outputsRouter({
-            db,
-            storage: cloud.storage,
-            deletionEnabled: () =>
-              process.env.VIDEO_DELETE_ACCEPTING === "true",
-            pushEnabled: () => process.env.VIDEO_PUSH_ENABLED === "true",
-            vapidPublicKey: process.env.VIDEO_VAPID_PUBLIC_KEY,
-          })
-        : undefined,
-    cloud: cloudRouter({ db, ...cloud }),
-    fnf: fnfRouter({
+  try {
+    const accepting = () => Boolean(cloud.storage) && config.admissionEnabled();
+    const handler = createVideoApi({
+      ...config,
+      admissionEnabled: accepting,
       db,
-      enabled: () =>
-        config.admissionEnabled() && process.env.VIDEO_FNF_ACCEPTING === "true",
-      unitsPerFrame: config.unitsPerFrame,
-    }),
-    projects: projectsRouter({
-      db,
-      enabled: config.admissionEnabled,
-      unitsPerFrame: config.unitsPerFrame,
-    }),
-    render: renderRouter({
-      accessGuard:
-        process.env.VIDEO_OUTPUTS_ENABLED === "true"
-          ? outputAvailable
+      outputs:
+        env.VIDEO_OUTPUTS_ENABLED === "true"
+          ? outputsRouter({
+              db,
+              storage: cloud.storage,
+              deletionEnabled: () => env.VIDEO_DELETE_ACCEPTING === "true",
+              pushEnabled: () => env.VIDEO_PUSH_ENABLED === "true",
+              vapidPublicKey: env.VIDEO_VAPID_PUBLIC_KEY,
+            })
           : undefined,
-      db,
-      storage: cloud.storage,
-      enabled: config.admissionEnabled,
-      unitsPerFrame: config.unitsPerFrame,
-    }),
-    verify: supabaseVerifier(config.issuer, config.audience),
-  });
-  const server = createServer(async (incoming, outgoing) => {
-    try {
-      const headers = new Headers();
-      for (const [name, value] of Object.entries(incoming.headers))
-        if (value !== undefined)
-          headers.set(name, Array.isArray(value) ? value.join(",") : value);
-      const controller = new AbortController();
-      incoming.once("aborted", () => controller.abort());
-      const init: RequestInit & { duplex?: "half" } = {
-        method: incoming.method,
-        headers,
-        signal: controller.signal,
-      };
-      if (!["GET", "HEAD"].includes(incoming.method ?? "GET")) {
-        init.body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
-        init.duplex = "half";
-      }
-      const response = await handler(
-        new Request(`http://video-api.invalid${incoming.url}`, init),
-      );
-      outgoing.writeHead(response.status, Object.fromEntries(response.headers));
-      outgoing.end(await response.text());
-    } catch {
-      outgoing.writeHead(500, {
-        "content-type": "application/json",
-        "cache-control": "no-store",
-      });
-      outgoing.end('{"error":{"code":"INTERNAL_ERROR"}}');
-    }
-  });
-  server.requestTimeout = 15000;
-  server.headersTimeout = 10000;
-  server.listen(config.port, "127.0.0.1");
-  for (const signal of ["SIGTERM", "SIGINT"] as const)
-    process.once(signal, () => {
-      server.close(() => {
-        void db.close();
+      cloud: cloudRouter({ db, ...cloud }),
+      fnf: fnfRouter({
+        db,
+        enabled: () => accepting() && env.VIDEO_FNF_ACCEPTING === "true",
+        unitsPerFrame: config.unitsPerFrame,
+      }),
+      projects: projectsRouter({
+        db,
+        enabled: accepting,
+        unitsPerFrame: config.unitsPerFrame,
+      }),
+      render: renderRouter({
+        accessGuard:
+          env.VIDEO_OUTPUTS_ENABLED === "true" ? outputAvailable : undefined,
+        db,
+        storage: cloud.storage,
+        enabled: accepting,
+        unitsPerFrame: config.unitsPerFrame,
+      }),
+      verify,
+    });
+    const bridge = createHttpServer(handler, httpConfiguration(env));
+    await new Promise<void>((resolve, reject) => {
+      bridge.server.once("error", reject);
+      bridge.server.listen(config.port, config.host, () => {
+        bridge.server.removeListener("error", reject);
+        resolve();
       });
     });
+    return {
+      server: bridge.server,
+      async close() {
+        bridge.abort();
+        await Promise.all([
+          new Promise<void>((resolve) => bridge.server.close(() => resolve())),
+          db.close(),
+        ]);
+      },
+    };
+  } catch {
+    await db.close();
+    throw Error("API startup configuration failed");
+  }
 }
-try {
-  start();
-} catch {
-  process.stderr.write(
-    "Video API startup failed. Verify server configuration.\n",
-  );
-  process.exitCode = 1;
+if (isEntrypoint(import.meta.url, ["api.mjs", "api/main.ts"])) {
+  void runService(async () => {
+    const api = await startApi();
+    return () => api.close();
+  }, process.env).catch((error: unknown) => {
+    if (error instanceof ConfigurationError)
+      process.stderr.write(error.message + "\n");
+    process.stderr.write(
+      "Video API startup/operation failed. Verify server configuration.\n",
+    );
+    process.exitCode = 1;
+  });
 }

@@ -1,7 +1,12 @@
 import type { Database } from "../../db/database";
 import { requireMembership } from "../../api/jobs";
 export interface OutputEraser {
-  erase(key: string, size: number, hash: string): Promise<void>;
+  erase(
+    key: string,
+    size: number,
+    hash: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
 }
 /** Persistent deleting state freezes new references before network IO. HEAD 404 recovers lost DELETE responses.
  * Temporary objects are retained conservatively: no unproven absence-of-pins garbage collection. */
@@ -9,8 +14,9 @@ export async function deleteOne(
   db: Database,
   storage: OutputEraser,
   enabled: () => boolean,
+  signal?: AbortSignal,
 ) {
-  if (!enabled()) return false;
+  if (!enabled() || signal?.aborted) return false;
   const target = await db.transaction(async (sql) => {
     const candidate = (
       await sql.query(
@@ -68,7 +74,8 @@ export async function deleteOne(
     };
   });
   if (!target) return false;
-  await storage.erase(target.key, target.size, target.hash);
+  signal?.throwIfAborted();
+  await storage.erase(target.key, target.size, target.hash, signal);
   return db.transaction(async (sql) => {
     await sql.query("SELECT set_config('axfluxo.owner_id',$1,true)", [
       target.owner,

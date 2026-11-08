@@ -1,0 +1,55 @@
+# Isolated low-resource experiment, NOT a confirmed blitz.cloud deployment recipe.
+# No shared API/worker volume; no production credentials; all cloud admission OFF.
+services:
+  api:
+    build:
+      context: ../../..
+      dockerfile: infra/video/Dockerfile
+      target: api
+    ports: ["127.0.0.1:3100:3100"]
+    environment:
+      PORT: "3100"
+      VIDEO_ACCEPTING: "false"
+      CLOUD_UPLOADS_ENABLED: "false"
+      CLOUD_PREVIEW_ENABLED: "false"
+      VIDEO_API_POOL_MAX: "2"
+      # JWT issuer/audience, allowed origins and test DB must be explicitly supplied.
+    mem_limit: 256m
+    cpus: 0.5
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 25s
+    restart: "no"
+    networks: [isolated]
+  worker:
+    build:
+      context: ../../..
+      dockerfile: infra/video/Dockerfile
+      target: worker
+    environment:
+      VIDEO_WORKER_ENABLED: "false"
+      VIDEO_RENDER_ENABLED: "false"
+      VIDEO_PROBE_ENABLED: "false"
+      CLOUD_PREVIEW_ENABLED: "false"
+      VIDEO_DELETE_WORKER_ENABLED: "false"
+      VIDEO_PUSH_ENABLED: "false"
+      VIDEO_WORKER_POOL_MAX: "1"
+      VIDEO_RENDER_MAX_WORK_BYTES: "1073741824"
+      VIDEO_RENDER_MIN_FREE_BYTES: "67108864"
+    volumes: ["worker-data:/work"]
+    tmpfs: ["/tmp:size=64m,noexec,nosuid,nodev"]
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 128
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 25s
+    restart: "no"
+    networks: [isolated]
+volumes:
+  worker-data:
+networks:
+  isolated:
+    internal: true

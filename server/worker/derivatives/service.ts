@@ -38,7 +38,9 @@ export async function generatePreview(
   storage: DerivedStorage,
   owner: string,
   version: string,
+  signal?: AbortSignal,
 ) {
+  signal?.throwIfAborted();
   const token = randomUUID();
   const job = await scoped(db, owner, async (sql) => {
     const r = await sql.query(
@@ -51,6 +53,9 @@ export async function generatePreview(
   const dir = await mkdtemp(join(tmpdir(), "axfluxo-preview-")),
     source = join(dir, "original"),
     stop = new AbortController();
+  const relay = () => stop.abort();
+  signal?.addEventListener("abort", relay, { once: true });
+  if (signal?.aborted) stop.abort();
   const timer = setInterval(() => {
     void scoped(db, owner, (sql) =>
       sql.query(
@@ -140,6 +145,7 @@ export async function generatePreview(
       });
     }
     for (const file of plan.files) {
+      stop.signal.throwIfAborted();
       const local = measured.find((f) => f.kind === file.kind)!;
       if (local.hash !== file.hash || local.size !== file.size)
         throw new Error("PREVIEW_FAILED");
@@ -155,7 +161,9 @@ export async function generatePreview(
           file.hash,
         );
     }
+    stop.signal.throwIfAborted();
     await scoped(db, owner, async (sql) => {
+      stop.signal.throwIfAborted();
       const r = await sql.query(
         "SELECT * FROM axfluxo_video.media_preview_jobs WHERE owner_id=$1 AND version_id=$2 AND lease_token=$3 FOR UPDATE",
         [owner, version, token],
@@ -181,6 +189,15 @@ export async function generatePreview(
     });
     return true;
   } catch (error) {
+    if (signal?.aborted) {
+      await scoped(db, owner, (sql) =>
+        sql.query(
+          "UPDATE axfluxo_video.media_preview_jobs SET state='queued',lease_token=NULL,lease_until=NULL WHERE owner_id=$1 AND version_id=$2 AND lease_token=$3",
+          [owner, version, token],
+        ),
+      ).catch(() => undefined);
+      throw error;
+    }
     await scoped(db, owner, (sql) =>
       sql.query(
         "UPDATE axfluxo_video.media_preview_jobs SET state='failed',error_code=$4,lease_token=NULL,lease_until=NULL WHERE owner_id=$1 AND version_id=$2 AND lease_token=$3",
@@ -196,6 +213,7 @@ export async function generatePreview(
     ).catch(() => undefined);
     return false;
   } finally {
+    signal?.removeEventListener("abort", relay);
     clearInterval(timer);
     stop.abort();
     await rm(dir, { recursive: true, force: true });

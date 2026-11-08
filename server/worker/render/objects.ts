@@ -118,7 +118,9 @@ export async function storeObject(
   }
   if (size !== p.size || h.digest("hex") !== p.hash)
     throw new RenderError("VALIDATION_FAILED");
+  signal?.throwIfAborted();
   await fenced(db, c, async (sql) => {
+    signal?.throwIfAborted();
     await sql.query(
       "UPDATE axfluxo_video.render_objects SET ready=true WHERE owner_id=$1 AND id=$2 AND NOT ready",
       [c.owner, id],

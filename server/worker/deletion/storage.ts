@@ -40,7 +40,7 @@ export function deletionStorage(
     },
   });
   return {
-    async erase(key, size, hash) {
+    async erase(key, size, hash, signal) {
       if (
         !/^render-outputs\/[a-f0-9-]{36}\/[a-f0-9-]{36}\/[a-f0-9-]{36}\.mp4$/.test(
           key,
@@ -50,7 +50,8 @@ export function deletionStorage(
       const missing = (e: unknown) =>
         (e as { $metadata?: { httpStatusCode?: number } })?.$metadata
           ?.httpStatusCode === 404;
-      const abortSignal = AbortSignal.timeout(30 * 60 * 1000);
+      const timeout = AbortSignal.timeout(30 * 60 * 1000);
+      const abortSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
       let head;
       try {
         head = await client.send(

@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnMedia as spawn } from "../runtime/process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 export async function ffmpeg(args: string[], signal?: AbortSignal) {
@@ -18,7 +18,7 @@ export async function ffmpeg(args: string[], signal?: AbortSignal) {
     );
     child.on("error", reject);
     child.on("close", (code) => {
-      if (code === 0) resolve();
+      if (code === 0 && !signal?.aborted) resolve();
       else reject(new Error("PREVIEW_FAILED"));
     });
   });
@@ -32,7 +32,7 @@ export type StreamMetadata = {
   height?: number;
   side_data_list?: { rotation?: number }[];
 };
-export async function inspect(path: string) {
+export async function inspect(path: string, signal?: AbortSignal) {
   const text = await new Promise<string>((resolve, reject) => {
     const child = spawn(
       "ffprobe",
@@ -49,6 +49,7 @@ export async function inspect(path: string) {
       ],
       {
         stdio: ["ignore", "pipe", "ignore"],
+        signal,
         env: {
           PATH: process.env.PATH ?? "/usr/bin:/bin",
           LANG: "C",
@@ -59,16 +60,15 @@ export async function inspect(path: string) {
     let result = "";
     const timeout = setTimeout(() => {
       child.kill();
-      reject(new Error("PREVIEW_FAILED"));
     }, 30000);
-    child.stdout.on("data", (b) => {
+    child.stdout!.on("data", (b) => {
       result += b;
       if (result.length > 262144) child.kill();
     });
     child.on("error", reject);
     child.on("close", (code) => {
       clearTimeout(timeout);
-      if (code === 0) resolve(result);
+      if (code === 0 && !signal?.aborted) resolve(result);
       else reject(new Error("PREVIEW_FAILED"));
     });
   });
@@ -92,7 +92,7 @@ export async function generateMedia(
   reference: { id: string; hash: string; durationUs: number },
   signal?: AbortSignal,
 ) {
-  const original = await inspect(source),
+  const original = await inspect(source, signal),
     video = original.streams.find((s) => s.codec_type === "video");
   const audioOnly = !video;
   if (audioOnly && !original.streams.some((s) => s.codec_type === "audio"))
@@ -155,7 +155,7 @@ export async function generateMedia(
     ["-i", proxy, "-frames:v", "1", "-vf", "scale=320:-2", "-y", thumbnail],
     signal,
   );
-  const output = await inspect(proxy),
+  const output = await inspect(proxy, signal),
     v = output.streams.find((s) => s.codec_type === "video")!;
   const sourceFirstPtsUs = decimalUs(
       original.format.start_time ?? video?.start_time ?? "0",
@@ -204,7 +204,7 @@ export async function generateMedia(
         },
       );
       let carry: Buffer<ArrayBufferLike> = Buffer.alloc(0);
-      child.stdout.on("data", (chunk: Buffer) => {
+      child.stdout!.on("data", (chunk: Buffer) => {
         const data = carry.length ? Buffer.concat([carry, chunk]) : chunk;
         for (let i = 0; i + 1 < data.length; i += 2) {
           const value = data.readInt16LE(i) / 32768;
@@ -219,8 +219,7 @@ export async function generateMedia(
               mins[l] = 1;
               maxs[l] = -1;
               if (peaks[l].length > 200000) {
-                child.kill();
-                reject(new Error("PREVIEW_FAILED"));
+                child.kill("SIGKILL");
               }
             }
           }
@@ -231,7 +230,7 @@ export async function generateMedia(
       });
       child.on("error", reject);
       child.on("close", (code) => {
-        if (code === 0) resolve();
+        if (code === 0 && !signal?.aborted) resolve();
         else reject(new Error("PREVIEW_FAILED"));
       });
     });

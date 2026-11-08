@@ -41,3 +41,61 @@ describe("server-only safe configuration", () => {
     ).toThrow();
   });
 });
+
+it("prioritizes PORT and preserves VIDEO_API_PORT and explicit local bind", () => {
+  expect(serverConfig(env).port).toBe(3100);
+  expect(serverConfig(env).host).toBe("0.0.0.0");
+  expect(serverConfig({ ...env, VIDEO_API_PORT: "3200" }).port).toBe(3200);
+  expect(
+    serverConfig({
+      ...env,
+      PORT: "3300",
+      VIDEO_API_PORT: "3200",
+      VIDEO_API_HOST: "127.0.0.1",
+    }),
+  ).toMatchObject({ port: 3300, host: "127.0.0.1" });
+  for (const value of ["", " ", "0", "-1", "65536", "1.5", "Infinity", "1e3"])
+    expect(() => serverConfig({ ...env, PORT: value })).toThrow();
+});
+it("uses DATABASE_URL fallback and rejects conflicting or unsafe connection values privately", () => {
+  expect(
+    serverConfig({
+      ...env,
+      VIDEO_DATABASE_URL: undefined,
+      DATABASE_URL: env.VIDEO_DATABASE_URL,
+    }).databaseUrl,
+  ).toBe(env.VIDEO_DATABASE_URL);
+  expect(() =>
+    serverConfig({
+      ...env,
+      DATABASE_URL: env.VIDEO_DATABASE_URL.replace("postgres:", "postgresql:"),
+    }),
+  ).not.toThrow();
+  for (const url of [
+    "postgres://other:private-secret@localhost/video",
+    "postgres://user:private-secret@localhost/video?sslmode=disable",
+    "postgres:///video",
+    "postgres://localhost/",
+  ]) {
+    try {
+      serverConfig({ ...env, DATABASE_URL: url });
+      expect.fail();
+    } catch (e) {
+      expect(String(e)).not.toMatch(
+        /private-secret|private-password|postgres:\/\//,
+      );
+    }
+  }
+});
+it("validates small finite pool settings", () => {
+  expect(serverConfig(env).poolMax).toBe(2);
+  for (const value of ["0", "11", "Infinity", "1.5"])
+    expect(() => serverConfig({ ...env, VIDEO_API_POOL_MAX: value })).toThrow();
+});
+
+it("requires shutdown grace to exceed child termination grace", () => {
+  expect(() => serverConfig({ ...env, VIDEO_SHUTDOWN_MS: "1000" })).toThrow();
+  expect(serverConfig({ ...env, VIDEO_SHUTDOWN_MS: "3000" }).shutdownMs).toBe(
+    3000,
+  );
+});

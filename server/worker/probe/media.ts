@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawnMedia as spawn } from "../runtime/process";
 import { open } from "node:fs/promises";
 import { sourceGeometry } from "../validation/geometry";
 import { LIMITS } from "../../../src/config/limits";
@@ -86,13 +86,11 @@ export async function probeMedia(
     let output = "";
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
-      reject(new ApiError(422, "CORRUPT_MEDIA"));
     }, 30000);
-    child.stdout.on("data", (chunk) => {
+    child.stdout!.on("data", (chunk) => {
       output += chunk.toString();
       if (output.length > 256 * 1024) {
         child.kill("SIGKILL");
-        reject(new ApiError(422, "CORRUPT_MEDIA"));
       }
     });
     child.on("error", () => {
@@ -101,7 +99,8 @@ export async function probeMedia(
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      if (code === 0) resolve(output);
+      if (signal?.aborted) reject(new ApiError(503, "STORAGE_UNAVAILABLE"));
+      else if (code === 0) resolve(output);
       else reject(new ApiError(422, "CORRUPT_MEDIA"));
     });
   });
