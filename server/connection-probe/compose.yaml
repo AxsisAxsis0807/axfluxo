@@ -1,0 +1,50 @@
+# Probe-only project. Not the AxFluxo production compose file.
+# Provider must confirm that these are parts of ONE app, not two separate apps.
+x-env: &env
+  PROBE_RUN_ID: ${PROBE_RUN_ID:?Set a new UUID for this isolated run}
+  PROBE_EXPIRES_AT: ${PROBE_EXPIRES_AT:?Absolute ISO time within next 30 minutes}
+  PROBE_TOKEN: ${PROBE_TOKEN:?Private probe UI bearer token}
+  PROBE_INTERNAL_KEY: ${PROBE_INTERNAL_KEY:?Private internal HMAC key}
+  PROBE_ROOT: /probe-data
+  # Let a provider inject DATABASE_URL instead if appropriate. Do not point at AxFluxo's DB.
+  PROBE_DATABASE_URL: ${PROBE_DATABASE_URL:?Dedicated axfluxo-probe-* database only}
+  PROBE_DB_TLS: "true"
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: server/connection-probe/Dockerfile.api
+    environment:
+      <<: *env
+      PORT: "8080"
+      PROBE_PUBLIC_ORIGIN: ${PROBE_PUBLIC_ORIGIN:?Exact HTTPS probe origin}
+      PROBE_WORKER_ORIGIN: ${PROBE_WORKER_ORIGIN:-http://worker:8091}
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: ["probe-data:/probe-data"]
+    read_only: true
+    mem_limit: 128m
+    pids_limit: 32
+    stop_grace_period: 15s
+    restart: "no"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+  worker:
+    build:
+      context: ../..
+      dockerfile: server/connection-probe/Dockerfile.worker
+    environment:
+      <<: *env
+      PROBE_INTERNAL_PORT: "8091"
+    expose: ["8091"]
+    volumes: ["probe-data:/probe-data"]
+    read_only: true
+    mem_limit: 128m
+    pids_limit: 32
+    stop_grace_period: 15s
+    restart: "no"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+volumes:
+  probe-data:
+  # The setup command is NOT part of the normal startup. For a provider, select
+  # the documented one-shot predeploy step and disable it after the first setup.

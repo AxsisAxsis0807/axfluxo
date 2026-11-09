@@ -1,0 +1,15 @@
+# Preparation template only. No live credentials have been generated.
+# Set on the new probe app after execution approval; do not commit an actual .env.
+PROBE_RUN_ID=<new UUID for this run>
+PROBE_EXPIRES_AT=<absolute ISO UTC timestamp no more than 30 minutes ahead>
+PROBE_TOKEN=<private random UI bearer token, at least 32 characters>
+PROBE_INTERNAL_KEY=<different private random HMAC key, at least 32 characters>
+PROBE_DATABASE_URL=<private URL of a new dedicated axfluxo-probe-* database>
+PROBE_DB_TLS=true
+PROBE_ROOT=/probe-data
+# API only. The api Dockerfile already sets PROBE_ROLE=api.
+PROBE_PUBLIC_ORIGIN=<exact HTTPS API origin>
+PROBE_WORKER_ORIGIN=http://worker:8091
+# Worker only. The worker Dockerfile already sets PROBE_ROLE=worker.
+PROBE_INTERNAL_PORT=8091
+# Provider-injected PORT is used by API. Do not override it with a guessed value.
