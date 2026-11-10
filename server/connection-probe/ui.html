@@ -40,6 +40,11 @@
       type="password"
       autocomplete="off"
   /></label>
+  <button data-path="/v1/status" data-method="GET">
+    設定状態を確認（認証後）
+  </button>
+  <button data-path="/v1/setup">専用DBを一度だけ初期化</button>
+  <button data-path="/v1/start">30分の試験を一度だけ開始</button>
   <button data-path="/v1/share">1. 小さなファイルの共有試験を開始</button>
   <button data-path="/v1/report" data-method="GET">観測結果を手動更新</button>
   <button data-path="/v1/internal-http">2. 認証付き内部HTTPを試験</button>
@@ -50,6 +55,9 @@
   </p>
   <p>
     API再開後、この画面でtokenを再入力して「観測結果を手動更新」を押します。eventsの時刻とdashboardで確認したAPI停止区間を照合してください。JSONだけでAPI停止を証明したとは扱いません。
+  </p>
+  <p>
+    手動停止は自動sleepの合格証拠ではありません。開始期限はDB保存され、再起動・再押下でも延長されません。
   </p>
   <pre id="output" aria-live="polite">未実行</pre>
   <button id="download">現在表示中の結果をJSON保存</button>

@@ -3,7 +3,7 @@ FROM node:24.19.0-bookworm-slim
 WORKDIR /app
 COPY --chmod=644 server/connection-probe/package.json server/connection-probe/package-lock.json ./
 RUN --mount=type=secret,id=proxy_ca if [ -s /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; npm ci --omit=dev --ignore-scripts --cache /tmp/probe-npm && rm -rf /tmp/probe-npm
-COPY --chmod=644 server/connection-probe/core.mjs server/connection-probe/main.mjs server/connection-probe/ui.html server/connection-probe/cleanup.mjs server/connection-probe/admin.mjs server/connection-probe/setup.sql server/connection-probe/cleanup.sql ./
+COPY --chmod=644 server/connection-probe/lifecycle.mjs server/connection-probe/core.mjs server/connection-probe/main.mjs server/connection-probe/ui.html server/connection-probe/cleanup.mjs server/connection-probe/admin.mjs server/connection-probe/setup.sql server/connection-probe/cleanup.sql ./
 RUN mkdir /probe-data && chown node:node /probe-data && chmod 700 /probe-data
 ENV NODE_ENV=production PROBE_ROLE=worker
 USER node:node

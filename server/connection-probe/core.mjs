@@ -19,27 +19,33 @@ export function configuration(env) {
   const role = env.PROBE_ROLE;
   if (!["api", "worker"].includes(role) || !uuid.test(env.PROBE_RUN_ID ?? ""))
     throw Error("Invalid probe role/run ID");
-  const expires = Date.parse(env.PROBE_EXPIRES_AT ?? "");
-  if (!Number.isFinite(expires) || expires > Date.now() + 1800000)
-    throw Error("Set an absolute expiry no more than 30 minutes ahead");
+  const expires = Infinity; // The one-shot DB session determines the deadline.
   if (
     (env.PROBE_TOKEN ?? "").length < 32 ||
-    (env.PROBE_INTERNAL_KEY ?? "").length < 32
+    (env.PROBE_INTERNAL_KEY ?? "").length < 32 ||
+    equal(env.PROBE_TOKEN, env.PROBE_INTERNAL_KEY)
   )
     throw Error("Private probe credentials required");
   const root = env.PROBE_ROOT ?? "/probe-data";
   if (!isAbsolute(root) || root === "/" || root.includes(".."))
     throw Error("Dedicated probe root required");
-  const db = new URL(env.PROBE_DATABASE_URL ?? env.DATABASE_URL ?? "");
+  const db =
+    env.PROBE_DATABASE_URL || env.DATABASE_URL
+      ? new URL(env.PROBE_DATABASE_URL || env.DATABASE_URL)
+      : null;
+  const expectedDatabase = env.PROBE_DATABASE_NAME;
   if (
-    !["postgres:", "postgresql:"].includes(db.protocol) ||
-    !/^axfluxo[-_]probe[-_][a-z0-9_-]+$/.test(
-      decodeURIComponent(db.pathname.slice(1)),
-    ) ||
-    db.search ||
-    db.hash
+    db &&
+    (!["postgres:", "postgresql:"].includes(db.protocol) ||
+      db.search ||
+      db.hash)
   )
-    throw Error("Refusing non-probe database URL");
+    throw Error("Invalid database URL");
+  if (
+    expectedDatabase &&
+    (!db || decodeURIComponent(db.pathname.slice(1)) !== expectedDatabase)
+  )
+    throw Error("Database confirmation mismatch");
   const publicOrigin = env.PROBE_PUBLIC_ORIGIN
     ? new URL(env.PROBE_PUBLIC_ORIGIN)
     : null;
@@ -73,7 +79,7 @@ export function configuration(env) {
     env.PROBE_DB_TLS === "false" &&
     !(
       env.NODE_ENV === "test" &&
-      ["127.0.0.1", "localhost", "probe-db"].includes(db.hostname)
+      ["127.0.0.1", "localhost", "probe-db"].includes(db?.hostname)
     )
   )
     throw Error("Plaintext DB permitted only for an isolated local test");
@@ -84,7 +90,9 @@ export function configuration(env) {
     root,
     token: env.PROBE_TOKEN,
     internalKey: env.PROBE_INTERNAL_KEY,
-    databaseUrl: db.href,
+    databaseUrl: db?.href,
+    expectedDatabase,
+    dedicated: env.PROBE_DEDICATED_DATABASE === "new-empty-probe-only",
     workerOrigin,
     publicOrigin: publicOrigin?.origin,
     port,
@@ -110,7 +118,7 @@ export async function directory(root, run) {
   }
   return path;
 }
-export async function marker(config, role) {
+async function markerFile(config, role) {
   const path = join(await directory(config.root, config.run), `${role}.json`);
   const value = Buffer.from(
     JSON.stringify({ run: config.run, role, nonce: randomUUID() }),
@@ -128,7 +136,7 @@ export async function marker(config, role) {
   }
   return inspect(config, role);
 }
-export async function inspect(config, role) {
+async function inspectFile(config, role) {
   if (!["api", "worker"].includes(role)) throw Error("Invalid marker role");
   const path = join(await directory(config.root, config.run), `${role}.json`);
   try {
@@ -155,6 +163,17 @@ export async function inspect(config, role) {
     throw e;
   }
 }
+async function storage(operation, args) {
+  try {
+    return await operation(...args);
+  } catch {
+    const error = Error("STORAGE_UNAVAILABLE");
+    error.code = "PROBE_STORAGE_UNAVAILABLE";
+    throw error;
+  }
+}
+export const marker = (...args) => storage(markerFile, args);
+export const inspect = (...args) => storage(inspectFile, args);
 export function signature(key, run, time, nonce, data) {
   return createHmac("sha256", key)
     .update(`${run}\n${time}\n${nonce}\n${digest(data)}`)
@@ -181,13 +200,46 @@ export const tables = {
   run: "axfluxo_connection_probe.runs",
   event: "axfluxo_connection_probe.events",
 };
-export async function validateDatabase(db) {
+export async function validateDatabase(db, config) {
+  if (!config?.databaseUrl || !config.expectedDatabase || !config.dedicated)
+    throw Error("DB_CONFIRMATION_REQUIRED");
   const result = await db.query("SELECT current_database() AS name");
-  if (!/^axfluxo[-_]probe[-_][a-z0-9_-]+$/.test(result.rows[0]?.name ?? ""))
-    throw Error("Refusing non-probe database");
+  if (result.rows[0]?.name !== config.expectedDatabase)
+    throw Error("DB_IDENTITY_MISMATCH");
+}
+export async function session(db, config, begin = false) {
+  await validateDatabase(db, config);
+  const schema =
+    await db.query(`SELECT 1 FROM pg_namespace WHERE nspname='axfluxo_connection_probe'
+    AND pg_get_userbyid(nspowner)=current_user AND obj_description(oid,'pg_namespace')='axfluxo-probe-v2'`);
+  if (!schema.rows.length) throw Error("PROBE_SCHEMA_UNVERIFIED");
+  if (begin)
+    await db.query(
+      `UPDATE axfluxo_connection_probe.session
+    SET started_at=statement_timestamp(), expires_at=statement_timestamp()+interval '30 minutes'
+    WHERE singleton=true AND started_at IS NULL AND run_id=$1`,
+      [config.run],
+    );
+  const row = (
+    await db.query(
+      `SELECT run_id,expires_at FROM axfluxo_connection_probe.session WHERE singleton=true`,
+    )
+  ).rows[0];
+  if (!row || row.run_id !== config.run) throw Error("SESSION_ID_MISMATCH");
+  config.expires = row.expires_at
+    ? new Date(row.expires_at).getTime()
+    : Infinity;
+  return {
+    state: !row.expires_at
+      ? "ready"
+      : Date.now() >= config.expires
+        ? "expired"
+        : "active",
+    expiresAt: row.expires_at ?? null,
+  };
 }
 export async function armShare(db, config) {
-  await validateDatabase(db);
+  await validateDatabase(db, config);
   const file = await marker(config, "api");
   await db.query(
     `INSERT INTO ${tables.run}(id,expires_at,api_hash) VALUES($1,$2,$3) ON CONFLICT(id) DO NOTHING`,
@@ -279,7 +331,9 @@ export async function report(db, config) {
     run: config.run,
     role: config.role,
     apiBoot: config.boot,
-    expiresAt: new Date(config.expires).toISOString(),
+    expiresAt: Number.isFinite(config.expires)
+      ? new Date(config.expires).toISOString()
+      : null,
     row,
     apiFile,
     apiSawWorker,

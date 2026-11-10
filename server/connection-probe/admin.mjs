@@ -1,6 +1,7 @@
-// Explicit one-shot command. Never imported or run by the API/worker entrypoint.
+// Optional local CLI. The authenticated UI uses the same guarded setup.
 import { readFile } from "node:fs/promises";
 import { Pool } from "pg";
+import { setup } from "./lifecycle.mjs";
 import { configuration, validateDatabase } from "./core.mjs";
 const action = process.argv[2];
 if (!["--setup", "--drop-probe-schema"].includes(action))
@@ -15,15 +16,28 @@ try {
     query_timeout: 5000,
     ssl: config.dbTls ? { rejectUnauthorized: true } : false,
   });
-  await validateDatabase(db);
-  const sql = await readFile(
-    new URL(
-      action === "--setup" ? "./setup.sql" : "./cleanup.sql",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  await db.query(sql);
+  await validateDatabase(db, config);
+  if (action === "--setup") await setup(db, config);
+  else {
+    // The cleanup SQL independently checks the explicitly confirmed name.
+    const client = await db.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "SELECT set_config('probe.expected_database',$1,true)",
+        [config.expectedDatabase],
+      );
+      await client.query(
+        await readFile(new URL("./cleanup.sql", import.meta.url), "utf8"),
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
   console.log(
     action === "--setup"
       ? "Probe-only schema created. Disable the one-shot setup step now."

@@ -1,13 +1,14 @@
 # Probe-only project. Not the AxFluxo production compose file.
-# Provider must confirm that these are parts of ONE app, not two separate apps.
+# Local compose fixture only. Blitz import/part mapping and kept-folder sharing are unverified.
 x-env: &env
   PROBE_RUN_ID: ${PROBE_RUN_ID:?Set a new UUID for this isolated run}
-  PROBE_EXPIRES_AT: ${PROBE_EXPIRES_AT:?Absolute ISO time within next 30 minutes}
+  PROBE_DATABASE_NAME: ${PROBE_DATABASE_NAME:?Explicit actual dedicated database name}
+  PROBE_DEDICATED_DATABASE: ${PROBE_DEDICATED_DATABASE:?Confirm new-empty-probe-only}
   PROBE_TOKEN: ${PROBE_TOKEN:?Private probe UI bearer token}
   PROBE_INTERNAL_KEY: ${PROBE_INTERNAL_KEY:?Private internal HMAC key}
   PROBE_ROOT: /probe-data
   # Let a provider inject DATABASE_URL instead if appropriate. Do not point at AxFluxo's DB.
-  PROBE_DATABASE_URL: ${PROBE_DATABASE_URL:?Dedicated axfluxo-probe-* database only}
+  PROBE_DATABASE_URL: ${PROBE_DATABASE_URL:?New dedicated probe database only}
   PROBE_DB_TLS: "true"
 services:
   api:
@@ -18,7 +19,7 @@ services:
       <<: *env
       PORT: "8080"
       PROBE_PUBLIC_ORIGIN: ${PROBE_PUBLIC_ORIGIN:?Exact HTTPS probe origin}
-      PROBE_WORKER_ORIGIN: ${PROBE_WORKER_ORIGIN:-http://worker:8091}
+      PROBE_WORKER_ORIGIN: ${PROBE_WORKER_ORIGIN:-}
     ports: ["127.0.0.1:8080:8080"]
     volumes: ["probe-data:/probe-data"]
     read_only: true
@@ -46,5 +47,3 @@ services:
     security_opt: [no-new-privileges:true]
 volumes:
   probe-data:
-  # The setup command is NOT part of the normal startup. For a provider, select
-  # the documented one-shot predeploy step and disable it after the first setup.

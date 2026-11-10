@@ -1,10 +1,5 @@
--- ONLY in a newly created, dedicated test database. Not migration 001–008.
-BEGIN;
-DO $$ BEGIN
- IF current_database() !~ '^axfluxo[-_]probe[-_][a-z0-9_-]+$' THEN
- RAISE EXCEPTION 'Refusing non-probe database'; END IF;
-END $$;
 CREATE SCHEMA axfluxo_connection_probe;
+COMMENT ON SCHEMA axfluxo_connection_probe IS 'axfluxo-probe-v2';
 REVOKE ALL ON SCHEMA axfluxo_connection_probe FROM PUBLIC;
 CREATE TABLE axfluxo_connection_probe.runs (
  id uuid PRIMARY KEY, expires_at timestamptz NOT NULL,
@@ -20,7 +15,11 @@ CREATE TABLE axfluxo_connection_probe.events (
  PRIMARY KEY(run_id,kind,slot)
 );
 REVOKE ALL ON ALL TABLES IN SCHEMA axfluxo_connection_probe FROM PUBLIC;
-COMMIT;
--- Prefer applying as the dedicated probe login, owner of only this new DB/schema.
--- If an administrator applies this, grant schema/table privileges only to the
--- dedicated probe login in the settings console, never to PUBLIC or the main app.
+CREATE TABLE axfluxo_connection_probe.session (
+ singleton boolean PRIMARY KEY CHECK(singleton), run_id uuid NOT NULL,
+ started_at timestamptz, expires_at timestamptz,
+ http_attempts integer NOT NULL DEFAULT 0 CHECK(http_attempts BETWEEN 0 AND 3),
+ CHECK ((started_at IS NULL AND expires_at IS NULL) OR
+ (expires_at = started_at + interval '30 minutes'))
+);
+REVOKE ALL ON axfluxo_connection_probe.session FROM PUBLIC;

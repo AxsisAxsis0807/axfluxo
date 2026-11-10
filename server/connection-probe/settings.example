@@ -1,15 +1,17 @@
-# Preparation template only. No live credentials have been generated.
-# Set on the new probe app after execution approval; do not commit an actual .env.
-PROBE_RUN_ID=<new UUID for this run>
-PROBE_EXPIRES_AT=<absolute ISO UTC timestamp no more than 30 minutes ahead>
-PROBE_TOKEN=<private random UI bearer token, at least 32 characters>
-PROBE_INTERNAL_KEY=<different private random HMAC key, at least 32 characters>
-PROBE_DATABASE_URL=<private URL of a new dedicated axfluxo-probe-* database>
-PROBE_DB_TLS=true
+# Preparation only. Never commit real credentials.
+PROBE_RUN_ID=b71f0d38-68a2-4e91-a3d4-902e6f7c158b
+PROBE_TOKEN=<private UI bearer token, at least 32 characters>
+PROBE_INTERNAL_KEY=<different private HMAC key, at least 32 characters>
 PROBE_ROOT=/probe-data
-# API only. The api Dockerfile already sets PROBE_ROLE=api.
-PROBE_PUBLIC_ORIGIN=<exact HTTPS API origin>
-PROBE_WORKER_ORIGIN=http://worker:8091
-# Worker only. The worker Dockerfile already sets PROBE_ROLE=worker.
+PROBE_DB_TLS=true
+# AFTER creation: use the database detail page, never infer from app name.
+PROBE_DATABASE_NAME=<actual new dedicated database name>
+PROBE_DEDICATED_DATABASE=new-empty-probe-only
+# DATABASE_URL is injected by Blitz; do not use an existing app database.
+# API only; verify the actual newly created app origin.
+PROBE_PUBLIC_ORIGIN=<actual HTTPS API origin>
+# PROBE_WORKER_ORIGIN: leave unset until provider internal origin is confirmed.
+# Worker only:
 PROBE_INTERNAL_PORT=8091
-# Provider-injected PORT is used by API. Do not override it with a guessed value.
+# Role comes from each Dockerfile. PORT is provider-injected for API.
+# PROBE_EXPIRES_AT is obsolete: the authenticated Start button saves a one-shot deadline.
