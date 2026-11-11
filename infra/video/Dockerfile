@@ -29,7 +29,7 @@ ENTRYPOINT ["node"]
 CMD ["/app/worker.mjs"]
 # Minimal cloud export worker: database bytes only, no shared disk with the API.
 FROM runtime AS export-worker
-ENV NODE_OPTIONS=--max-old-space-size=256 TMPDIR=/work EXPORT_WORK_DIR=/work EXPORT_MIN_FREE_BYTES=268435456
+ENV NODE_OPTIONS=--max-old-space-size=128 TMPDIR=/work EXPORT_WORK_DIR=/work EXPORT_MIN_FREE_BYTES=268435456
 VOLUME ["/work"]
 ENTRYPOINT ["node", "/app/export-worker.mjs"]
 # Default target preserves the existing render image command and heap setting.

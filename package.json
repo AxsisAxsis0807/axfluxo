@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
+    "check:video-origin": "node scripts/check-video-origin.mjs",
     "build": "next build",
     "start": "node scripts/serve.mjs",
     "lint": "eslint . --max-warnings=0",
