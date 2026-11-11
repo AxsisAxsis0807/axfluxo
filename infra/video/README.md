@@ -36,8 +36,11 @@ on. Build-only CA files are not copied to the runtime. API/worker targets use
 `ENTRYPOINT ["node"]`, with `/app/api.mjs` or `/app/worker.mjs` as CMD. For an
 individual worker, replace CMD with `/app/probe.mjs`, `/app/derivatives.mjs`,
 `/app/render.mjs`, `/app/deletion.mjs` or `/app/notifications.mjs`.
-The legacy default target retains `ENTRYPOINT ["node","/app/render.mjs"]`.
-Do not append an API filename to that legacy entrypoint.
+The last stage is now `cloud`, the one blitz.cloud builds when no target is given:
+`ENTRYPOINT ["node"]` with `/app/render.mjs` as the default command, so the legacy
+default still renders while a start command can select `/app/api.mjs` or
+`/app/export-worker.mjs`. `EXPOSE 8080` is declared for port detection. The named
+`render` stage is unchanged for `--target render`.
 
 `blitz/compose.yaml` is an isolated low-resource experiment, **not** evidence
 that blitz.cloud accepts this configuration or can render 1080p60. API and

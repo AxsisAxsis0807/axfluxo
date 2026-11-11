@@ -148,17 +148,85 @@ APIとWorkerはDBだけを共有し、ディスクは共有しない。
    ```sql
    GRANT axfluxo_export_api, axfluxo_export_worker TO <blitz_db_login>;
    ```
-   （単一口グインのため完全な最小権限分離はできない。API/Workerはそれぞれ `SET LOCAL ROLE` で自分のロールだけを使う。）
+   （単一口グインのため完全な最小権限分離はできない。API/Workerはそれぞれ `SET LOCAL ROLE` で自分のロールだけを使う。
+   `node /app/migrate.mjs` はこのGRANTも自動で行う。）
 3. 対象ownerが `axfluxo_video.developer_memberships` に active で存在すること。
 
 ## デプロイ手順（承認後）
 
-1. Blitzで `Needs a database` を有効にし PostgreSQL 17 を作成。DB詳細で実DB名・接続を確認。
-2. migration 008 → 009 を適用し、上のGRANTを実行。
-3. Parts: API（Dockerfile target `api`、`EXPORT_ENABLED=true`、JWT/Origin設定）と Worker（target `export-worker`、同一DB）。
-4. APIの `/health` と認証を確認 → Worker起動ログ（秘密なし）を確認。
-5. 小さい素材（5秒）でジョブ作成 → Workerが処理 → 再訪で状態取得 → チケット保存。
-6. 映像/音声/解像度/fpsを確認し、記録する。
+### 1. ブランチを明示する
+
+ウィザードは既定で `main` を選ぶ。`main` にはこのコードがない。
+「My own code」でリポジトリを選んだあと、**「Advanced settings」を開き、Branch の一覧から
+`freebuff/46d45a7d28e79173a72d4eeb` を選ぶ**（デプロイ後も Settings > Where new versions
+come from で変更できる）。ブランチ欄が畳まれていて見えないだけなので、まず Advanced settings を展開する。
+
+### 2. ビルド構成
+
+リポジトリ直下の `compose.yaml` が API と export-worker の2パーツを定義する。
+Blitz はこの compose を読み、1アプリ・1アドレスとして提案する（DBサービスは含めない）。
+Dockerfile は `infra/video/Dockerfile`。最終ステージ `cloud` が `ENTRYPOINT ["node"]` なので、
+パーツごとの start command（`/app/api.mjs` / `/app/export-worker.mjs`）だけで役割が決まる。
+Docker の `--target` に依存しない。
+
+- ウィザードが「We write a recipe for it」と言っても、compose と Dockerfile が読まれれば
+  recipe は使われない。もしパーツが提案されない場合は、Dockerfile を明示選択し、
+  パーツ設定で start command を入れる。
+- API は 8080 で待ち受ける（`PORT` を読む）。API のパスは `/` にする（フロントは Pages 側）。
+  Worker はポートを持たないので自動的にバックグラウンド扱いになる。
+
+### 3. 既存DB `axfluxo-db` へ接続
+
+Blitz は **1アプリにつき1DB** で、DBを2つのアプリで共有する構成は想定されていない。
+そのため API と Worker は「同じアプリの2パーツ」にして、そのアプリに `axfluxo-db` を接続する。
+
+1. デプロイ後（または Databases ページから）`axfluxo-db` のカードを開き、**Connect to app** で
+   このアプリを選ぶ。アプリ側の「Give it a database」からでも同じ。
+2. 接続すると全パーツに `DATABASE_URL` が注入される。ホスト名はアカウント内でのみ解決される。
+3. DB は内部専用で、手元の `psql` からは接続できない。そのため migration はアプリ内で実行する。
+4. `axfluxo-db` が既に別アプリに接続済みの場合、そのアプリを消して DB を残すか、
+   そのアプリをこのデプロイ先として使う（新規アプリには付け替えられない）。
+
+「Database: Not needed」という判定は無視してよい。判定は検出器の結果で、実際の接続は
+Databases ページから行う。
+
+### 4. migration とロール
+
+`008` と `009` は起動時に自動実行されない。Blitz CLI（AIツールページでAPIキーを発行）で
+アプリ内のランナーを1回実行する。
+
+```
+blitz run <app> -- node /app/migrate.mjs
+```
+
+- `001`〜`009` を順に適用し、`public.axfluxo_schema_migrations` に記録する（再実行はskip）。
+- 最後に `axfluxo_video_api` / `axfluxo_export_api` / `axfluxo_export_worker` を
+  接続ログインへ GRANT する（Blitz は API と Worker に同じ `DATABASE_URL` を渡すため）。
+- ロール作成には `CREATEROLE` 権限が必要。ランナーは権限が無い場合に警告を出す。
+  拒否された場合は Blitz のサポートに DB ログインの権限を確認する（未検証）。
+- `blitz run` は60秒・64KBまで。空のDBでは十分速い。
+
+### 5. 環境変数
+
+Environment タブで設定する（変更は再起動後に反映）。
+
+| 変数 | 値 |
+| --- | --- |
+| `VIDEO_JWT_ISSUER` | Supabase の issuer URL |
+| `VIDEO_JWT_AUDIENCE` | Supabase の audience |
+| `VIDEO_ALLOWED_ORIGINS` | 編集画面のorigin（例 `https://<user>.github.io`、パスは含めない） |
+| `EXPORT_ENABLED` | `true`（compose で設定済み） |
+| `VIDEO_API_HOST` | 既定 `0.0.0.0` のままでよい |
+
+`DATABASE_URL` は接続時に Blitz が設定するので入力しない。`VIDEO_DATABASE_TLS` は未設定
+（=disable）のまま。
+
+### 6. 確認
+
+1. API の `/health` と、認証付き `/v1/cloud-export/session` が返ることを確認。
+2. Worker のログに起動行が出ることを確認（秘密値は出ない）。
+3. 5秒の素材でジョブ作成 → Worker が処理 → 再訪で状態取得 → チケット保存。
+4. 1920×1080/60fps/音声ありを確認し、記録する。
 
 初回は5–10秒。無料枠のメモリで1080p60が収まる保証はなく、OOM時は `EXPORT_OUT_OF_MEMORY` で失敗する（未検証）。
 

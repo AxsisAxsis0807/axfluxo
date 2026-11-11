@@ -1,0 +1,40 @@
+# blitz.cloud deployment: one app, two parts (public API + background export
+# worker). Blitz reads this file, builds both parts from the repository
+# Dockerfile and attaches the managed database, which injects DATABASE_URL into
+# every part. No database service belongs here.
+#
+# Not a local development compose file: the API needs authentication settings
+# and a database before it starts. Local checks use `npm run dev` / `npm test`.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: infra/video/Dockerfile
+    command: ["/app/api.mjs"]
+    environment:
+      NODE_OPTIONS: --max-old-space-size=128
+      PORT: "8080"
+      EXPORT_ENABLED: "true"
+      EXPORT_MAX_UPLOAD_BYTES: "25165824"
+      EXPORT_MAX_FRAMES: "600"
+      EXPORT_OWNER_BYTES: "268435456"
+      EXPORT_RETENTION_HOURS: "24"
+      VIDEO_API_POOL_MAX: "2"
+    expose: ["8080"]
+
+  export-worker:
+    # No port: Blitz runs this part in the background, and it never sleeps.
+    build:
+      context: .
+      dockerfile: infra/video/Dockerfile
+    command: ["/app/export-worker.mjs"]
+    environment:
+      NODE_OPTIONS: --max-old-space-size=128
+      TMPDIR: /tmp
+      EXPORT_WORK_DIR: /tmp/export
+      EXPORT_MIN_FREE_BYTES: "134217728"
+      EXPORT_MAX_WORK_BYTES: "1073741824"
+      EXPORT_MAX_UPLOAD_BYTES: "25165824"
+      EXPORT_MAX_FRAMES: "600"
+      EXPORT_OWNER_BYTES: "268435456"
+      EXPORT_RETENTION_HOURS: "24"
