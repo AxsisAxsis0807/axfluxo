@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -89,7 +89,7 @@ test("internal HMAC rejects missing/wrong/expired signatures and replay", () => 
 });
 test("separates shared folder, nonshared folder, signed internal HTTP and API-off DB observations", async () => {
   const dir = await mkdtemp(join(tmpdir(), "axfluxo-probe-check-"));
-  let db, closeDB, execSQL;
+  let db, closeDB;
   const native = process.env.AXFLUXO_PROBE_TEST_DATABASE_URL;
   if (native) {
     const url = new URL(native);
@@ -117,7 +117,6 @@ test("separates shared folder, nonshared folder, signed internal HTTP and API-of
         release() {},
       }),
     };
-    execSQL = (text) => p.exec(text);
     closeDB = () => p.close();
   }
   let api, worker;
