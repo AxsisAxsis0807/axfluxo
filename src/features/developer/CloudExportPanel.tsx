@@ -366,6 +366,17 @@ export default function CloudExportPanel({
     if (!client || !job) return;
     setPhase("downloading");
     setError("");
+    setNote("保存を準備しています…");
+    // A one-time URL lets Safari download straight to Files without JS memory.
+    const ticket = await client.downloadTicket(job.id);
+    if (ticket.ok) {
+      window.location.assign(ticket.data.url);
+      setNote(
+        "ダウンロードを開始しました。Safariのダウンロード（Files）を確認してください。",
+      );
+      setPhase("accepted");
+      return;
+    }
     setNote("完成したMP4を取得しています…");
     const result = await client.download(job.id, (fraction) =>
       setNote(`完成したMP4を取得しています… ${Math.floor(fraction * 100)}%`),
@@ -380,6 +391,32 @@ export default function CloudExportPanel({
     outputRef.current = url;
     setOutput(url);
     setNote("");
+  }
+
+  async function remove() {
+    if (!client || !job) return;
+    if (
+      !window.confirm(
+        "この書き出しと素材をサーバーから削除します。削除後は復元できません。",
+      )
+    )
+      return;
+    const result = await client.deleteJob(job.id);
+    if (!result.ok) {
+      setError(messages[result.code] ?? "サーバーから削除できませんでした。");
+      return;
+    }
+    if (outputRef.current) URL.revokeObjectURL(outputRef.current);
+    outputRef.current = "";
+    setOutput("");
+    setJob(null);
+    setJobId("");
+    try {
+      sessionStorage.removeItem(JOB_KEY);
+    } catch {
+      /* storage may be unavailable */
+    }
+    setNote("サーバーから削除しました。");
   }
 
   return (
@@ -454,8 +491,11 @@ export default function CloudExportPanel({
         )}
         {job?.state === "succeeded" && (
           <button disabled={phase === "downloading"} onClick={() => void download()}>
-            MP4を取得
+            MP4を保存
           </button>
+        )}
+        {job && terminal(job) && (
+          <button onClick={() => void remove()}>サーバーから削除</button>
         )}
         {job?.state === "succeeded" && output && (
           <button
@@ -474,7 +514,10 @@ export default function CloudExportPanel({
         <summary>この最小版の制限</summary>
         <p>
           1回の書き出しは{Math.floor(limits.maxFrames / 60)}秒まで、素材1本は
-          {Math.floor(limits.maxUploadBytes / 1024 ** 2)}MiBまでです。FNF書き出し、素材ライブラリへの保存、完了通知、自動再試行は未対応です。
+          {Math.floor(limits.maxUploadBytes / 1024 ** 2)}MiBまでです。完成物と素材は
+          {session?.retentionHours ?? 24}
+          時間後にサーバーから削除されます（残したい場合は早めに保存してください）。
+          FNF書き出し、素材ライブラリへの保存、完了通知、自動再試行は未対応です。
           端末内の書き出しは従来どおり利用できます。
         </p>
       </details>

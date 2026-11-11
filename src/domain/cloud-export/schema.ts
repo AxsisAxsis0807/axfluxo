@@ -151,6 +151,8 @@ export const exportSessionViewSchema = z.strictObject({
   maxOutputBytes: z.number().int().positive(),
   maxClips: z.number().int().positive(),
   maxFrames: z.number().int().positive(),
+  maxOwnerBytes: z.number().int().positive(),
+  retentionHours: z.number().int().positive(),
   profile: z.strictObject({
     width: z.number().int().positive(),
     height: z.number().int().positive(),
@@ -160,3 +162,14 @@ export const exportSessionViewSchema = z.strictObject({
 export type ExportSessionView = z.infer<typeof exportSessionViewSchema>;
 
 export const exportOutputName = "AxFluxo Cloud Export.mp4";
+
+/** A relative path; the client resolves it against the validated API origin. */
+export const exportDownloadTicketSchema = z.strictObject({
+  url: z.string().regex(/^\/v1\/cloud-export\/downloads\/[A-Za-z0-9_-]{43}$/),
+  expiresAt: z.string(),
+});
+export type ExportDownloadTicket = z.infer<typeof exportDownloadTicketSchema>;
+
+export const exportDeleteViewSchema = z.strictObject({
+  deleted: z.literal(true),
+});

@@ -1,17 +1,21 @@
 import { z } from "zod";
 import {
   exportBlobViewSchema,
+  exportDeleteViewSchema,
+  exportDownloadTicketSchema,
   exportErrorSchema,
   exportJobRequestSchema,
   exportJobViewSchema,
   exportLimits,
   exportSessionViewSchema,
   type ExportBlobView,
+  type ExportDownloadTicket,
   type ExportJobRequest,
   type ExportJobView,
   type ExportSessionView,
 } from "../../domain/cloud-export/schema";
 import type { VideoSessionSource } from "./api-client";
+import { sha256File } from "../../domain/cloud-export/sha256";
 
 export type CloudExportFailure = {
   ok: false;
@@ -122,7 +126,7 @@ export function createCloudExportClient(options: {
   async function request<T>(
     path: string,
     schema: z.ZodType<T>,
-    method: "GET" | "POST" = "GET",
+    method: "GET" | "POST" | "DELETE" = "GET",
     body?: unknown,
     key?: string,
   ): Promise<CloudExportResult<T>> {
@@ -188,8 +192,8 @@ export function createCloudExportClient(options: {
       try {
         const accessToken = await token();
         options2.onHashing?.();
-        const sha256 =
-          options2.sha256 ?? (await sha256Hex(await file.arrayBuffer()));
+        // Bounded slices: never hold a whole clip in memory on iPhone Safari.
+        const sha256 = options2.sha256 ?? (await sha256File(file));
         const body = await new Promise<CloudExportResult<ExportBlobView>>(
           (resolve) => {
             const xhr = new XMLHttpRequest();
@@ -279,6 +283,26 @@ export function createCloudExportClient(options: {
       request(
         `/v1/cloud-export/jobs/${encodeURIComponent(id)}`,
         exportJobViewSchema,
+      ),
+    downloadTicket: async (
+      id: string,
+    ): Promise<CloudExportResult<ExportDownloadTicket>> => {
+      const result = await request(
+        `/v1/cloud-export/jobs/${encodeURIComponent(id)}/download-ticket`,
+        exportDownloadTicketSchema,
+        "POST",
+        {},
+        `ticket-${id}`,
+      );
+      return result.ok
+        ? { ok: true, data: { ...result.data, url: new URL(result.data.url, url.origin).toString() } }
+        : result;
+    },
+    deleteJob: (id: string) =>
+      request(
+        `/v1/cloud-export/jobs/${encodeURIComponent(id)}`,
+        exportDeleteViewSchema,
+        "DELETE",
       ),
     cancelJob: (id: string) =>
       request(
