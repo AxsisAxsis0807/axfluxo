@@ -1,5 +1,6 @@
 import { isAbsolute } from "node:path";
 import { databaseUrl, integerSetting } from "../runtime/config";
+import { databaseTls } from "../db/tls";
 import { exportLimits } from "../../src/domain/cloud-export/schema";
 
 /**
@@ -39,6 +40,28 @@ export function exportApiConfiguration(
       1,
       18000,
     ),
+    /** Free PostgreSQL is 1GB, so one owner cannot reserve the whole database. */
+    maxOwnerBytes: integerSetting(
+      env,
+      "EXPORT_OWNER_BYTES",
+      256 * 1024 ** 2,
+      8 * 1024 ** 2,
+      1024 ** 3,
+    ),
+    retentionHours: integerSetting(
+      env,
+      "EXPORT_RETENTION_HOURS",
+      24,
+      1,
+      168,
+    ),
+    ticketSeconds: integerSetting(
+      env,
+      "EXPORT_TICKET_SECONDS",
+      120,
+      30,
+      600,
+    ),
   };
 }
 export type ExportApiConfig = ReturnType<typeof exportApiConfiguration>;
@@ -52,6 +75,7 @@ export function exportWorkerConfiguration(
   return {
     workDirectory,
     databaseUrl: databaseUrl(env),
+    tls: databaseTls(env),
     production: !["test", "development"].includes(env.NODE_ENV ?? ""),
     maxWorkBytes: integerSetting(
       env,
@@ -95,6 +119,20 @@ export function exportWorkerConfiguration(
       1800,
       60,
       18000,
+    ),
+    maxOwnerBytes: integerSetting(
+      env,
+      "EXPORT_OWNER_BYTES",
+      256 * 1024 ** 2,
+      8 * 1024 ** 2,
+      1024 ** 3,
+    ),
+    retentionHours: integerSetting(
+      env,
+      "EXPORT_RETENTION_HOURS",
+      24,
+      1,
+      168,
     ),
   };
 }

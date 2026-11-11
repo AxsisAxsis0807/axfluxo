@@ -2,6 +2,7 @@ import {
   databaseUrl as resolveDatabaseUrl,
   integerSetting,
 } from "../runtime/config";
+import { databaseTls } from "../db/tls";
 export function serverConfig(env: Record<string, string | undefined>) {
   const issuer = env.VIDEO_JWT_ISSUER;
   const audience = env.VIDEO_JWT_AUDIENCE;
@@ -31,6 +32,7 @@ export function serverConfig(env: Record<string, string | undefined>) {
     issuer,
     audience,
     databaseUrl,
+    tls: databaseTls(env),
     port,
     host,
     poolMax: integerSetting(env, "VIDEO_API_POOL_MAX", 2, 1, 10),
