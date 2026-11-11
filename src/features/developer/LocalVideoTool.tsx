@@ -4,6 +4,7 @@ import { isInteriorBoundary } from "../../services/video/timeline-math";
 import LocalCompositionPreview from "./LocalCompositionPreview";
 import LocalTimeline from "./LocalTimeline";
 import { LocalExport } from "../video-common/LocalExport";
+import CloudExportPanel from "./CloudExportPanel";
 import { type LocalEncodeJob } from "../../services/video/local-encode";
 import { isUnlocked } from "../../services/developer/local-lock";
 
@@ -714,6 +715,9 @@ export default function LocalVideoTool({
         rest={rest}
         onRestChange={setRest}
       />
+      {!fnf && (
+        <CloudExportPanel sources={sources} names={names} cover={coverFile} />
+      )}
       <style>{`.local-video-tool button,.local-video-tool input,.local-video-tool a{min-height:44px}.local-video-tool label{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.local-video-tool input,.local-video-tool textarea{max-width:100%;font-size:16px}.local-video-tool fieldset{min-width:0;margin:16px 0}.local-video-tool textarea{width:100%}.local-video-tool{overflow-wrap:anywhere}`}</style>
     </main>
   );
