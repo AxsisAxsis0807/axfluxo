@@ -55,10 +55,28 @@ export function blobLayout(size: number) {
   return { chunkSize, chunkCount: Math.ceil(size / chunkSize) };
 }
 
+/** The free database is 1GB; a single owner must not be able to fill it. */
+async function assertOwnerCapacity(
+  sql: Sql,
+  owner: string,
+  extra: number,
+  quota: number,
+) {
+  const row = (
+    await sql.query<{ total: string | number }>(
+      "SELECT coalesce(sum(size),0) AS total FROM axfluxo_export.blobs WHERE owner_id=$1",
+      [owner],
+    )
+  ).rows[0];
+  if (Number(row.total) + extra > quota)
+    throw new ApiError(413, "EXPORT_LIMIT_EXCEEDED");
+}
+
 export async function beginBlob(
   db: Database,
   owner: string,
   input: { id: string; kind: ExportBlobKind; size: number; sha256: string },
+  quota?: number,
 ): Promise<{ duplicate: ExportBlobView | null }> {
   const { chunkSize, chunkCount } = blobLayout(input.size);
   return exportScoped(db, owner, async (sql) => {
@@ -67,6 +85,7 @@ export async function beginBlob(
       [owner, input.sha256, input.kind, input.size],
     );
     if (existing.rows.length) return { duplicate: blobView(existing.rows[0]) };
+    if (quota !== undefined) await assertOwnerCapacity(sql, owner, input.size, quota);
     try {
       await sql.query(
         "INSERT INTO axfluxo_export.blobs(id,owner_id,kind,size,sha256,chunk_size,chunk_count) VALUES($1,$2,$3,$4,$5,$6,$7)",
@@ -233,8 +252,13 @@ export async function storeBlob(
     chunks: AsyncIterable<Uint8Array>;
     size: number;
   },
+  quota?: number,
 ) {
   const { chunkSize, chunkCount } = blobLayout(input.size);
+  if (quota !== undefined)
+    await exportScoped(db, owner, (sql) =>
+      assertOwnerCapacity(sql, owner, input.size, quota),
+    );
   const inserted = await exportScoped(db, owner, (sql) =>
     sql.query<{ id: string }>(
       "INSERT INTO axfluxo_export.blobs(id,owner_id,kind,size,sha256,chunk_size,chunk_count) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (owner_id,sha256,kind,size) DO NOTHING RETURNING id",

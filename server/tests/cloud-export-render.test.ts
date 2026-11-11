@@ -58,6 +58,9 @@ const app = () =>
       maxImageBytes: exportLimits.maxImageBytes,
       maxClips: exportLimits.maxClips,
       maxFrames: exportLimits.maxFrames,
+      maxOwnerBytes: 256 * 1024 ** 2,
+      retentionHours: 24,
+      ticketSeconds: 120,
     }),
   });
 const sha = (data: Uint8Array) =>
@@ -86,7 +89,11 @@ beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "axfluxo-export-e2e-db-"));
   fixtures = await mkdtemp(join(tmpdir(), "axfluxo-export-e2e-media-"));
   pg = testEngine(directory);
-  for (const name of ["001_video_foundation.sql", "008_cloud_export.sql"])
+  for (const name of [
+    "001_video_foundation.sql",
+    "008_cloud_export.sql",
+    "009_cloud_export_retention.sql",
+  ])
     await pg.exec(
       await readFile(
         new URL(`../db/migrations/${name}`, import.meta.url),
@@ -212,6 +219,7 @@ describe.skipIf(!hasFfmpeg)("cloud export end to end", () => {
           minFreeBytes: 256 * 1024 ** 2,
           segmentFrames: 1800,
           sessionTimeoutMs: 240000,
+          maxOwnerBytes: 256 * 1024 ** 2,
         },
         stop.signal,
       );

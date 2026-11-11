@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createVideoApi } from "../api/app";
 import { ApiError } from "../api/errors";
 import type { Database, Sql } from "../db/database";
-import { cloudExportRouter } from "../cloud-export/api";
+import { cloudExportRouter, ticketDownload } from "../cloud-export/api";
 import {
   claim,
   cancelJob,
@@ -15,8 +15,9 @@ import {
   heartbeat,
   progress,
   publish,
+  purgeExpired,
 } from "../cloud-export/queue";
-import { storeBlob, discardBlob } from "../cloud-export/storage";
+import { beginBlob, storeBlob, discardBlob } from "../cloud-export/storage";
 import { testEngine, type TestEngine } from "./engine";
 import { exportLimits, EXPORT_PROFILE } from "../../src/domain/cloud-export/schema";
 
@@ -56,7 +57,11 @@ const app = () =>
       maxImageBytes: exportLimits.maxImageBytes,
       maxClips: exportLimits.maxClips,
       maxFrames: exportLimits.maxFrames,
+      maxOwnerBytes: 256 * 1024 ** 2,
+      retentionHours: 24,
+      ticketSeconds: 120,
     }),
+    public: ticketDownload({ db }),
   });
 
 function sha(data: Uint8Array) {
@@ -127,7 +132,11 @@ function post(path: string, body: unknown, key = randomUUID()) {
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "axfluxo-export-"));
   pg = testEngine(directory);
-  for (const name of ["001_video_foundation.sql", "008_cloud_export.sql"])
+  for (const name of [
+    "001_video_foundation.sql",
+    "008_cloud_export.sql",
+    "009_cloud_export_retention.sql",
+  ])
     await pg.exec(
       await readFile(
         new URL(`../db/migrations/${name}`, import.meta.url),
@@ -251,6 +260,9 @@ describe("cloud export admission without a database", () => {
         maxImageBytes: exportLimits.maxImageBytes,
         maxClips: exportLimits.maxClips,
         maxFrames: exportLimits.maxFrames,
+        maxOwnerBytes: 256 * 1024 ** 2,
+        retentionHours: 24,
+        ticketSeconds: 120,
       }),
     });
     const session = await disabled(
@@ -599,5 +611,181 @@ describe("cloud export worker queue", () => {
       [ready.body.blob.id],
     );
     expect(Number(kept.rows[0].n)).toBe(1);
+  });
+});
+
+describe("cloud export retention, deletion and tickets", () => {
+  it("enforces the owner byte quota before writing", async () => {
+    const total = Number(
+      (
+        await pg.query(
+          "SELECT coalesce(sum(size),0) AS total FROM axfluxo_export.blobs WHERE owner_id=$1",
+          [owner],
+        )
+      ).rows[0].total,
+    );
+    const size = 2 * 1024 * 1024;
+    await expect(
+      beginBlob(
+        db,
+        owner,
+        { id: randomUUID(), kind: "video", size, sha256: "a".repeat(64) },
+        total + 1024 * 1024,
+      ),
+    ).rejects.toThrow();
+    const allowed = await beginBlob(
+      db,
+      owner,
+      { id: randomUUID(), kind: "video", size, sha256: "b".repeat(64) },
+      total + 3 * 1024 * 1024,
+    );
+    expect(allowed.duplicate).toBeNull();
+  });
+
+  it("deletes a terminal job and its unreferenced bytes", async () => {
+    const video = await upload("video", bytes(4096, 3));
+    const cover = await upload("image", bytes(512, 5));
+    const created = await app()(
+      post(
+        "/v1/cloud-export/jobs",
+        jobBody({
+          clips: [
+            {
+              blobId: video.body.blob.id,
+              startUs: 0,
+              endUs: 2_000_000,
+              markersUs: [],
+            },
+          ],
+          names: ["only version"],
+          coverBlobId: cover.body.blob.id,
+        }),
+      ),
+    );
+    expect(created.status).toBe(202);
+    const job = (await created.json()) as { id: string };
+    const headers = { origin, authorization: `Bearer ${ownerToken}` };
+    const busy = await app()(
+      new Request(`https://api.example/v1/cloud-export/jobs/${job.id}`, {
+        method: "DELETE",
+        headers,
+      }),
+    );
+    expect(busy.status).toBe(409);
+    expect(
+      (
+        await app()(
+          new Request(
+            `https://api.example/v1/cloud-export/jobs/${job.id}/cancel`,
+            { method: "POST", headers },
+          ),
+        )
+      ).status,
+    ).toBe(200);
+    const removed = await app()(
+      new Request(`https://api.example/v1/cloud-export/jobs/${job.id}`, {
+        method: "DELETE",
+        headers,
+      }),
+    );
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ deleted: true });
+    const gone = await app()(
+      new Request(`https://api.example/v1/cloud-export/jobs/${job.id}`, {
+        headers,
+      }),
+    );
+    expect(gone.status).toBe(404);
+  });
+
+  it("serves a succeeded output once through a single-use ticket", async () => {
+    const data = bytes(2048, 11);
+    const sha256 = sha(data);
+    const blobId = randomUUID();
+    await storeBlob(
+      workerDb,
+      owner,
+      {
+        id: blobId,
+        kind: "output",
+        sha256,
+        size: data.byteLength,
+        chunks: (async function* () {
+          yield data;
+        })(),
+      },
+      256 * 1024 ** 2,
+    );
+    const jobId = randomUUID();
+    await pg.query(
+      "INSERT INTO axfluxo_export.jobs(id,owner_id,idempotency_key,request_hash,spec,spec_hash,total_frames,state,progress_frame,output_blob_id,output_validation,finished_at) VALUES($1,$2,$3,$4,'{}'::jsonb,$4,60,'succeeded',60,$5,$6::jsonb,now())",
+      [
+        jobId,
+        owner,
+        `ticket-${jobId}`,
+        "0".repeat(64),
+        blobId,
+        JSON.stringify({
+          width: 1920,
+          height: 1080,
+          frames: 60,
+          durationUs: 1_000_000,
+          size: data.byteLength,
+          sha256,
+        }),
+      ],
+    );
+    const ticket = await app()(
+      new Request(
+        `https://api.example/v1/cloud-export/jobs/${jobId}/download-ticket`,
+        {
+          method: "POST",
+          headers: { origin, authorization: `Bearer ${ownerToken}` },
+        },
+      ),
+    );
+    expect(ticket.status).toBe(200);
+    const { url } = (await ticket.json()) as { url: string };
+    expect(url).toMatch(/^\/v1\/cloud-export\/downloads\/[A-Za-z0-9_-]{43}$/);
+    const download = await app()(new Request(`https://api.example${url}`));
+    expect(download.status).toBe(200);
+    expect(download.headers.get("content-disposition")).toContain("attachment");
+    expect(new Uint8Array(await download.arrayBuffer())).toEqual(data);
+    const replay = await app()(new Request(`https://api.example${url}`));
+    expect(replay.status).toBe(404);
+  });
+
+  it("sweeps expired jobs of any owner but not fresh ones", async () => {
+    const video = await upload("video", bytes(1024, 13));
+    const cover = await upload("image", bytes(256, 17));
+    const created = await app()(
+      post(
+        "/v1/cloud-export/jobs",
+        jobBody({
+          clips: [
+            {
+              blobId: video.body.blob.id,
+              startUs: 0,
+              endUs: 1_000_000,
+              markersUs: [],
+            },
+          ],
+          names: ["sweep"],
+          coverBlobId: cover.body.blob.id,
+        }),
+      ),
+    );
+    const job = (await created.json()) as { id: string };
+    await pg.query(
+      "UPDATE axfluxo_export.jobs SET state='cancelled',error_code='EXPORT_CANCELLED',finished_at=now() WHERE id=$1",
+      [job.id],
+    );
+    expect(await purgeExpired(workerDb, 24)).toBe(0);
+    await pg.query(
+      "UPDATE axfluxo_export.jobs SET finished_at=now()-interval '3 hours' WHERE id=$1",
+      [job.id],
+    );
+    expect(await purgeExpired(workerDb, 1)).toBeGreaterThan(0);
+    await expect(getJob(db, owner, job.id)).rejects.toThrow();
   });
 });

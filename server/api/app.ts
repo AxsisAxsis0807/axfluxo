@@ -40,6 +40,8 @@ export interface ApiConfig {
   ) => Promise<{ status: number; body: unknown }>;
   /** Raw response hook for streaming handlers (uploads/storage downloads). */
   response?: (request: Request, owner: string) => Promise<Response | null>;
+  /** Pre-authentication hook for single-use token downloads. */
+  public?: (request: Request) => Promise<Response | null>;
 }
 export async function jsonBody(request: Request) {
   if (
@@ -133,7 +135,7 @@ export function createVideoApi(
             .map((v) => v.trim()) ?? [];
         if (
           !method ||
-          !["GET", "HEAD", "POST"].includes(method) ||
+          !["GET", "HEAD", "POST", "DELETE"].includes(method) ||
           requestedHeaders.some(
             (v) =>
               ![
@@ -149,7 +151,7 @@ export function createVideoApi(
           throw new ApiError(403, "ORIGIN_NOT_ALLOWED");
         headers.set(
           "access-control-allow-methods",
-          "GET, HEAD, POST, OPTIONS",
+          "GET, HEAD, POST, DELETE, OPTIONS",
         );
         headers.set(
           "access-control-allow-headers",
@@ -157,6 +159,11 @@ export function createVideoApi(
         );
         headers.delete("content-type");
         return new Response(null, { status: 204, headers });
+      }
+      // Single-use token downloads authenticate with the token itself.
+      if (config.public) {
+        const raw = await config.public(request);
+        if (raw) return raw;
       }
       const identity = await config.verify(
         request.headers.get("authorization"),

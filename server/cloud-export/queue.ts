@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { type Database, type Row, type Sql } from "../db/database";
 import { digest } from "../api/jobs";
 import { ApiError } from "../api/errors";
@@ -557,4 +557,175 @@ export async function outputBlob(db: Database, owner: string, id: string) {
     if (!row) throw new ApiError(404, "EXPORT_NOT_FOUND");
     return row;
   });
+}
+
+const terminalStates = ["succeeded", "failed", "cancelled"];
+
+/**
+ * Deletes one terminal job of the owner and every blob no other job still pins.
+ * Ready bytes are otherwise immutable; the purge flag only relaxes the guard for
+ * this transaction, and RLS still limits the rows to the owner.
+ */
+export async function purgeJob(
+  db: Database,
+  owner: string,
+  id: string,
+): Promise<boolean> {
+  return exportScoped(db, owner, async (sql) => {
+    await sql.query("SELECT set_config('axfluxo.export_purge','on',true)");
+    const job = (
+      await sql.query<{ state: string; output_blob_id: string | null }>(
+        "SELECT state,output_blob_id FROM axfluxo_export.jobs WHERE owner_id=$1 AND id=$2 FOR UPDATE",
+        [owner, id],
+      )
+    ).rows[0];
+    if (!job) throw new ApiError(404, "EXPORT_NOT_FOUND");
+    if (!terminalStates.includes(job.state))
+      throw new ApiError(409, "EXPORT_BUSY");
+    const pins = (
+      await sql.query<{ blob_id: string }>(
+        "SELECT blob_id FROM axfluxo_export.job_blobs WHERE owner_id=$1 AND job_id=$2",
+        [owner, id],
+      )
+    ).rows.map((row) => row.blob_id);
+    if (job.output_blob_id) pins.push(job.output_blob_id);
+    await sql.query(
+      "UPDATE axfluxo_export.jobs SET output_blob_id=NULL WHERE owner_id=$1 AND id=$2",
+      [owner, id],
+    );
+    await sql.query(
+      "DELETE FROM axfluxo_export.job_blobs WHERE owner_id=$1 AND job_id=$2",
+      [owner, id],
+    );
+    await sql.query(
+      "DELETE FROM axfluxo_export.download_tickets WHERE owner_id=$1 AND job_id=$2",
+      [owner, id],
+    );
+    await sql.query(
+      "DELETE FROM axfluxo_export.jobs WHERE owner_id=$1 AND id=$2",
+      [owner, id],
+    );
+    for (const blobId of new Set(pins))
+      await sql.query(
+        "DELETE FROM axfluxo_export.blobs b WHERE b.owner_id=$1 AND b.id=$2 AND NOT EXISTS (SELECT 1 FROM axfluxo_export.job_blobs jb WHERE jb.owner_id=$1 AND jb.blob_id=b.id) AND NOT EXISTS (SELECT 1 FROM axfluxo_export.jobs j WHERE j.owner_id=$1 AND j.output_blob_id=b.id)",
+        [owner, blobId],
+      );
+    return true;
+  });
+}
+
+/**
+ * One-time, short-lived download URL for a browser navigation. The token itself is
+ * never stored; only its SHA-256 is. Redemption marks it used in the same statement.
+ */
+export async function createDownloadTicket(
+  db: Database,
+  owner: string,
+  id: string,
+  seconds: number,
+) {
+  return exportScoped(db, owner, async (sql) => {
+    await requireExportMembership(sql, owner);
+    const job = (
+      await sql.query<{ state: string; output_blob_id: string | null }>(
+        "SELECT state,output_blob_id FROM axfluxo_export.jobs WHERE owner_id=$1 AND id=$2",
+        [owner, id],
+      )
+    ).rows[0];
+    if (!job) throw new ApiError(404, "EXPORT_NOT_FOUND");
+    if (job.state !== "succeeded" || !job.output_blob_id)
+      throw new ApiError(409, "EXPORT_BUSY");
+    const token = randomBytes(32).toString("base64url");
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    await sql.query(
+      "DELETE FROM axfluxo_export.download_tickets WHERE owner_id=$1 AND (expires_at < now() - interval '1 hour' OR used_at < now() - interval '1 hour')",
+      [owner],
+    );
+    const row = (
+      await sql.query<{ expires_at: Date | string }>(
+        "INSERT INTO axfluxo_export.download_tickets(token_hash,owner_id,job_id,expires_at) VALUES($1,$2,$3,now()+($4::int * interval '1 second')) RETURNING expires_at",
+        [tokenHash, owner, id, seconds],
+      )
+    ).rows[0];
+    return {
+      url: `/v1/cloud-export/downloads/${token}`,
+      expiresAt: new Date(row.expires_at).toISOString(),
+    };
+  });
+}
+
+/** Resolves a presented token to its job once, or null. Never reveals other owners. */
+export async function redeemDownloadTicket(db: Database, token: string) {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  return db.transaction(async (sql) => {
+    await sql.query("SELECT set_config('axfluxo.export_ticket',$1,true)", [
+      tokenHash,
+    ]);
+    const ticket = (
+      await sql.query<{ owner_id: string; job_id: string }>(
+        "UPDATE axfluxo_export.download_tickets SET used_at=now() WHERE token_hash=$1 AND used_at IS NULL AND expires_at>clock_timestamp() RETURNING owner_id,job_id",
+        [tokenHash],
+      )
+    ).rows[0];
+    if (!ticket) return null;
+    await sql.query("SELECT set_config('axfluxo.export_owner',$1,true)", [
+      ticket.owner_id,
+    ]);
+    const ready = await sql.query(
+      "SELECT 1 FROM axfluxo_export.jobs WHERE owner_id=$1 AND id=$2 AND state='succeeded' AND output_blob_id IS NOT NULL",
+      [ticket.owner_id, ticket.job_id],
+    );
+    return ready.rows.length
+      ? { owner: ticket.owner_id, job: ticket.job_id }
+      : null;
+  });
+}
+
+/** Bounded sweep used by the worker: old terminal jobs and abandoned uploads. */
+export async function purgeExpired(
+  db: Database,
+  retentionHours: number,
+  batch = 20,
+): Promise<number> {
+  let removed = 0;
+  const jobs = (
+    await db.transaction((sql) =>
+      sql.query<{ owner_id: string; id: string }>(
+        "SELECT owner_id,id FROM axfluxo_export.jobs WHERE state IN ('succeeded','failed','cancelled') AND coalesce(finished_at,created_at) < now() - ($1::int * interval '1 hour') ORDER BY coalesce(finished_at,created_at) LIMIT $2",
+        [retentionHours, batch],
+      ),
+    )
+  ).rows;
+  for (const row of jobs) {
+    try {
+      await purgeJob(db, row.owner_id, row.id);
+      removed++;
+    } catch {
+      /* a job may be pinned by another worker's lease; try again later */
+    }
+  }
+  const pending = (
+    await db.transaction((sql) =>
+      sql.query<{ owner_id: string; id: string }>(
+        "SELECT owner_id,id FROM axfluxo_export.blobs WHERE state='pending' AND created_at < now() - interval '1 hour' ORDER BY created_at LIMIT $1",
+        [batch],
+      ),
+    )
+  ).rows;
+  for (const row of pending) {
+    try {
+      await exportScoped(db, row.owner_id, async (sql) => {
+        await sql.query("SELECT set_config('axfluxo.export_purge','on',true)");
+        await sql.query(
+          "DELETE FROM axfluxo_export.blobs WHERE owner_id=$1 AND id=$2 AND state='pending'",
+          [row.owner_id, row.id],
+        );
+      });
+      removed++;
+    } catch {
+      /* keep the sweep best-effort */
+    }
+  }
+  return removed;
 }

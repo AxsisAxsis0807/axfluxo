@@ -14,6 +14,7 @@ import { serverConfig } from "./config";
 import {
   cloudExportRouter,
   exportPolicyFor,
+  ticketDownload,
 } from "../cloud-export/api";
 import { exportApiConfiguration } from "../cloud-export/config";
 import { ConfigurationError } from "../runtime/config";
@@ -24,15 +25,14 @@ export async function startApi(env = process.env) {
   const db = postgresDatabase({
     connectionString: config.databaseUrl,
     max: config.poolMax,
-    ssl: config.production ? { rejectUnauthorized: true } : undefined,
+    ssl: config.tls.ssl,
   });
   const exportApi = exportApiConfiguration(env);
   const exportDb = exportApi.enabled()
     ? postgresDatabase(
-        {
-          connectionString: config.databaseUrl,
-          max: 1,
-          ssl: config.production ? { rejectUnauthorized: true } : undefined,
+        {            connectionString: config.databaseUrl,
+            max: 1,
+            ssl: config.tls.ssl,
         },
         "axfluxo_export_api",
       )
@@ -46,6 +46,9 @@ export async function startApi(env = process.env) {
       maxImageBytes: exportApi.maxImageBytes,
       maxClips: exportApi.maxClips,
       maxFrames: exportApi.maxFrames,
+      maxOwnerBytes: exportApi.maxOwnerBytes,
+      retentionHours: exportApi.retentionHours,
+      ticketSeconds: exportApi.ticketSeconds,
     });
     const handler = createVideoApi({
       ...config,
@@ -82,6 +85,7 @@ export async function startApi(env = process.env) {
       }),
       verify,
       response: cloudExport,
+      public: ticketDownload({ db: exportDb }),
     });
     const transfer = httpConfiguration(env);
     const bridge = createHttpServer(handler, transfer, (incoming) =>

@@ -18,6 +18,7 @@ import {
   heartbeat,
   progress,
   publish,
+  purgeExpired,
   type Claim,
 } from "./queue";
 import {
@@ -112,7 +113,12 @@ export async function runExportPass(
   db: Database,
   config: Pick<
     ExportWorkerConfig,
-    "workDirectory" | "maxWorkBytes" | "minFreeBytes" | "segmentFrames" | "sessionTimeoutMs"
+    | "workDirectory"
+    | "maxWorkBytes"
+    | "minFreeBytes"
+    | "segmentFrames"
+    | "sessionTimeoutMs"
+    | "maxOwnerBytes"
   >,
   signal: AbortSignal,
   render: typeof renderExport = renderExport,
@@ -187,13 +193,18 @@ export async function runExportPass(
     );
     outputBlobId = existing
       ? existing.id
-      : await storeBlob(db, job.owner, {
-          id: randomUUID(),
-          kind: "output",
-          sha256: rendered.sha256,
-          size: rendered.size,
-          chunks: fileChunks(rendered.path, rendered.size),
-        });
+      : await storeBlob(
+          db,
+          job.owner,
+          {
+            id: randomUUID(),
+            kind: "output",
+            sha256: rendered.sha256,
+            size: rendered.size,
+            chunks: fileChunks(rendered.path, rendered.size),
+          },
+          config.maxOwnerBytes,
+        );
     stop.signal.throwIfAborted();
     if ((await exportFileHash(rendered.path)) !== rendered.sha256)
       throw new ExportError("EXPORT_OUTPUT_INVALID");
@@ -252,10 +263,11 @@ export async function runExportWorker(
     {
       connectionString: config.databaseUrl,
       max: 1,
-      ssl: config.production ? { rejectUnauthorized: true } : undefined,
+      ssl: config.tls.ssl,
     },
     "axfluxo_export_worker",
   );
+  let idle = 0;
   try {
     while (!signal.aborted) {
       let worked = false;
@@ -265,7 +277,14 @@ export async function runExportWorker(
         // Never log driver errors, paths, tokens or media names.
         worked = false;
       }
-      if (!worked) await sleep(config.pollMs, signal);
+      if (worked) {
+        idle = 0;
+        continue;
+      }
+      // Retention runs while idle so stale jobs never fill the free 1GB database.
+      if (idle++ % 60 === 0)
+        await purgeExpired(db, config.retentionHours).catch(() => undefined);
+      await sleep(config.pollMs, signal);
     }
   } finally {
     await db.close();

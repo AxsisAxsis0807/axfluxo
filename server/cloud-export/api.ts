@@ -29,7 +29,15 @@ import {
   exportScoped,
   type BlobRow,
 } from "./storage";
-import { cancelJob, createJob, getJob, outputBlob } from "./queue";
+import {
+  cancelJob,
+  createDownloadTicket,
+  createJob,
+  getJob,
+  outputBlob,
+  purgeJob,
+  redeemDownloadTicket,
+} from "./queue";
 import type { TransferPolicy } from "../api/http";
 
 const uuidSchema = z.uuid();
@@ -122,12 +130,12 @@ async function receiveBlob(
   if (!Number.isSafeInteger(size) || size <= 0 || size > limit)
     throw new ApiError(413, "EXPORT_LIMIT_EXCEEDED");
   const id = randomUUID();
-  const { duplicate } = await beginBlob(db, owner, {
-    id,
-    kind,
-    size,
-    sha256: sha.data,
-  });
+  const { duplicate } = await beginBlob(
+    db,
+    owner,
+    { id, kind, size, sha256: sha.data },
+    config.maxOwnerBytes,
+  );
   if (duplicate) {
     // The client may safely omit the transfer when an identical ready blob exists.
     await request.body?.cancel().catch(() => undefined);
@@ -236,6 +244,9 @@ export function cloudExportRouter(options: {
   maxImageBytes: number;
   maxClips: number;
   maxFrames: number;
+  maxOwnerBytes: number;
+  retentionHours: number;
+  ticketSeconds: number;
 }) {
   const session: ReturnType<typeof exportSessionViewSchema.parse> = {
     enabled: options.enabled(),
@@ -243,6 +254,8 @@ export function cloudExportRouter(options: {
     maxOutputBytes: exportLimits.maxOutputBytes,
     maxClips: options.maxClips,
     maxFrames: options.maxFrames,
+    maxOwnerBytes: options.maxOwnerBytes,
+    retentionHours: options.retentionHours,
     profile: {
       width: EXPORT_PROFILE.width,
       height: EXPORT_PROFILE.height,
@@ -297,7 +310,7 @@ export function cloudExportRouter(options: {
         return json(origin, 202, exportJobViewSchema.parse(job));
       }
       const jobPath =
-        /^\/v1\/cloud-export\/jobs\/([0-9a-fA-F-]{36})(\/cancel|\/output)?$/.exec(
+        /^\/v1\/cloud-export\/jobs\/([0-9a-fA-F-]{36})(\/cancel|\/output|\/download-ticket)?$/.exec(
           path,
         );
       if (!jobPath) throw new ApiError(404, "EXPORT_NOT_FOUND");
@@ -308,6 +321,17 @@ export function cloudExportRouter(options: {
       }
       if (request.method === "POST" && action === "/cancel") {
         return json(origin, 200, await cancelJob(db, owner, id));
+      }
+      if (request.method === "POST" && action === "/download-ticket") {
+        return json(
+          origin,
+          200,
+          await createDownloadTicket(db, owner, id, options.ticketSeconds),
+        );
+      }
+      if (request.method === "DELETE" && !action) {
+        await purgeJob(db, owner, id);
+        return json(origin, 200, { deleted: true });
       }
       if (
         (request.method === "GET" || request.method === "HEAD") &&
@@ -371,7 +395,69 @@ export function cloudExportRouter(options: {
   };
 }
 
-/** Server-owned transfer policy. Only these two routes may receive/send large bodies. */
+/**
+ * Unauthenticated, single-use download for browser navigation. The token is the
+ * authorization, is stored hashed, expires quickly and is consumed on first use.
+ */
+export function ticketDownload(options: { db: Database | null }) {
+  return async (request: Request): Promise<Response | null> => {
+    const path = new URL(request.url).pathname;
+    const match = /^\/v1\/cloud-export\/downloads\/([A-Za-z0-9_-]{43})$/.exec(path);
+    if (!match) return null;
+    const missing = () => json(null, 404, { error: { code: "EXPORT_NOT_FOUND" } });
+    if (request.method !== "GET" && request.method !== "HEAD")
+      return missing();
+    if (!options.db) return missing();
+    try {
+      const ticket = await redeemDownloadTicket(options.db, match[1]);
+      if (!ticket) return missing();
+      await exportScoped(options.db, ticket.owner, (sql) =>
+        requireExportMembership(sql, ticket.owner),
+      );
+      const row = await outputBlob(options.db, ticket.owner, ticket.job);
+      const size = Number(row.size);
+      const headers = headersFor(null);
+      headers.set("content-type", "video/mp4");
+      headers.set("accept-ranges", "bytes");
+      headers.set(
+        "content-disposition",
+        `attachment; filename="${exportOutputName}"`,
+      );
+      let range: { start: number; end: number } | null = null;
+      try {
+        range = parseRange(request.headers.get("range"), size);
+      } catch {
+        headers.set("content-range", `bytes */${size}`);
+        return new Response(null, { status: 416, headers });
+      }
+      if (range) {
+        headers.set(
+          "content-range",
+          `bytes ${range.start}-${range.end - 1}/${size}`,
+        );
+        headers.set("content-length", String(range.end - range.start));
+        return new Response(
+          request.method === "HEAD"
+            ? null
+            : stream(options.db, ticket.owner, row, range),
+          { status: 206, headers },
+        );
+      }
+      headers.set("content-length", String(size));
+      return new Response(
+        request.method === "HEAD"
+          ? null
+          : stream(options.db, ticket.owner, row, null),
+        { status: 200, headers },
+      );
+    } catch {
+      // Never expose whether a token existed, expired, was used or belongs to another owner.
+      return missing();
+    }
+  };
+}
+
+/** Server-owned transfer policy. Only these routes may receive/send large bodies. */
 export function exportPolicyFor(
   incoming: IncomingMessage,
   policies: {
@@ -388,8 +474,10 @@ export function exportPolicyFor(
   if (incoming.method === "POST" && path === "/v1/cloud-export/blobs")
     return { ...policies.chunk, bodyBytes: maxUploadBytes };
   if (
-    ["GET", "HEAD"].includes(incoming.method ?? "") &&
-    /^\/v1\/cloud-export\/jobs\/[0-9a-fA-F-]{36}\/output$/.test(path)
+    (["GET", "HEAD"].includes(incoming.method ?? "") &&
+      /^\/v1\/cloud-export\/jobs\/[0-9a-fA-F-]{36}\/output$/.test(path)) ||
+    (["GET", "HEAD"].includes(incoming.method ?? "") &&
+      /^\/v1\/cloud-export\/downloads\/[A-Za-z0-9_-]{43}$/.test(path))
   )
     return policies.download;
   return policies.control;
