@@ -8,7 +8,9 @@ export function postgresDatabase(
     | "axfluxo_video_probe"
     | "axfluxo_video_delete"
     | "axfluxo_video_notify"
-    | "axfluxo_video_render" = "axfluxo_video_api",
+    | "axfluxo_video_render"
+    | "axfluxo_export_worker"
+    | "axfluxo_export_api" = "axfluxo_video_api",
 ): Database & { close(): Promise<void> } {
   if (
     ![
@@ -17,6 +19,8 @@ export function postgresDatabase(
       "axfluxo_video_render",
       "axfluxo_video_delete",
       "axfluxo_video_notify",
+      "axfluxo_export_worker",
+      "axfluxo_export_api",
     ].includes(role)
   )
     throw Error("Invalid role");
