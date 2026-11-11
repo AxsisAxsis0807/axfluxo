@@ -38,6 +38,8 @@ export interface ApiConfig {
     request: Request,
     owner: string,
   ) => Promise<{ status: number; body: unknown }>;
+  /** Raw response hook for streaming handlers (uploads/storage downloads). */
+  response?: (request: Request, owner: string) => Promise<Response | null>;
 }
 export async function jsonBody(request: Request) {
   if (
@@ -110,6 +112,8 @@ export function createVideoApi(
       vary: "Origin",
       "content-type": "application/json",
       "x-content-type-options": "nosniff",
+      "access-control-expose-headers":
+        "Content-Range, Content-Length, Accept-Ranges, Content-Disposition",
     });
     const origin = request.headers.get("origin");
     const respond = (status: number, body: unknown) =>
@@ -129,7 +133,7 @@ export function createVideoApi(
             .map((v) => v.trim()) ?? [];
         if (
           !method ||
-          !["GET", "POST"].includes(method) ||
+          !["GET", "HEAD", "POST"].includes(method) ||
           requestedHeaders.some(
             (v) =>
               ![
@@ -138,14 +142,18 @@ export function createVideoApi(
                 "idempotency-key",
                 "if-match",
                 "x-project-owner",
+                "range",
               ].includes(v),
           )
         )
           throw new ApiError(403, "ORIGIN_NOT_ALLOWED");
-        headers.set("access-control-allow-methods", "GET, POST, OPTIONS");
+        headers.set(
+          "access-control-allow-methods",
+          "GET, HEAD, POST, OPTIONS",
+        );
         headers.set(
           "access-control-allow-headers",
-          "Authorization, Content-Type, Idempotency-Key, If-Match, X-Project-Owner",
+          "Authorization, Content-Type, Idempotency-Key, If-Match, X-Project-Owner, Range",
         );
         headers.delete("content-type");
         return new Response(null, { status: 204, headers });
@@ -154,6 +162,10 @@ export function createVideoApi(
         request.headers.get("authorization"),
       );
       const path = new URL(request.url).pathname;
+      if (config.response) {
+        const raw = await config.response(request, identity.ownerId);
+        if (raw) return raw;
+      }
       if (
         config.outputs &&
         (path === "/outputs" ||
