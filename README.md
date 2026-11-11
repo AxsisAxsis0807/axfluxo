@@ -141,6 +141,16 @@ saveは通常キャッシュから分離し、同じ再実行系列の結果を�
 [設計・互換性・rollback](docs/adr/006-library-workflow-io.md)と
 [Phase 3検証記録・実機手順](docs/manual-tests/workflow-phase3-results.md)を参照してください。
 
+### 最小クラウド動画書き出し（All Versions、既定OFF）
+
+Developer StudioのAll Versionsで編集した内容を、サーバー側の同じレンダラーで
+1920×1080・60fps・H.264/AACのMP4に書き出せます。素材と完成物はDB経由で受け渡し、
+APIと独立したWorkerがFFmpegを実行します。素材転送とジョブ受領が終わるまでSafariを閉じない旨を画面に表示し、
+受領後はSafariを閉じても処理を継続します。`EXPORT_ENABLED=true`とmigration
+`008_cloud_export.sql`、専用DBロールの付与が必要です（既定OFF、未デプロイ）。
+上限・設定・blitz.cloud手順・未検証項目は
+[最小クラウド書き出し](docs/cloud-export/minimal.md)を参照してください。
+
 ### 開発者向け動画統合（V0–V7、既定OFF）
 
 動画editor・server workerは既存の画像Studio/Workflowと分離しています。
