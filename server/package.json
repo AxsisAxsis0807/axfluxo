@@ -19,6 +19,8 @@
     "build:deletion": "esbuild worker/deletion/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/deletion.mjs",
     "build:notifications": "esbuild worker/notifications/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/notifications.mjs",
     "build:export-worker": "esbuild cloud-export/worker.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/export-worker.mjs",
+    "build:migrate": "esbuild db/migrate.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/migrate.mjs",
+    "migrate": "node ../work/video-server/migrate.mjs",
     "export-worker": "node ../work/video-server/export-worker.mjs",
     "build:worker": "esbuild worker/runtime/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/worker.mjs",
     "worker": "node ../work/video-server/worker.mjs"
