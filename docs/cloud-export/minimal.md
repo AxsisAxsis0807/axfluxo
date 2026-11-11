@@ -168,6 +168,8 @@ Blitz はこの compose を読み、1アプリ・1アドレスとして提案す
 Dockerfile は `infra/video/Dockerfile`。最終ステージ `cloud` が `ENTRYPOINT ["node"]` なので、
 パーツごとの start command（`/app/api.mjs` / `/app/export-worker.mjs`）だけで役割が決まる。
 Docker の `--target` に依存しない。
+Dockerfile は既定フロントエンドのみを使い、`# syntax` ディレクティブと BuildKit secret mount を含めない
+（Blitzの初回ビルドは外部フロントエンドの解決直後に `exit code: 1` で停止し、コンテキスト読込まで進まなかった）。
 
 - ウィザードが「We write a recipe for it」と言っても、compose と Dockerfile が読まれれば
   recipe は使われない。もしパーツが提案されない場合は、Dockerfile を明示選択し、

@@ -1,10 +1,13 @@
-# syntax=docker/dockerfile:1
 # Build only. No provisioning, migration or deployment step.
+# Keep this on the builder's built-in Dockerfile frontend: blitz.cloud failed to
+# solve on `# syntax=docker/dockerfile:1` with exit code 1 before loading the
+# build context, and it cannot pass BuildKit secrets. No secret mounts here; a
+# private-CA proxy needs a local Dockerfile variant that copies the CA in.
 FROM node:24.19.0-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json server/package.json
-RUN --mount=type=secret,id=proxy_ca if [ -s /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; npm ci --ignore-scripts --workspace=axfluxo-video-server --include-workspace-root=false
+RUN npm ci --ignore-scripts --workspace=axfluxo-video-server --include-workspace-root=false
 COPY server server
 COPY src/domain src/domain
 COPY src/config src/config
@@ -13,7 +16,7 @@ FROM node:24.19.0-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production VIDEO_RENDER_DISK=/work VIDEO_RENDER_ENABLED=false VIDEO_ALEO_FONT=/app/assets/Aleo.ttf VIDEO_FNF_FONT=/app/assets/NotoSansJP.ttf AXFLUXO_MIGRATIONS_DIR=/app/migrations
 STOPSIGNAL SIGTERM
-RUN --mount=type=secret,id=proxy_ca set -eu; if [ -s /run/secrets/proxy_ca ]; then export APT_CONFIG=/tmp/axfluxo-apt.conf; printf 'Acquire::https::CaInfo "/run/secrets/proxy_ca";\n' > "$APT_CONFIG"; fi; apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* /tmp/axfluxo-apt.conf && mkdir /work && chown node:node /work
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work
 COPY --from=build /runtime/ ./
 USER node:node
 

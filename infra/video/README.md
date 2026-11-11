@@ -2,7 +2,7 @@
 
 これらはreview用です。cloud/DB/cluster/bucketを作成せず、migrationやdeployも行いません。
 
-DockerfileはNode 24.19.0とDebianのffmpeg/libx264/zscale/tonemapを使用。秘密をimageへコピーしません。managed環境では既存proxyとCAを維持し、buildに`--secret id=proxy_ca,src=/etc/ssl/certs/ca-certificates.crt`等のcombined CA bundleを渡してください。Docker認証設定は変更しません。通常の非proxy環境ではsecretなしでsystem CAを使用します。配布時にはbase image/ffmpegの対応source・licenseを確認してください（Debian package copyrightはimage内`/usr/share/doc/ffmpeg/copyright`）。この作業でimageの公開はしていません。
+DockerfileはNode 24.19.0とDebianのffmpeg/libx264/zscale/tonemapを使用。秘密をimageへコピーしません。BlitzのビルダーはBuildKit secretを渡せず、`# syntax=docker/dockerfile:1` の外部フロントエンドで `exit code: 1` になったため、このDockerfileは既定フロントエンドと通常の`npm ci`/`apt-get`だけを使います。社内proxyで私設CAが必要な場合はローカル用のDockerfile差分でCAをbuild段階へCOPYしてください。Docker認証設定は変更しません。非proxy環境ではsystem CAを使用します。配布時にはbase image/ffmpegの対応source・licenseを確認してください（Debian package copyrightはimage内`/usr/share/doc/ffmpeg/copyright`）。この作業でimageの公開はしていません。
 
 Composeは初期並列1、CPU2/RAM4GiB/PID128、非root、capなし、readonly、diskは既存seek可能bind mount、restart=no、内部networkのみ。既定flagはOFF。diskはjob/checkpoint復帰調査のため保持し、tmpfsをmedia diskに使わないでください。ホストdiskのsizeを自動変更する機能はありません。
 
@@ -29,10 +29,11 @@ docker build --target api -f infra/video/Dockerfile -t axfluxo-video-api .
 docker build --target worker -f infra/video/Dockerfile -t axfluxo-video-worker .
 ```
 
-The build context is the repository root. `proxy_ca` is optional. In a proxy
-with a private CA, supply `--secret id=proxy_ca,src=<combined-CA-bundle>`; npm
-uses the mounted additional trust and apt uses that bundle. Verification stays
-on. Build-only CA files are not copied to the runtime. API/worker targets use
+The build context is the repository root. This file deliberately has no `# syntax`
+directive and no secret mounts: blitz.cloud could not solve the external frontend
+(`exit code: 1` before the context was loaded) and cannot pass BuildKit secrets.
+A private-CA proxy needs a local variant that copies the CA into the build stage.
+Verification stays on, and CA files are never copied to the runtime. API/worker targets use
 `ENTRYPOINT ["node"]`, with `/app/api.mjs` or `/app/worker.mjs` as CMD. For an
 individual worker, replace CMD with `/app/probe.mjs`, `/app/derivatives.mjs`,
 `/app/render.mjs`, `/app/deletion.mjs` or `/app/notifications.mjs`.
