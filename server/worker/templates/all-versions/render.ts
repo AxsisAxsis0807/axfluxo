@@ -4,6 +4,7 @@ import {
   versionIntervals,
   projectIssues,
   type AllVersionsProject,
+  AV_RENDERER,
 } from "../../../../src/domain/video/all-versions";
 import { renderPlan, type RenderPlan, type Segment } from "../../render/plan";
 import type { FnfSnapshot } from "../../../../src/domain/video/schema";
@@ -37,7 +38,7 @@ export function projectPlan(
     ...plan,
     ...dimensions(project),
     segments,
-    hash: digest({ plan: plan.hash, project }),
+    hash: digest({ plan: plan.hash, project, visualRenderer: AV_RENDERER }),
   };
 }
 export async function prepareGraphics(
