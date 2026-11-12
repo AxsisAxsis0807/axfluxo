@@ -17,7 +17,7 @@ export const AV_REFERENCE_LAYOUT = {
   backgroundOverscan: 1.25,
   backgroundBlur: 0.095,
   textCenterY: 0.5,
-  textSize: 0.058,
+  textSize: 0.0565,
   textMaxWidth: 0.94,
   textBandHeight: 0.069,
   textBandHorizontalPadding: 0.006,
