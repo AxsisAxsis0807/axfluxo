@@ -386,10 +386,12 @@ export function AllVersionsEditor({
     // InShot-strength blur is expensive. Rasterize the static cover+backdrop
     // exactly once rather than doing a 100px blur for every 60fps frame.
     const baseCanvas = document.createElement("canvas");
-    baseCanvas.width = 1920;
-    baseCanvas.height = 1080;
+    baseCanvas.width = width;
+    baseCanvas.height = height;
     const baseCtx = baseCanvas.getContext("2d");
     if (!baseCtx) throw Error("CANVAS_UNAVAILABLE");
+    baseCtx.save();
+    baseCtx.scale(width / 1920, height / 1080);
     baseCtx.fillStyle = "black";
     baseCtx.fillRect(0, 0, 1920, 1080);
     baseCtx.save();
@@ -434,6 +436,7 @@ export function AllVersionsEditor({
       size,
       size,
     );
+    baseCtx.restore();
     baseCtx.restore();
     return [
       {
