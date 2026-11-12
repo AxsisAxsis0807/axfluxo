@@ -17,12 +17,13 @@ export const AV_REFERENCE_LAYOUT = {
   backgroundOverscan: 1.25,
   backgroundBlur: 0.095,
   textCenterY: 0.5,
-  textSize: 0.0565,
+  textSize: 0.0555,
+  textScaleX: 1.03,
   textMaxWidth: 0.94,
   textBandHeight: 0.069,
-  textBandHorizontalPadding: 0.006,
+  textBandHorizontalPadding: 0.0005,
   textBandOpacity: 0.6,
-  textStroke: 0.004,
+  textStroke: 0.003,
 } as const;
 export const projectCodes = [
   "PROJECT_CONFLICT",
