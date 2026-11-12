@@ -225,7 +225,8 @@ Environment タブで設定する（変更は再起動後に反映）。
 
 ### 6. 確認
 
-1. API の `/health` と、認証付き `/v1/cloud-export/session` が返ることを確認。
+1. 未認証で `/v1/cloud-export/session` が **401** を返すことを確認（APIに `/health` は無い。401がプロセス生存の確認になる）。続いて認証付きで 200 と `enabled: true` を確認。
+   起動に失敗した場合は `API startup failed at <段階>: <設定名>` の1行が追加される（値は出ない）。段階は config / storage / jwt / database / export / router / http / listen。
 2. Worker のログに起動行が出ることを確認（秘密値は出ない）。
 3. 5秒の素材でジョブ作成 → Worker が処理 → 再訪で状態取得 → チケット保存。
 4. 1920×1080/60fps/音声ありを確認し、記録する。

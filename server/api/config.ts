@@ -1,4 +1,5 @@
 import {
+  ConfigurationError,
   databaseUrl as resolveDatabaseUrl,
   integerSetting,
 } from "../runtime/config";
@@ -8,7 +9,9 @@ export function serverConfig(env: Record<string, string | undefined>) {
   const audience = env.VIDEO_JWT_AUDIENCE;
   const databaseUrl = resolveDatabaseUrl(env);
   if (!issuer || !audience)
-    throw new Error("Missing server authentication/database configuration");
+    throw new ConfigurationError(
+      "Missing VIDEO_JWT_ISSUER/VIDEO_JWT_AUDIENCE configuration",
+    );
   const port = integerSetting(
     { ...env, API_PORT: env.PORT ?? env.VIDEO_API_PORT },
     "API_PORT",

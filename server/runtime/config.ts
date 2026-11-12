@@ -50,7 +50,7 @@ export function databaseUrl(
   const value = primary ?? fallback;
   if (!value)
     throw new ConfigurationError(
-      "Missing server authentication/database configuration",
+      "Missing database connection configuration",
     );
   return value;
 }

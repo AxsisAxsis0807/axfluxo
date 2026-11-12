@@ -18,26 +18,47 @@ import {
 } from "../cloud-export/api";
 import { exportApiConfiguration } from "../cloud-export/config";
 import { ConfigurationError } from "../runtime/config";
-export async function startApi(env = process.env) {
-  const config = serverConfig(env);
-  const cloud = cloudConfiguration(env);
-  const verify = supabaseVerifier(config.issuer, config.audience);
-  const db = postgresDatabase({
-    connectionString: config.databaseUrl,
-    max: config.poolMax,
-    ssl: config.tls.ssl,
-  });
-  const exportApi = exportApiConfiguration(env);
-  const exportDb = exportApi.enabled()
-    ? postgresDatabase(
-        {            connectionString: config.databaseUrl,
+import {
+  StartupError,
+  startupFailureLine,
+  type StartupStage,
+} from "./startup";
+
+export async function startApi(
+  env: Record<string, string | undefined> = process.env,
+) {
+  let stage: StartupStage = "config";
+  let cleanup: (() => Promise<void>) | undefined;
+  let bridge: ReturnType<typeof createHttpServer> | undefined;
+  try {
+    const config = serverConfig(env);
+    stage = "storage";
+    const cloud = cloudConfiguration(env);
+    stage = "jwt";
+    const verify = supabaseVerifier(config.issuer, config.audience);
+    stage = "database";
+    const db = postgresDatabase({
+      connectionString: config.databaseUrl,
+      max: config.poolMax,
+      ssl: config.tls.ssl,
+    });
+    stage = "export";
+    const exportApi = exportApiConfiguration(env);
+    const exportDb = exportApi.enabled()
+      ? postgresDatabase(
+          {
+            connectionString: config.databaseUrl,
             max: 1,
             ssl: config.tls.ssl,
-        },
-        "axfluxo_export_api",
-      )
-    : null;
-  try {
+          },
+          "axfluxo_export_api",
+        )
+      : null;
+    cleanup = async () => {
+      await db.close().catch(() => undefined);
+      await exportDb?.close().catch(() => undefined);
+    };
+    stage = "router";
     const accepting = () => Boolean(cloud.storage) && config.admissionEnabled();
     const cloudExport = cloudExportRouter({
       db: exportDb,
@@ -87,32 +108,35 @@ export async function startApi(env = process.env) {
       response: cloudExport,
       public: ticketDownload({ db: exportDb }),
     });
+    stage = "http";
     const transfer = httpConfiguration(env);
-    const bridge = createHttpServer(handler, transfer, (incoming) =>
+    const server = createHttpServer(handler, transfer, (incoming) =>
       exportPolicyFor(incoming, transfer, exportApi.maxUploadBytes),
     );
+    bridge = server;
+    stage = "listen";
     await new Promise<void>((resolve, reject) => {
-      bridge.server.once("error", reject);
-      bridge.server.listen(config.port, config.host, () => {
-        bridge.server.removeListener("error", reject);
+      server.server.once("error", reject);
+      server.server.listen(config.port, config.host, () => {
+        server.server.removeListener("error", reject);
         resolve();
       });
     });
     return {
-      server: bridge.server,
+      server: server.server,
       async close() {
-        bridge.abort();
+        server.abort();
         await Promise.all([
-          new Promise<void>((resolve) => bridge.server.close(() => resolve())),
+          new Promise<void>((resolve) => server.server.close(() => resolve())),
           db.close(),
           exportDb?.close(),
         ]);
       },
     };
-  } catch {
-    await db.close();
-    await exportDb?.close().catch(() => undefined);
-    throw Error("API startup configuration failed");
+  } catch (error) {
+    bridge?.abort();
+    await cleanup?.();
+    throw new StartupError(stage, error);
   }
 }
 if (isEntrypoint(import.meta.url, ["api.mjs", "api/main.ts"])) {
@@ -120,8 +144,9 @@ if (isEntrypoint(import.meta.url, ["api.mjs", "api/main.ts"])) {
     const api = await startApi();
     return () => api.close();
   }, process.env).catch((error: unknown) => {
-    if (error instanceof ConfigurationError)
-      process.stderr.write(error.message + "\n");
+    // Stage and whitelisted reason only: never a setting value or connection string.
+    if (error instanceof StartupError || error instanceof ConfigurationError)
+      process.stderr.write(startupFailureLine(error) + "\n");
     process.stderr.write(
       "Video API startup/operation failed. Verify server configuration.\n",
     );
