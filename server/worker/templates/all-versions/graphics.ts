@@ -95,7 +95,8 @@ export async function textImage(p: AllVersionsProject, index: number) {
   const textWidth = ctx.measureText(text).width,
     bandWidth = Math.min(
       width,
-      textWidth + height * AV_REFERENCE_LAYOUT.textBandHorizontalPadding,
+      textWidth * AV_REFERENCE_LAYOUT.textScaleX +
+        height * AV_REFERENCE_LAYOUT.textBandHorizontalPadding,
     ),
     centerY = height * AV_REFERENCE_LAYOUT.textCenterY,
     bandHeight = height * AV_REFERENCE_LAYOUT.textBandHeight;
@@ -114,8 +115,12 @@ export async function textImage(p: AllVersionsProject, index: number) {
   ctx.lineWidth = height * AV_REFERENCE_LAYOUT.textStroke;
   ctx.strokeStyle = "black";
   ctx.fillStyle = "white";
-  ctx.strokeText(text, width / 2, centerY);
-  ctx.fillText(text, width / 2, centerY);
+  ctx.save();
+  ctx.translate(width / 2, centerY);
+  ctx.scale(AV_REFERENCE_LAYOUT.textScaleX, 1);
+  ctx.strokeText(text, 0, 0);
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
   return {
     png: await canvas.encode("png"),
     width,
