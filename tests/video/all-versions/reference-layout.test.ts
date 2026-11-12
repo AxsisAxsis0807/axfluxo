@@ -28,16 +28,17 @@ describe("All Versions reference-frame geometry", () => {
   });
 
   it("3/5: Aleo reference font scales uniformly at both video resolutions", () => {
-    expect(height * layout.textSize).toBeCloseTo(48.816, 3);
-    expect(1080 * layout.textSize).toBeCloseTo(61.02, 3);
+    expect(height * layout.textSize).toBeCloseTo(47.952, 3);
+    expect(1080 * layout.textSize).toBeCloseTo(59.94, 3);
+    expect(layout.textScaleX).toBe(1.03);
     // For long version labels, the text shrinks to fit inside the cover.
     expect(layout.textMaxWidth).toBeLessThanOrEqual(layout.coverSide);
   });
 
   it("4/5: the band uses exactly the measured black opacity", () => {
     expect(layout.textBandOpacity).toBe(0.6);
-    expect(layout.textStroke).toBe(0.004);
-    expect(layout.textBandHorizontalPadding).toBe(0.006);
+    expect(layout.textStroke).toBe(0.003);
+    expect(layout.textBandHorizontalPadding).toBe(0.0005);
   });
 
   it("5/5: the blur is full-strength and the old projects remain readable", () => {
