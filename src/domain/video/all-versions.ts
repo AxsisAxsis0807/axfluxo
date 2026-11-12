@@ -23,7 +23,7 @@ export const AV_REFERENCE_LAYOUT = {
   textBandHeight: 0.069,
   textBandHorizontalPadding: 0.0005,
   textBandOpacity: 0.6,
-  textStroke: 0.003,
+  textStroke: 0.004,
 } as const;
 export const projectCodes = [
   "PROJECT_CONFLICT",
