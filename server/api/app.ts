@@ -91,12 +91,19 @@ export async function jsonBody(request: Request) {
 export function createVideoApi(
   config: ApiConfig,
 ): (request: Request) => Promise<Response> {
-  const origins = new Set(config.allowedOrigins);
-  for (const origin of origins) {
-    const url = new URL(origin);
+  const origins = new Set<string>();
+  for (const origin of config.allowedOrigins) {
+    let url: URL;
+    try {
+      url = new URL(origin);
+    } catch {
+      throw new Error("Invalid CORS origin configuration");
+    }
+    // A bare origin may be entered with one trailing slash. Normalize only
+    // that equivalent form, never a path, query, fragment, or other URL.
     if (
       origin === "null" ||
-      url.origin !== origin ||
+      (origin !== url.origin && origin !== `${url.origin}/`) ||
       url.username ||
       url.password ||
       (url.protocol !== "https:" &&
@@ -106,6 +113,7 @@ export function createVideoApi(
         ))
     )
       throw new Error("Invalid CORS origin configuration");
+    origins.add(url.origin);
   }
   if (!origins.size) throw new Error("Explicit CORS origins required");
   return async (request) => {
