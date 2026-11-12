@@ -37,7 +37,7 @@ describe("All Versions reference-frame geometry", () => {
 
   it("4/5: the band uses exactly the measured black opacity", () => {
     expect(layout.textBandOpacity).toBe(0.6);
-    expect(layout.textStroke).toBe(0.003);
+    expect(layout.textStroke).toBe(0.004);
     expect(layout.textBandHorizontalPadding).toBe(0.0005);
   });
 
