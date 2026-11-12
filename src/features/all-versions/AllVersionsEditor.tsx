@@ -383,6 +383,58 @@ export function AllVersionsEditor({
     }
     const height = project.design.height,
       width = (height * 16) / 9;
+    // InShot-strength blur is expensive. Rasterize the static cover+backdrop
+    // exactly once rather than doing a 100px blur for every 60fps frame.
+    const baseCanvas = document.createElement("canvas");
+    baseCanvas.width = 1920;
+    baseCanvas.height = 1080;
+    const baseCtx = baseCanvas.getContext("2d");
+    if (!baseCtx) throw Error("CANVAS_UNAVAILABLE");
+    baseCtx.fillStyle = "black";
+    baseCtx.fillRect(0, 0, 1920, 1080);
+    baseCtx.save();
+    baseCtx.filter = `blur(${1080 * AV_REFERENCE_LAYOUT.backgroundBlur}px)`;
+    const scale =
+      Math.max(1920 / cover.width, 1080 / cover.height) *
+      AV_REFERENCE_LAYOUT.backgroundOverscan;
+    baseCtx.drawImage(
+      cover,
+      (1920 - cover.width * scale) / 2,
+      (1080 - cover.height * scale) / 2,
+      cover.width * scale,
+      cover.height * scale,
+    );
+    baseCtx.restore();
+    const size = 1080 * AV_REFERENCE_LAYOUT.coverSide,
+      x = (1920 - size) / 2,
+      y = (1080 - size) / 2,
+      radius = size * AV_REFERENCE_LAYOUT.coverCornerRadius,
+      crop = Math.min(cover.width, cover.height);
+    baseCtx.save();
+    baseCtx.beginPath();
+    baseCtx.moveTo(x + radius, y);
+    baseCtx.lineTo(x + size - radius, y);
+    baseCtx.quadraticCurveTo(x + size, y, x + size, y + radius);
+    baseCtx.lineTo(x + size, y + size - radius);
+    baseCtx.quadraticCurveTo(x + size, y + size, x + size - radius, y + size);
+    baseCtx.lineTo(x + radius, y + size);
+    baseCtx.quadraticCurveTo(x, y + size, x, y + size - radius);
+    baseCtx.lineTo(x, y + radius);
+    baseCtx.quadraticCurveTo(x, y, x + radius, y);
+    baseCtx.closePath();
+    baseCtx.clip();
+    baseCtx.drawImage(
+      cover,
+      (cover.width - crop) / 2,
+      (cover.height - crop) / 2,
+      crop,
+      crop,
+      x,
+      y,
+      size,
+      size,
+    );
+    baseCtx.restore();
     return [
       {
         filename: "All Versions.mp4",
@@ -400,52 +452,7 @@ export function AllVersionsEditor({
         draw: (ctx, _media, seconds) => {
           ctx.save();
           ctx.scale(width / 1920, height / 1080);
-          ctx.fillStyle = "black";
-          ctx.fillRect(0, 0, 1920, 1080);
-          ctx.save();
-          ctx.filter = `blur(${1080 * AV_REFERENCE_LAYOUT.backgroundBlur}px)`;
-          const scale =
-            Math.max(1920 / cover.width, 1080 / cover.height) *
-            AV_REFERENCE_LAYOUT.backgroundOverscan;
-          ctx.drawImage(
-            cover,
-            (1920 - cover.width * scale) / 2,
-            (1080 - cover.height * scale) / 2,
-            cover.width * scale,
-            cover.height * scale,
-          );
-          ctx.restore();
-          const size = 1080 * AV_REFERENCE_LAYOUT.coverSide,
-            x = (1920 - size) / 2,
-            y = (1080 - size) / 2,
-            radius = size * AV_REFERENCE_LAYOUT.coverCornerRadius,
-            crop = Math.min(cover.width, cover.height);
-          ctx.save();
-          ctx.beginPath();
-          ctx.moveTo(x + radius, y);
-          ctx.lineTo(x + size - radius, y);
-          ctx.quadraticCurveTo(x + size, y, x + size, y + radius);
-          ctx.lineTo(x + size, y + size - radius);
-          ctx.quadraticCurveTo(x + size, y + size, x + size - radius, y + size);
-          ctx.lineTo(x + radius, y + size);
-          ctx.quadraticCurveTo(x, y + size, x, y + size - radius);
-          ctx.lineTo(x, y + radius);
-          ctx.quadraticCurveTo(x, y, x + radius, y);
-          ctx.closePath();
-          ctx.clip();
-          ctx.drawImage(
-            cover,
-            (cover.width - crop) / 2,
-            (cover.height - crop) / 2,
-            crop,
-            crop,
-            x,
-            y,
-            size,
-            size,
-          );
-          ctx.restore();
-          // The server-generated text PNG also contains the reference's band.
+          ctx.drawImage(baseCanvas, 0, 0);
           const frame = Math.floor(seconds * 60),
             i = versions.findIndex(
               (v) => frame >= v.startFrame && frame < v.endFrame,
