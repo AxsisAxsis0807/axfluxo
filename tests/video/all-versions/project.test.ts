@@ -148,10 +148,14 @@ it("title and timer share fade windows with independent curves at 60fps", () => 
   }
   expect(textAlpha(1810, version, p.design)).toBeGreaterThan(timerAlpha(1810, version, p.design));
   expect(textAlpha(7770, version, p.design)).toBeGreaterThan(timerAlpha(7770, version, p.design));
-  expect(textAlpha(1854, version, p.design)).toBe(1);
-  expect(timerAlpha(1854, version, p.design)).toBe(1);
+  expect(textAlpha(1854, version, p.design)).toBeCloseTo(REF.titleOpacityScale);
+  expect(timerAlpha(1854, version, p.design)).toBeCloseTo(REF.timerOpacityScale);
   expect(textAlpha(7800, version, p.design)).toBe(0);
   expect(timerAlpha(7800, version, p.design)).toBe(0);
+  // Title visibility at first frame of subsequent versions is small but
+  // non-zero in the supplied 30fps reference; the clock enters more slowly.
+  expect(textAlpha(1800, version, p.design)).toBeCloseTo(0.05 * REF.titleOpacityScale);
+  expect(timerAlpha(1800, version, p.design)).toBe(0);
 });
 
 it("does not introduce a version-count or duration limit", () => {
