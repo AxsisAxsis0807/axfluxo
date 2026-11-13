@@ -95,13 +95,13 @@ export async function referenceTitleImage(p: AllVersionsProject, index: number) 
   const barWidth = Math.min(width, Math.ceil(measuring.measureText(text).width + 8 * scale));
   const barHeight = Math.ceil(REF.titleBandHeight * scale);
   const canvas = createCanvas(barWidth, barHeight), ctx = canvas.getContext("2d");
-  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.fillStyle = `rgba(0,0,0,${REF.titleBandAlpha})`;
   ctx.fillRect(0, 0, barWidth, barHeight);
   ctx.font = `${fontSize}px AxFluxoAleo`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.lineJoin = "round";
-  ctx.lineWidth = Math.max(1, fontSize * 0.05);
+  ctx.lineWidth = Math.max(1, fontSize * 0.03);
   ctx.strokeStyle = "black";
   ctx.fillStyle = "white";
   ctx.strokeText(text, barWidth / 2, barHeight / 2);
