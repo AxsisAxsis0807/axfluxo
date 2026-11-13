@@ -13,9 +13,12 @@ export const ALL_VERSIONS_REFERENCE = {
   titleBandHeight: 35,
   titleFontSize: 28,
   timerCenterY: 448,
-  timerFontSize: 13,
+  timerFontSize: 14, // calibrated against 30fps reference
   fadeInFrames: 54, // 0.9 seconds at 60fps
   fadeOutFrames: 42, // 0.7 seconds at 60fps
+  titleOpacityScale: 0.95,
+  timerOpacityScale: 0.85,
+  titleBandAlpha: 0.58,
 } as const;
 
 export type VersionWindow = { startFrame: number; endFrame: number };
@@ -39,13 +42,22 @@ export function referenceOpacity(
   const outT = fadeOutFrames
     ? clamp01((position - (length - fadeOutFrames)) / fadeOutFrames)
     : 0;
+  // Exponents were tuned against the uploaded 30fps fade samples (first
+  // appearance, subsequent appearance, and both end transitions).
+  // Keep the FFmpeg equations in reference-render.ts mathematically matched.
+  const firstVersion = version.startFrame === 0;
   const entry = track === "title"
-    ? 1 - Math.pow(1 - inT, 3)
-    : 0.5 - 0.5 * Math.cos(Math.PI * inT);
+    ? (firstVersion ? 0 : 0.05) +
+      (firstVersion ? 1 : 0.95) *
+        (1 - Math.pow(1 - inT, firstVersion ? 3.4 : 3.8))
+    : 0.5 - 0.5 * Math.cos(Math.PI * Math.pow(inT, 0.83));
   const exit = track === "title"
-    ? 1 - Math.pow(outT, 3)
-    : 0.5 + 0.5 * Math.cos(Math.PI * outT);
-  return clamp01(entry * exit);
+    ? 1 - Math.pow(outT, 2.6)
+    : 0.5 + 0.5 * Math.cos(Math.PI * Math.pow(outT, 0.86));
+  return clamp01(entry * exit *
+    (track === "title"
+      ? ALL_VERSIONS_REFERENCE.titleOpacityScale
+      : ALL_VERSIONS_REFERENCE.timerOpacityScale));
 }
 
 /** 00:01 at version start; 00:02 at local frame #66 (1.1s at 60fps).
