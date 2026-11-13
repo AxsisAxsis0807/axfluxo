@@ -4,7 +4,27 @@ import { mediaVersionRefSchema } from "../cloud-library/schema";
 import { toFrame } from "./time";
 export const ALEO_HASH =
   "62b6cb49b7b087b341f0307ea3bc871a9690d8947691206ab025d149b8f6ed6f";
-export const AV_RENDERER = "axfluxo-all-versions-v5.1";
+export const AV_RENDERER_PREVIOUS = "axfluxo-all-versions-v5.1";
+export const AV_RENDERER = "axfluxo-all-versions-v5.2";
+/**
+ * Reference frame layout, in fractions of the video height. The text and
+ * translucent band are rasterized together so all three previews/export paths
+ * share the same typography and placement.
+ */
+export const AV_REFERENCE_LAYOUT = {
+  coverSide: 1,
+  coverCornerRadius: 0.042,
+  backgroundOverscan: 1.25,
+  backgroundBlur: 0.095,
+  textCenterY: 0.5,
+  textSize: 0.0555,
+  textScaleX: 1.03,
+  textMaxWidth: 0.94,
+  textBandHeight: 0.069,
+  textBandHorizontalPadding: 0.0005,
+  textBandOpacity: 0.6,
+  textStroke: 0.004,
+} as const;
 export const projectCodes = [
   "PROJECT_CONFLICT",
   "PROJECT_NOT_FOUND",
@@ -33,7 +53,10 @@ export const allVersionsProjectSchema = z.strictObject({
     fadeInFrames: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     fadeOutFrames: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     fontHash: z.literal(ALEO_HASH),
-    rendererVersion: z.literal(AV_RENDERER),
+    rendererVersion: z.union([
+      z.literal(AV_RENDERER),
+      z.literal(AV_RENDERER_PREVIOUS),
+    ]),
     layout: z.literal("provisional-v1"),
   }),
 });

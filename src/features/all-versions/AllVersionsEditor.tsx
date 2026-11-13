@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { allVersionsDocumentSchema } from "../../domain/video/schema";
 import {
   newProject,
+  AV_REFERENCE_LAYOUT,
   projectNames,
   projectIssues,
   versionIntervals,
@@ -382,6 +383,61 @@ export function AllVersionsEditor({
     }
     const height = project.design.height,
       width = (height * 16) / 9;
+    // InShot-strength blur is expensive. Rasterize the static cover+backdrop
+    // exactly once rather than doing a 100px blur for every 60fps frame.
+    const baseCanvas = document.createElement("canvas");
+    baseCanvas.width = width;
+    baseCanvas.height = height;
+    const baseCtx = baseCanvas.getContext("2d");
+    if (!baseCtx) throw Error("CANVAS_UNAVAILABLE");
+    baseCtx.save();
+    baseCtx.scale(width / 1920, height / 1080);
+    baseCtx.fillStyle = "black";
+    baseCtx.fillRect(0, 0, 1920, 1080);
+    baseCtx.save();
+    baseCtx.filter = `blur(${1080 * AV_REFERENCE_LAYOUT.backgroundBlur}px)`;
+    const scale =
+      Math.max(1920 / cover.width, 1080 / cover.height) *
+      AV_REFERENCE_LAYOUT.backgroundOverscan;
+    baseCtx.drawImage(
+      cover,
+      (1920 - cover.width * scale) / 2,
+      (1080 - cover.height * scale) / 2,
+      cover.width * scale,
+      cover.height * scale,
+    );
+    baseCtx.restore();
+    const size = 1080 * AV_REFERENCE_LAYOUT.coverSide,
+      x = (1920 - size) / 2,
+      y = (1080 - size) / 2,
+      radius = size * AV_REFERENCE_LAYOUT.coverCornerRadius,
+      crop = Math.min(cover.width, cover.height);
+    baseCtx.save();
+    baseCtx.beginPath();
+    baseCtx.moveTo(x + radius, y);
+    baseCtx.lineTo(x + size - radius, y);
+    baseCtx.quadraticCurveTo(x + size, y, x + size, y + radius);
+    baseCtx.lineTo(x + size, y + size - radius);
+    baseCtx.quadraticCurveTo(x + size, y + size, x + size - radius, y + size);
+    baseCtx.lineTo(x + radius, y + size);
+    baseCtx.quadraticCurveTo(x, y + size, x, y + size - radius);
+    baseCtx.lineTo(x, y + radius);
+    baseCtx.quadraticCurveTo(x, y, x + radius, y);
+    baseCtx.closePath();
+    baseCtx.clip();
+    baseCtx.drawImage(
+      cover,
+      (cover.width - crop) / 2,
+      (cover.height - crop) / 2,
+      crop,
+      crop,
+      x,
+      y,
+      size,
+      size,
+    );
+    baseCtx.restore();
+    baseCtx.restore();
     return [
       {
         filename: "All Versions.mp4",
@@ -399,35 +455,7 @@ export function AllVersionsEditor({
         draw: (ctx, _media, seconds) => {
           ctx.save();
           ctx.scale(width / 1920, height / 1080);
-          ctx.fillStyle = "black";
-          ctx.fillRect(0, 0, 1920, 1080);
-          ctx.save();
-          ctx.filter = "blur(24px)";
-          ctx.globalAlpha = 0.7;
-          const scale = Math.max(2150 / cover.width, 1210 / cover.height);
-          ctx.drawImage(
-            cover,
-            (1920 - cover.width * scale) / 2,
-            (1080 - cover.height * scale) / 2,
-            cover.width * scale,
-            cover.height * scale,
-          );
-          ctx.restore();
-          const size = 605,
-            crop = Math.min(cover.width, cover.height);
-          ctx.drawImage(
-            cover,
-            (cover.width - crop) / 2,
-            (cover.height - crop) / 2,
-            crop,
-            crop,
-            (1920 - size) / 2,
-            130,
-            size,
-            size,
-          );
-          ctx.fillStyle = "rgba(0,0,0,.48)";
-          ctx.fillRect(96, 842, 1728, 162);
+          ctx.drawImage(baseCanvas, 0, 0);
           const frame = Math.floor(seconds * 60),
             i = versions.findIndex(
               (v) => frame >= v.startFrame && frame < v.endFrame,
@@ -588,19 +616,24 @@ export function AllVersionsEditor({
           overlay={
             step === 4 ? (
               <div
-                style={{ position: "absolute", inset: 0, background: "black" }}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  overflow: "hidden",
+                  background: "black",
+                  containerType: "inline-size",
+                }}
               >
                 {coverUrl && (
                   <>
                     <div
                       style={{
                         position: "absolute",
-                        inset: "-6%",
+                        inset: `-${((AV_REFERENCE_LAYOUT.backgroundOverscan - 1) * 50).toFixed(2)}%`,
                         backgroundImage: `url(${JSON.stringify(coverUrl)})`,
                         backgroundSize: "cover",
                         backgroundPosition: "center",
-                        filter: "blur(24px)",
-                        opacity: 0.7,
+                        filter: `blur(${(100 * (9 / 16) * AV_REFERENCE_LAYOUT.backgroundBlur).toFixed(2)}cqw)`,
                       }}
                     />
                     <img
@@ -610,27 +643,17 @@ export function AllVersionsEditor({
                       src={coverUrl}
                       style={{
                         position: "absolute",
-                        height: "56%",
-                        width: "31.5%",
-                        aspectRatio: "1",
+                        height: "100%",
+                        width: "56.25%",
                         objectFit: "cover",
                         left: "50%",
-                        top: "12%",
+                        top: 0,
                         transform: "translateX(-50%)",
+                        borderRadius: `${AV_REFERENCE_LAYOUT.coverCornerRadius * 100}%`,
                       }}
                     />
                   </>
                 )}
-                <div
-                  style={{
-                    position: "absolute",
-                    left: "5%",
-                    right: "5%",
-                    top: "78%",
-                    height: "15%",
-                    background: "rgba(0,0,0,.48)",
-                  }}
-                />
                 {text && (
                   <img
                     width={1920}
@@ -779,7 +802,7 @@ export function AllVersionsEditor({
             </select>
           </label>
           <p>
-            16:9・60fps・MP4/H.264/AAC320k・Aleo・1行自動縮小・黒stroke。coverと背景はfadeしません。
+            16:9・60fps・MP4/H.264/AAC320k・Aleo・中央の正方形cover・最大ぼかし背景・中央の文字と黒帯。文字と帯のみfadeします。
           </p>
           {(["fadeInFrames", "fadeOutFrames"] as const).map((k) => (
             <label key={k}>
