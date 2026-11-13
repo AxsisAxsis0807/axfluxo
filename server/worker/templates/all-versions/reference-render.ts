@@ -20,16 +20,20 @@ function alphaExpression(
   duration: number,
   fadeIn: number,
   fadeOut: number,
+  isFirst: boolean,
 ) {
   const start = fadeIn ? clamp(timestamp + "/" + fadeIn) : "1";
   const end = fadeOut ? clamp("(" + timestamp + "-" + (duration - fadeOut) + ")/" + fadeOut) : "0";
   const enter = track === "title"
-    ? "1-pow(1-" + start + ",3)"
-    : "0.5-0.5*cos(PI*" + start + ")";
+    ? (isFirst ? "" : "(0.05+0.95*") +
+      "(1-pow(1-" + start + "," + (isFirst ? "3.4" : "3.8") + "))" +
+      (isFirst ? "" : ")")
+    : "0.5-0.5*cos(PI*pow(" + start + ",0.83))";
   const exit = track === "title"
-    ? "1-pow(" + end + ",3)"
-    : "0.5+0.5*cos(PI*" + end + ")";
-  return "(" + enter + ")*(" + exit + ")";
+    ? "1-pow(" + end + ",2.6)"
+    : "0.5+0.5*cos(PI*pow(" + end + ",0.86))";
+  return "(" + enter + ")*(" + exit + ")*" +
+    (track === "title" ? REF.titleOpacityScale : REF.timerOpacityScale);
 }
 function clockExpansion(localSegmentStartFrame: number) {
   // Segment starts are arbitrary; FFmpeg's n starts at zero per segment.
@@ -62,8 +66,9 @@ export async function encodeReferenceProjectSegment(
   const duration = (version.endFrame - version.startFrame) / 60;
   const fadeIn = project.design.fadeInFrames / 60;
   const fadeOut = project.design.fadeOutFrames / 60;
-  const titleAlpha = alphaExpression("title", "T", duration, fadeIn, fadeOut);
-  const timerAlpha = alphaExpression("timer", "t", duration, fadeIn, fadeOut);
+  const first = version.startFrame === 0;
+  const titleAlpha = alphaExpression("title", "T", duration, fadeIn, fadeOut, first);
+  const timerAlpha = alphaExpression("timer", "t", duration, fadeIn, fadeOut, first);
   const fontFile = resolve(
     process.env.VIDEO_FNF_FONT ??
     "server/worker/templates/fnf-showcase/assets/NotoSansJP.ttf",
