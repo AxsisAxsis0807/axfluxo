@@ -110,13 +110,19 @@ export async function textImage(p: AllVersionsProject, index: number) {
     bandHeight,
   );
   ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+  // Canvas's "middle" baseline is based on font metrics, not the visible ink.
+  // Use the actual glyph bounds so the white lettering is optically centered
+  // within the black band for every version name and both output sizes.
+  ctx.textBaseline = "alphabetic";
+  const ink = ctx.measureText(text);
+  const inkCenterOffset =
+    (ink.actualBoundingBoxAscent - ink.actualBoundingBoxDescent) / 2;
   ctx.lineJoin = "round";
   ctx.lineWidth = height * AV_REFERENCE_LAYOUT.textStroke;
   ctx.strokeStyle = "black";
   ctx.fillStyle = "white";
   ctx.save();
-  ctx.translate(width / 2, centerY);
+  ctx.translate(width / 2, centerY + inkCenterOffset);
   ctx.scale(AV_REFERENCE_LAYOUT.textScaleX, 1);
   ctx.strokeText(text, 0, 0);
   ctx.fillText(text, 0, 0);
