@@ -1,3 +1,5 @@
+import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { textImage } from "../../../server/worker/templates/all-versions/graphics";
 import { describe, expect, it } from "vitest";
 import {
   AV_REFERENCE_LAYOUT,
@@ -53,4 +55,34 @@ describe("All Versions reference-frame geometry", () => {
     };
     expect(allVersionsProjectSchema.safeParse(old).success).toBe(true);
   });
+});
+
+it("rasterizes white glyph ink at the vertical center of the black label band", async () => {
+  const project = newProject();
+  project.namesText = "PASA! (NORMAL)";
+  const output = await textImage(project, 0);
+  const image = await loadImage(output.png);
+  const canvas = createCanvas(output.width, output.height);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(image, 0, 0);
+  const pixels = ctx.getImageData(0, 0, output.width, output.height);
+  let minY = output.height, maxY = -1;
+  for (let y = 0; y < output.height; y++) {
+    for (let x = 0; x < output.width; x++) {
+      const i = (y * output.width + x) * 4;
+      if (
+        pixels.data[i] > 220 &&
+        pixels.data[i + 1] > 220 &&
+        pixels.data[i + 2] > 220 &&
+        pixels.data[i + 3] > 220
+      ) {
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      }
+    }
+  }
+  expect(maxY).toBeGreaterThan(minY);
+  const inkCenter = (minY + maxY) / 2;
+  expect(Math.abs(inkCenter - output.height * AV_REFERENCE_LAYOUT.textCenterY))
+    .toBeLessThanOrEqual(2);
 });
