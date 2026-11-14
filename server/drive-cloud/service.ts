@@ -156,7 +156,7 @@ export class DriveCloud {
       (p.size > this.policy.maxFileBytes ||
         p.size + this.policy.marginBytes > this.policy.maxWorkBytes)
     )
-      throw new ApiError(413, "DRIVE_VERIFY_LIMIT");
+      throw new ApiError(413, "DRIVE_VERIFY_DISK_TOO_SMALL");
     const existing = await this.owner(
       owner,
       async (sql) =>
