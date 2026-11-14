@@ -858,6 +858,48 @@ it("handles 100 concurrent admission requests without double reservations or quo
   ).rows[0];
   expect(Number(sum.total)).toBe(Number(cap.reserved_bytes));
 }, 60000);
+it("retry of a multi-range Drive batch reserves only one job's peak share", async () => {
+  const original = await fixture();
+  const duration = original.snapshot.ranges[0].endUs;
+  const half = Math.floor(duration / 2);
+  const body = {
+    ...original,
+    snapshot: {
+      ...original.snapshot,
+      ranges: [
+        { startUs: 0, endUs: half },
+        { startUs: half, endUs: duration },
+      ],
+      names: ["part-one.mp4", "part-two.mp4"],
+    },
+  };
+  const accepted = await call("/batches", body);
+  expect(accepted.status).toBe(202);
+  const batch = await accepted.json();
+  expect(batch.jobs).toHaveLength(2);
+  // Simulate the existing worker having committed a terminal failure;
+  // the DB's capacity release trigger remains the authoritative path.
+  await pg.query(
+    "UPDATE axfluxo_video.render_jobs SET state='failed' WHERE owner_id=$1 AND id=$2",
+    [owner, batch.jobs[0].id],
+  );
+  const retried = await call("/jobs/" + batch.jobs[0].id + "/retry", {});
+  expect(retried.status).toBe(202);
+  const result = await retried.json();
+  const originalPeak = (
+    await pg.query(
+      "SELECT peak_bytes FROM axfluxo_video.drive_batches WHERE owner_id=$1 AND batch_id=$2",
+      [owner, batch.id],
+    )
+  ).rows[0].peak_bytes;
+  const retryBudget = (
+    await pg.query(
+      "SELECT remaining FROM axfluxo_video.drive_job_capacity WHERE owner_id=$1 AND job_id=$2",
+      [owner, result.job.id],
+    )
+  ).rows[0].remaining;
+  expect(Number(retryBudget)).toBe(Math.ceil(Number(originalPeak) / 2));
+}, 60000);
 it("holds a corrupt original without registering a ready resource or releasing its retained bytes", async () => {
   const row = await reserve(),
     bad = Buffer.alloc(data.length, 4);
