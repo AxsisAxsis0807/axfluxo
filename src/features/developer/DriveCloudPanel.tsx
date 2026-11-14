@@ -104,6 +104,8 @@ export default function DriveCloudPanel({
           "選んだ素材が現在のWorker検証容量の設定上限を超えています。送信前に設定・実容量を確認してください。画質や原本は変更していません。",
         DRIVE_WORKER_NOT_READY:
           "Drive上の素材をWorkerが検証中です。まだSafariを閉じてよい段階ではありません。",
+        DRIVE_SOURCE_IMPORT_REQUIRED:
+          "このプロジェクトの素材はDriveで検証済みではありません。元のR2・ローカル素材を削除せず、Drive素材ライブラリで同じファイルを再登録してから書き出してください。",
         DRIVE_TRANSFER_BUSY:
           "転送処理中です。少し待って状態を再確認してください。",
       };
