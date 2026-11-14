@@ -57,12 +57,19 @@ export class GoogleDrive {
       throw new ApiError(403, "DRIVE_SCOPE_REQUIRED");
     return result;
   }
-  async send(url: string, init: RequestInit) {
+  async send(url: string, init: RequestInit, timeoutMs = 5000) {
+    // A caller's cancellation must not be overridden by our deadline.
+    // Control-plane requests remain bounded at 5s; resumable media PUTs
+    // supply a longer *finite* limit for slower connections.
+    const deadline = AbortSignal.timeout(timeoutMs);
+    const signal = init.signal
+      ? AbortSignal.any([init.signal, deadline])
+      : deadline;
     try {
       return await this.transport(url, {
         ...init,
         redirect: "error",
-        signal: AbortSignal.timeout(5000),
+        signal,
       });
     } catch {
       throw new ApiError(503, "DRIVE_UNAVAILABLE");
