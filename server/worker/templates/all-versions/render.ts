@@ -12,6 +12,7 @@ import { RenderError } from "../../jobs/errors";
 import { textImage, backgroundImage, dimensions } from "./graphics";
 import { mediaProcess } from "../../render/process";
 import { encoding } from "../../render/encode";
+import { encodeReferenceProjectSegment } from "./reference-render";
 export function projectPlan(
   project: AllVersionsProject,
   snapshot: FnfSnapshot,
@@ -58,6 +59,8 @@ export async function encodeProjectSegment(
   path: string,
   signal?: AbortSignal,
 ) {
+  if (project.design.layout === "reference-pasa-v1")
+    return encodeReferenceProjectSegment(project, s, plan, graphics, dir, path, signal);
   const intervals = versionIntervals(project),
     index = intervals.findIndex(
       (v) =>

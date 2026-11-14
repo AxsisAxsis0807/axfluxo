@@ -422,9 +422,11 @@ test("three direct boundaries persist through move, nearest deletion and reload"
       n.scrollLeft = seconds * 80;
       n.dispatchEvent(new Event("scroll"));
     }, seconds);
-    await expect(page.getByLabel("中央プレイヘッド時刻")).toHaveText(
-      `${seconds.toFixed(6)} 秒`,
-    );
+    // Browser scrollLeft can round a computed playhead by 1 microsecond.
+    // Keep the actual boundary check strict, while tolerating this display precision.
+    await expect.poll(async () =>
+      Math.abs(Number((await page.getByLabel("中央プレイヘッド時刻").textContent())?.split(" ")[0]) - seconds),
+    ).toBeLessThan(0.000002);
   }
   for (const second of [10, 20, 30]) {
     await seek(second);
