@@ -245,7 +245,7 @@ export default function DriveCloudPanel({
               );
               setBatch(accepted);
               setNote(
-                "サーバー受領済み。検証済みDrive素材と現在の編集内容を固定して受け付けました。Safariを閉じてもWorkerが独立処理できる状態です。",
+                "サーバー受領済み。編集内容と検証済みDrive素材を確定しました。Safariを閉じてもジョブは保持されます。処理が進むのはWorker稼働中または復旧後です。",
               );
               return;
             }
@@ -285,7 +285,7 @@ export default function DriveCloudPanel({
             );
             setBatch(accepted);
             setNote(
-              "サーバー受領済み。Drive保存・検証・ジョブ受付が確定しました。Safariを閉じてもWorkerが処理を進められる状態です（Workerの実稼働条件は別途確認が必要）。",
+              "サーバー受領済み。Drive保存・素材検証・ジョブ受付が確定しました。Safariを閉じてもジョブは保持されます。Workerの実稼働・停止復旧は別途検証が必要です。",
             );
           })
         }
