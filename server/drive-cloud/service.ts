@@ -394,6 +394,7 @@ export class DriveCloud {
     offset: number,
     data: Uint8Array,
     hash: string,
+    signal?: AbortSignal,
   ) {
     if (!data.length || data.length > DRIVE_CHUNK || sha256(data) !== hash)
       throw new ApiError(422, "DRIVE_CHUNK_INVALID");
@@ -457,6 +458,7 @@ export class DriveCloud {
         Number(row.size),
         data,
         offset,
+        signal,
       );
       if (result.expired) {
         await this.update(
