@@ -8,7 +8,7 @@ import { ApiError } from "../api/errors";
 import { GoogleDrive } from "../google-drive/google";
 import { sha256 } from "../google-drive/security";
 import { probeMedia } from "../worker/probe/media";
-import { ownerTransaction, driveCredentials } from "./credentials";
+import { ownerTransaction, driveCredentials, invalidateDriveAccess } from "./credentials";
 import { DriveTransfer, DRIVE_CHUNK } from "./transfer";
 import type { DrivePolicy } from "./config";
 export type Inventory = Row & {
