@@ -301,6 +301,37 @@ it("rejects a server-side oversized original before reserving Drive capacity", a
   const capacity = await pg.query("SELECT * FROM axfluxo_video.drive_capacity");
   expect(capacity.rows).toHaveLength(0);
 });
+it("keeps a previously reserved upload recoverable after worker disk limit shrinks", async () => {
+  const operation = randomUUID();
+  const first = await service().reserve(owner, {
+    key: operation,
+    size: data.length,
+    hash: sha256(data),
+    mime: "video/mp4",
+    name: "recovered.mp4",
+  });
+  const restricted = new CloudService(pg.asRole("axfluxo_video_api"), google, {
+    ...policy(),
+    maxWorkBytes: data.length,
+  });
+  const resumed = await restricted.reserve(owner, {
+    key: operation,
+    size: data.length,
+    hash: sha256(data),
+    mime: "video/mp4",
+    name: "recovered.mp4",
+  });
+  expect(resumed.id).toBe(first.id);
+  await expect(
+    restricted.reserve(owner, {
+      key: randomUUID(),
+      size: data.length,
+      hash: sha256(data),
+      mime: "video/mp4",
+      name: "new-oversize.mp4",
+    }),
+  ).rejects.toMatchObject({ status: 413, code: "DRIVE_VERIFY_DISK_TOO_SMALL" });
+});
 it("validates Google session URLs, rejecting SSRF and secret-bearing arbitrary hosts", () => {
   for (const url of [
     "http://www.googleapis.com/upload/drive/v3/files?upload_id=x",
