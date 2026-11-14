@@ -15,7 +15,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { testEngine, type TestEngine } from "./engine";
 import { DriveCloud } from "../drive-cloud/service";
 import { DriveTransfer, uploadUrl, DRIVE_CHUNK } from "../drive-cloud/transfer";
-import { drivePolicy } from "../drive-cloud/config";
+import { drivePolicy, maxVerifiableDriveBytes } from "../drive-cloud/config";
 import { driveCredentials } from "../drive-cloud/credentials";
 import { GoogleDrive } from "../google-drive/google";
 import { tokenVault, sha256 } from "../google-drive/security";
@@ -232,6 +232,43 @@ it("fails closed until both the operating gate and <=500 yen confirmation are su
     }).enabled(),
   ).toBe(false);
   expect(policy().enabled()).toBe(true);
+});
+it("discloses that upload size is not worker verification capacity", () => {
+  const configured = policy();
+  expect(configured.maxFileBytes).toBeGreaterThan(configured.maxWorkBytes);
+  expect(maxVerifiableDriveBytes(configured)).toBe(
+    configured.maxWorkBytes - configured.marginBytes,
+  );
+  expect(maxVerifiableDriveBytes({ ...configured, maxWorkBytes: 1 })).toBe(0);
+});
+it("lists intermediate storage in read-only dry-run without removing files", async () => {
+  const reserved = await service().reserve(owner, {
+    key: randomUUID(),
+    size: data.length,
+    hash: sha256(data),
+    mime: "video/mp4",
+    name: "temporary.mp4",
+    namespace: "preview",
+  });
+  const response = await call("/cleanup-preview");
+  expect(response.status).toBe(200);
+  const report = await response.json();
+  expect(report).toMatchObject({
+    dryRun: true,
+    deletionEnabled: false,
+  });
+  expect(report.items).toContainEqual(
+    expect.objectContaining({
+      id: reserved.id,
+      namespace: "preview",
+      mayDelete: false,
+    }),
+  );
+  expect((await service().row(owner, reserved.id)).id).toBe(reserved.id);
+  const usage = await (await call("/usage")).json();
+  expect(usage.temporary).toContainEqual(
+    expect.objectContaining({ namespace: "preview", files: 1 }),
+  );
 });
 it("validates Google session URLs, rejecting SSRF and secret-bearing arbitrary hosts", () => {
   for (const url of [
