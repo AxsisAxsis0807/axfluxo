@@ -966,6 +966,24 @@ it("unequal-range Drive jobs and retries reserve the actual range peaks", async 
   expect(Number(retryBudget)).toBe(longBytes);
   expect(Number(retryBudget)).toBeGreaterThan(Number(originalPeak) / 2);
 }, 60000);
+it("never reads an uploading or held Drive inventory as a rendered resource", async () => {
+  const reserved = await reserve();
+  const storage = driveRenderStorage(service(), owner, randomUUID(), null);
+  await expect(storage.head(reserved.object_key)).rejects.toMatchObject({
+    code: "DRIVE_RESOURCE_MISSING",
+  });
+  await expect(storage.stream(reserved.object_key)).rejects.toMatchObject({
+    code: "DRIVE_RESOURCE_MISSING",
+  });
+  const blocked = await pg.query(
+    "UPDATE axfluxo_video.drive_inventory SET state='held' WHERE owner_id=$1 AND id=$2",
+    [owner, reserved.id],
+  );
+  expect(blocked.rows).toHaveLength(0);
+  await expect(storage.head(reserved.object_key)).rejects.toMatchObject({
+    code: "DRIVE_RESOURCE_MISSING",
+  });
+});
 it("holds a corrupt original without registering a ready resource or releasing its retained bytes", async () => {
   const row = await reserve(),
     bad = Buffer.alloc(data.length, 4);
