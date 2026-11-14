@@ -332,7 +332,21 @@ export function driveCloudRouter(
                   [owner, r.versionId, r.fileId, r.hash],
                 )
               ).rows[0];
-              if (!row) throw new ApiError(409, "DRIVE_WORKER_NOT_READY");
+              if (!row) {
+                // An old R2/Local media version is not automatically backed by
+                // Google Drive. Give a migration action instead of claiming a
+                // Drive verification is merely pending.
+                const legacy = (
+                  await sql.query(
+                    "SELECT id FROM axfluxo_video.media_versions WHERE owner_id=$1 AND id::text=$2 AND asset_id::text=$3 AND hash=$4",
+                    [owner, r.versionId, r.fileId, r.hash],
+                  )
+                ).rows[0];
+                throw new ApiError(
+                  409,
+                  legacy ? "DRIVE_SOURCE_IMPORT_REQUIRED" : "DRIVE_WORKER_NOT_READY",
+                );
+              }
               sourceBytes += Number(row.size);
             }
             const seconds = snapshot.ranges.reduce(
