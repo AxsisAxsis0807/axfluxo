@@ -13,6 +13,7 @@ import {
   projectIssues,
   versionIntervals,
   textAlpha,
+  timerAlpha,
   type AllVersionsProject,
 } from "../../domain/video/all-versions";
 import {
@@ -43,6 +44,7 @@ import {
   listProjects,
 } from "../../services/developer-storage/projects";
 import { PlaybackError } from "../../services/video/playback";
+import { ALL_VERSIONS_REFERENCE as REF, referenceTimerText } from "../../domain/video/all-versions-reference";
 const steps = [
   "素材",
   "音声編集",
@@ -399,6 +401,38 @@ export function AllVersionsEditor({
         draw: (ctx, _media, seconds) => {
           ctx.save();
           ctx.scale(width / 1920, height / 1080);
+          if (project.design.layout === "reference-pasa-v1") {
+            const scale = Math.max(1920 / cover.width, 1080 / cover.height) * 1.4;
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, 1920, 1080);
+            ctx.save();
+            ctx.filter = "blur(102.6px)";
+            ctx.drawImage(cover, (1920 - cover.width * scale) / 2,
+              (1080 - cover.height * scale) / 2,
+              cover.width * scale, cover.height * scale);
+            ctx.restore();
+            ctx.fillStyle = "rgba(0,0,0,.18)";
+            ctx.fillRect(0, 0, 1920, 1080);
+            const side = 1080 * REF.coverSize / REF.height;
+            const crop = Math.min(cover.width, cover.height);
+            ctx.drawImage(cover, (cover.width - crop) / 2, (cover.height - crop) / 2,
+              crop, crop, (1920 - side) / 2, (1080 - side) / 2, side, side);
+            const frame = Math.floor(seconds * 60);
+            const i = versions.findIndex(v => frame >= v.startFrame && frame < v.endFrame);
+            if (i >= 0) {
+              ctx.globalAlpha = textAlpha(frame, versions[i], project.design);
+              ctx.drawImage(overlays[i], 0, 0, 1920, 1080);
+              ctx.globalAlpha = timerAlpha(frame, versions[i], project.design);
+              ctx.fillStyle = "white";
+              ctx.font = `${1080 * REF.timerFontSize / REF.height}px Arial, sans-serif`;
+              ctx.textBaseline = "middle";
+              ctx.textAlign = "center";
+              ctx.fillText(referenceTimerText(frame, versions[i]), 960,
+                1080 * REF.timerCenterY / REF.height);
+            }
+            ctx.restore();
+            return;
+          }
           ctx.fillStyle = "black";
           ctx.fillRect(0, 0, 1920, 1080);
           ctx.save();
@@ -507,7 +541,9 @@ export function AllVersionsEditor({
   return (
     <main style={{ maxWidth: 1100, margin: "auto", padding: 16 }}>
       <h1>All Versions Video Maker</h1>
-      <p>暫定layoutです。参考画像との一致は未検証です。</p>
+      <p>{project.design.layout === "reference-pasa-v1"
+        ? "参考動画再現プロファイル：タイトル中央・経過時間・同期フェード（元動画との完全一致は未検証）"
+        : "暫定layoutです。参考画像との一致は未検証です。"}</p>
       <p>
         project ID：<output>{project.id}</output>
       </p>
@@ -599,8 +635,8 @@ export function AllVersionsEditor({
                         backgroundImage: `url(${JSON.stringify(coverUrl)})`,
                         backgroundSize: "cover",
                         backgroundPosition: "center",
-                        filter: "blur(24px)",
-                        opacity: 0.7,
+                        filter: project.design.layout === "reference-pasa-v1" ? "blur(65px)" : "blur(24px)",
+                        opacity: project.design.layout === "reference-pasa-v1" ? 0.82 : 0.7,
                       }}
                     />
                     <img
@@ -610,18 +646,18 @@ export function AllVersionsEditor({
                       src={coverUrl}
                       style={{
                         position: "absolute",
-                        height: "56%",
-                        width: "31.5%",
+                        height: project.design.layout === "reference-pasa-v1" ? "98.83%" : "56%",
+                        width: project.design.layout === "reference-pasa-v1" ? "55.6%" : "31.5%",
                         aspectRatio: "1",
                         objectFit: "cover",
                         left: "50%",
-                        top: "12%",
+                        top: project.design.layout === "reference-pasa-v1" ? "0.59%" : "12%",
                         transform: "translateX(-50%)",
                       }}
                     />
                   </>
                 )}
-                <div
+                {project.design.layout !== "reference-pasa-v1" && <div
                   style={{
                     position: "absolute",
                     left: "5%",
@@ -630,7 +666,29 @@ export function AllVersionsEditor({
                     height: "15%",
                     background: "rgba(0,0,0,.48)",
                   }}
-                />
+                />}
+                {project.design.layout === "reference-pasa-v1" && versions[index] && (
+                  <svg
+                    role="img"
+                    aria-label="楽曲の経過時間"
+                    viewBox={`0 0 ${REF.width} ${REF.height}`}
+                    preserveAspectRatio="none"
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+                  >
+                    <text
+                      x={REF.width / 2}
+                      y={REF.timerCenterY}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={REF.timerFontSize}
+                      fontFamily="Arial, sans-serif"
+                      fill="white"
+                      opacity={timerAlpha(frame, versions[index], project.design)}
+                    >
+                      {referenceTimerText(frame, versions[index])}
+                    </text>
+                  </svg>
+                )}
                 {text && (
                   <img
                     width={1920}
@@ -761,6 +819,27 @@ export function AllVersionsEditor({
       {step === 3 && (
         <>
           <label>
+            表示テンプレート
+            <select
+              value={project.design.layout}
+              onChange={(e) => {
+                const reference = e.target.value === "reference-pasa-v1";
+                change({
+                  ...project,
+                  design: {
+                    ...project.design,
+                    layout: reference ? "reference-pasa-v1" : "provisional-v1",
+                    fadeInFrames: reference ? REF.fadeInFrames : 9,
+                    fadeOutFrames: reference ? REF.fadeOutFrames : 9,
+                  },
+                });
+              }}
+            >
+              <option value="provisional-v1">従来の暫定レイアウト</option>
+              <option value="reference-pasa-v1">参考動画再現（中央文字＋経過時間）</option>
+            </select>
+          </label>
+          <label>
             出力解像度
             <select
               value={project.design.height}
@@ -779,7 +858,7 @@ export function AllVersionsEditor({
             </select>
           </label>
           <p>
-            16:9・60fps・MP4/H.264/AAC320k・Aleo・1行自動縮小・黒stroke。coverと背景はfadeしません。
+            16:9・60fps・MP4/H.264/AAC320k。参考動画再現は中央のAleo文字＋黒帯・下部のmm:ss表示。文字と時計のfade境界を同期し、背景はfadeしません。
           </p>
           {(["fadeInFrames", "fadeOutFrames"] as const).map((k) => (
             <label key={k}>
@@ -803,7 +882,7 @@ export function AllVersionsEditor({
           <p>
             fade合計{" "}
             {(project.design.fadeInFrames + project.design.fadeOutFrames) / 60}{" "}
-            秒（初期0.30秒）。短い区間は自動調整しません。
+            秒（暫定は初期0.30秒、参考動画再現は初期1.60秒）。短い区間は自動調整しません。
           </p>
         </>
       )}
