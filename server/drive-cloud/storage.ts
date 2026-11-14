@@ -134,6 +134,7 @@ export async function writeDriveObject(
             size,
             buffer,
             offset,
+            signal,
           );
         if (result.expired) throw new ApiError(409, "DRIVE_SESSION_EXPIRED");
         if (result.offset <= offset)
