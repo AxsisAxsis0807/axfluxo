@@ -29,6 +29,8 @@ held→resumeは同じjob ID、pins、予約、checkpointを継承。retryは新
 
 Drive専用 `drive-cfr60-crf18-lookahead8-v1` はthreads/filter threads=1、H.264 CRF18、先読み8/sync先読み0、原則5秒segment。旧profileの既定は変更しない。All Versions 1920×1080、FNF 1080×1920、CFR60、yuv420p、既存AAC 48kHz stereo設定を維持する。圧縮判断は旧profileとbit一致を約束しない。profile IDをplan hashとvalidationへ含める。
 
+512MiB / 0.5 CPUの隔離短尺試験では非rootのAPI/worker target（Node heap `--max-old-space-size=128`）と同じruntimeを使用した。Blitzの既定cloud targetは既存互換のためheap512のままなので、512MiB運用では別承認の設定作業でAPI/worker用のheap128を明示し、FFmpegを含むcgroup全体を実測する。短尺FNFは厳密512MiB上限近傍まで使ったため、長尺運用可とは判定していない。既存local/R2のheapやprofileを一括変更しない。
+
 1440p Cloudは既定OFF。短い1440p診断の成功は長尺での提供可否の根拠にしない。360p30等へ自動で落とさない。
 
 Driveの保存容量と一時diskは別。1.7GB素材を1GiBの作業diskで処理可能とは扱わない。原本、全segment、join、candidate、完成物、音声中間物、余白を保守的に見積もり、受入時とworkerの実free/directoryサイズで止める。元データ検証とpreviewにもdisk gateがある。メモリ/ENOSPC/lease/DB障害は既存エラー分類でheld等になり、原本・remote checkpoint・完成物は消さない。
