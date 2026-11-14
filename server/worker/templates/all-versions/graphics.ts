@@ -9,6 +9,7 @@ import {
   type AllVersionsProject,
 } from "../../../../src/domain/video/all-versions";
 import { ApiError } from "../../../api/errors";
+import { ALL_VERSIONS_REFERENCE as REF } from "../../../../src/domain/video/all-versions-reference";
 export const fontPath = () =>
   resolve(
     process.env.VIDEO_ALEO_FONT ??
@@ -76,7 +77,54 @@ function glyph(bytes: Buffer, cp: number) {
 export function dimensions(p: AllVersionsProject) {
   return { width: (p.design.height * 16) / 9, height: p.design.height };
 }
+/** Transparent cropped title and band, at reference proportions. */
+export async function referenceTitleImage(p: AllVersionsProject, index: number) {
+  const bytes = await font();
+  const text = projectNames(p)[index];
+  if (text === undefined || !text.trim()) throw new ApiError(422, "EMPTY_NAME");
+  if ([...text].some((c) => !glyph(bytes, c.codePointAt(0)!)))
+    throw new ApiError(422, "FONT_GLYPH_UNSUPPORTED");
+  const { width, height } = dimensions(p);
+  const scale = height / REF.height;
+  const measuring = createCanvas(4, 4).getContext("2d");
+  const base = REF.titleFontSize * scale;
+  measuring.font = `${base}px AxFluxoAleo`;
+  const measured = measuring.measureText(text).width;
+  const fontSize = Math.min(base, (base * (width * 0.88)) / Math.max(1, measured));
+  measuring.font = `${fontSize}px AxFluxoAleo`;
+  const barWidth = Math.min(width, Math.ceil(measuring.measureText(text).width + 8 * scale));
+  const barHeight = Math.ceil(REF.titleBandHeight * scale);
+  const canvas = createCanvas(barWidth, barHeight), ctx = canvas.getContext("2d");
+  ctx.fillStyle = `rgba(0,0,0,${REF.titleBandAlpha})`;
+  ctx.fillRect(0, 0, barWidth, barHeight);
+  ctx.font = `${fontSize}px AxFluxoAleo`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = Math.max(1, fontSize * 0.03);
+  ctx.strokeStyle = "black";
+  ctx.fillStyle = "white";
+  ctx.strokeText(text, barWidth / 2, barHeight / 2);
+  ctx.fillText(text, barWidth / 2, barHeight / 2);
+  return {
+    png: await canvas.encode("png"),
+    width: barWidth,
+    height: barHeight,
+    x: Math.round((width - barWidth) / 2),
+    y: Math.round((height * REF.titleBandTop) / REF.height),
+    fontSize,
+  };
+}
+
 export async function textImage(p: AllVersionsProject, index: number) {
+  if (p.design.layout === "reference-pasa-v1") {
+    const ref = await referenceTitleImage(p, index);
+    const { width, height } = dimensions(p), canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(await loadImage(ref.png), ref.x, ref.y);
+    return { png: await canvas.encode("png"), width, height,
+      fontHash: ALEO_HASH, rendererVersion: AV_RENDERER, fontSize: ref.fontSize };
+  }
   const bytes = await font(),
     text = projectNames(p)[index];
   if (text === undefined || !text.trim()) throw new ApiError(422, "EMPTY_NAME");
@@ -117,17 +165,18 @@ export async function backgroundImage(
     canvas = createCanvas(width, height),
     ctx = canvas.getContext("2d"),
     cover = await loadImage(coverPath);
-  const scale = Math.max(width / cover.width, height / cover.height) * 1.12,
+  const reference = p.design.layout === "reference-pasa-v1";
+  const scale = Math.max(width / cover.width, height / cover.height) * (reference ? 1.4 : 1.12),
     w = cover.width * scale,
     h = cover.height * scale;
-  ctx.filter = `blur(${height * 0.035}px)`;
+  ctx.filter = `blur(${height * (reference ? 0.095 : 0.035)}px)`;
   ctx.drawImage(cover, (width - w) / 2, (height - h) / 2, w, h);
   ctx.filter = "none";
-  ctx.fillStyle = "rgba(0,0,0,.3)";
+  ctx.fillStyle = reference ? "rgba(0,0,0,.18)" : "rgba(0,0,0,.3)";
   ctx.fillRect(0, 0, width, height);
-  const side = height * 0.56,
+  const side = height * (reference ? REF.coverSize / REF.height : 0.56),
     x = (width - side) / 2,
-    y = height * 0.12,
+    y = reference ? (height - side) / 2 : height * 0.12,
     s = Math.max(side / cover.width, side / cover.height);
   ctx.save();
   ctx.beginPath();
@@ -141,7 +190,9 @@ export async function backgroundImage(
     cover.height * s,
   );
   ctx.restore();
-  ctx.fillStyle = "rgba(0,0,0,.48)";
-  ctx.fillRect(width * 0.05, height * 0.78, width * 0.9, height * 0.15);
+  if (!reference) {
+    ctx.fillStyle = "rgba(0,0,0,.48)";
+    ctx.fillRect(width * 0.05, height * 0.78, width * 0.9, height * 0.15);
+  }
   return canvas.encode("png");
 }

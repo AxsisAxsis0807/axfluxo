@@ -7,7 +7,7 @@ import { ApiError } from "../errors";
 export async function previewAccess(
   config: {
     db: Database;
-    storage: MultipartStorage | null;
+    storage: Pick<MultipartStorage, "head" | "access"> | null;
     enabled: () => boolean;
     unitsPerSecond?: number;
   },

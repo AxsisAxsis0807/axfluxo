@@ -1,3 +1,4 @@
+import { ApiError } from "../../api/errors";
 export const renderCodes = [
   "STORAGE_TRANSIENT",
   "STORAGE_REJECTED",
@@ -74,6 +75,12 @@ export const heldCode = (code: RenderCode) =>
 
 /** Retry only known network/provider transient failures. Unknown/403/config errors stay held. */
 export function storageError(error: unknown): RenderError {
+  if (error instanceof ApiError) {
+    if (error.status === 507) return new RenderError("QUOTA_EXCEEDED");
+    if (error.code === "DRIVE_DISK_HELD") return new RenderError("DISK_FULL");
+    if (error.status === 503 || error.status === 429)
+      return new RenderError("STORAGE_TRANSIENT");
+  }
   const e = error as {
     code?: string;
     name?: string;

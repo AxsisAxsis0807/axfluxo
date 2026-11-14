@@ -1,10 +1,12 @@
 "use client";
+import { driveCloudUiEnabled } from "../../services/video/public-config";
 import { useEffect, useRef, useState } from "react";
 import { isInteriorBoundary } from "../../services/video/timeline-math";
 import LocalCompositionPreview from "./LocalCompositionPreview";
 import LocalTimeline from "./LocalTimeline";
 import { LocalExport } from "../video-common/LocalExport";
 import CloudExportPanel from "./CloudExportPanel";
+import DriveCloudPanel from "./DriveCloudPanel";
 import { type LocalEncodeJob } from "../../services/video/local-encode";
 import { isUnlocked } from "../../services/developer/local-lock";
 
@@ -715,6 +717,7 @@ export default function LocalVideoTool({
         rest={rest}
         onRestChange={setRest}
       />
+      {driveCloudUiEnabled() && <DriveCloudPanel project={projectData()} />}
       {!fnf && (
         <CloudExportPanel sources={sources} names={names} cover={coverFile} />
       )}

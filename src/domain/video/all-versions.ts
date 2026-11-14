@@ -2,6 +2,7 @@ import { z } from "zod";
 import { allVersionsDocumentSchema } from "./schema";
 import { mediaVersionRefSchema } from "../cloud-library/schema";
 import { toFrame } from "./time";
+import { referenceOpacity } from "./all-versions-reference";
 export const ALEO_HASH =
   "62b6cb49b7b087b341f0307ea3bc871a9690d8947691206ab025d149b8f6ed6f";
 export const AV_RENDERER = "axfluxo-all-versions-v5.1";
@@ -34,7 +35,10 @@ export const allVersionsProjectSchema = z.strictObject({
     fadeOutFrames: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     fontHash: z.literal(ALEO_HASH),
     rendererVersion: z.literal(AV_RENDERER),
-    layout: z.literal("provisional-v1"),
+    layout: z.union([
+      z.literal("provisional-v1"),
+      z.literal("reference-pasa-v1"),
+    ]),
   }),
 });
 export type AllVersionsProject = z.infer<typeof allVersionsProjectSchema>;
@@ -109,6 +113,8 @@ export function textAlpha(
   design: AllVersionsProject["design"],
 ) {
   if (frame < version.startFrame || frame >= version.endFrame) return 0;
+  if (design.layout === "reference-pasa-v1")
+    return referenceOpacity(frame, version, design.fadeInFrames, design.fadeOutFrames, "title");
   return Math.max(
     0,
     Math.min(
@@ -121,4 +127,15 @@ export function textAlpha(
         : 1,
     ),
   );
+}
+
+/** Independent timer opacity; shares the title's fade start/end frames. */
+export function timerAlpha(
+  frame: number,
+  version: { startFrame: number; endFrame: number },
+  design: AllVersionsProject["design"],
+) {
+  return design.layout === "reference-pasa-v1"
+    ? referenceOpacity(frame, version, design.fadeInFrames, design.fadeOutFrames, "timer")
+    : 0;
 }

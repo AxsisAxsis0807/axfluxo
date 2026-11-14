@@ -6,7 +6,10 @@ import {
   projectIssues,
   versionIntervals,
   textAlpha,
+  timerAlpha,
+  allVersionsProjectSchema,
 } from "../../../src/domain/video/all-versions";
+import { ALL_VERSIONS_REFERENCE as REF, referenceTimerText, referenceOpacity } from "../../../src/domain/video/all-versions-reference";
 import { allVersionsDocumentSchema } from "../../../src/domain/video/schema";
 import {
   ProjectSaveQueue,
@@ -102,6 +105,59 @@ it("detects too-short fade without shortening fade, versions or names; checks bo
   expect(projectIssues(p)).toContain("FADE_TOO_LONG");
   expect(p.design.fadeOutFrames).toBe(9);
 });
+
+it("reference profile preserves legacy projects and serializes opt-in layout", () => {
+  const legacy = newProject();
+  expect(legacy.design.layout).toBe("provisional-v1");
+  expect(allVersionsProjectSchema.parse(legacy).design.layout).toBe("provisional-v1");
+  const reference = {
+    ...legacy,
+    design: {
+      ...legacy.design,
+      layout: "reference-pasa-v1",
+      fadeInFrames: REF.fadeInFrames,
+      fadeOutFrames: REF.fadeOutFrames,
+    },
+  };
+  expect(allVersionsProjectSchema.parse(reference).design.layout).toBe("reference-pasa-v1");
+});
+it("reference timer resets per version, advances at 1.1s and survives segment boundaries", () => {
+  const first = { startFrame: 0, endFrame: 5816 };
+  const second = { startFrame: 5816, endFrame: 12340 };
+  expect(referenceTimerText(0, first)).toBe("00:01");
+  expect(referenceTimerText(65, first)).toBe("00:01");
+  expect(referenceTimerText(66, first)).toBe("00:02");
+  expect(referenceTimerText(3606, first)).toBe("01:01");
+  expect(referenceTimerText(second.startFrame, second)).toBe("00:01");
+  expect(referenceTimerText(second.startFrame + 66, second)).toBe("00:02");
+  expect(referenceTimerText(second.startFrame + 181, second)).toBe("00:03");
+});
+it("title and timer share fade windows with independent curves at 60fps", () => {
+  const p = newProject();
+  p.design.layout = "reference-pasa-v1";
+  p.design.fadeInFrames = REF.fadeInFrames;
+  p.design.fadeOutFrames = REF.fadeOutFrames;
+  const version = { startFrame: 1800, endFrame: 7800 };
+  for (const f of [1799, 1800, 1820, 1854, 7758, 7780, 7799, 7800]) {
+    expect(textAlpha(f, version, p.design)).toBeCloseTo(
+      referenceOpacity(f, version, REF.fadeInFrames, REF.fadeOutFrames, "title"),
+    );
+    expect(timerAlpha(f, version, p.design)).toBeCloseTo(
+      referenceOpacity(f, version, REF.fadeInFrames, REF.fadeOutFrames, "timer"),
+    );
+  }
+  expect(textAlpha(1810, version, p.design)).toBeGreaterThan(timerAlpha(1810, version, p.design));
+  expect(textAlpha(7770, version, p.design)).toBeGreaterThan(timerAlpha(7770, version, p.design));
+  expect(textAlpha(1854, version, p.design)).toBeCloseTo(REF.titleOpacityScale);
+  expect(timerAlpha(1854, version, p.design)).toBeCloseTo(REF.timerOpacityScale);
+  expect(textAlpha(7800, version, p.design)).toBe(0);
+  expect(timerAlpha(7800, version, p.design)).toBe(0);
+  // Title visibility at first frame of subsequent versions is small but
+  // non-zero in the supplied 30fps reference; the clock enters more slowly.
+  expect(textAlpha(1800, version, p.design)).toBeCloseTo(0.05 * REF.titleOpacityScale);
+  expect(timerAlpha(1800, version, p.design)).toBe(0);
+});
+
 it("does not introduce a version-count or duration limit", () => {
   const p = populated();
   p.document!.clips = [

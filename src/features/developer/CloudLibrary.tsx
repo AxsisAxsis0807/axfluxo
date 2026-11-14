@@ -1,4 +1,6 @@
 "use client";
+import { driveCloudUiEnabled } from "../../services/video/public-config";
+import DriveMaterialUpload from "./DriveMaterialUpload";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -214,6 +216,9 @@ export default function CloudLibrary({
   return (
     <main style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
       <h1>開発者クラウド素材</h1>
+      {driveCloudUiEnabled() && (
+        <DriveMaterialUpload onReady={() => setRevision((n) => n + 1)} />
+      )}
       <p>
         原本を非公開で保存します。既存画像ライブラリーとバックアップは変更しません。
       </p>

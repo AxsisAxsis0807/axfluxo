@@ -1,3 +1,4 @@
+import { driveCloudCodes } from "../../domain/drive-cloud/schema";
 import { driveCodes } from "../../domain/google-drive/schema";
 import { fnfCodes } from "../../domain/video/fnf-showcase";
 import { projectCodes } from "../../domain/video/all-versions";
@@ -199,6 +200,7 @@ export function createVideoApiClient(options: {
             .strictObject({
               error: z.strictObject({
                 code: z.enum([
+                  ...driveCloudCodes,
                   ...driveCodes,
                   ...cloudErrorCodes,
                   ...projectCodes,
@@ -255,6 +257,54 @@ export function createVideoApiClient(options: {
   }
   return {
     request,
+    async bytes<T>(
+      path: string,
+      data: Uint8Array,
+      schema: z.ZodType<T>,
+      signal?: AbortSignal,
+    ): Promise<ApiResult<T>> {
+      try {
+        let accessToken = await token();
+        const send = () =>
+          transport(new URL(path, url.origin), {
+            method: "POST",
+            headers: {
+              authorization: "Bearer " + accessToken,
+              "content-type": "application/octet-stream",
+            },
+            body: new Uint8Array(data),
+            signal,
+            credentials: "omit",
+            cache: "no-store",
+            redirect: "error",
+          });
+        let response = await send();
+        if (response.status === 401) {
+          accessToken = await token(true, accessToken);
+          response = await send();
+        }
+        if (!response.ok) {
+          const parsed = z
+            .object({
+              error: z.object({
+                code: z.enum([...driveCodes, ...driveCloudCodes]),
+              }),
+            })
+            .safeParse(await response.json());
+          return {
+            ok: false,
+            state: "failed",
+            code: parsed.success ? parsed.data.error.code : "REQUEST_FAILED",
+          };
+        }
+        const parsed = schema.safeParse(await response.json());
+        return parsed.success
+          ? { ok: true, state: "ready", data: parsed.data }
+          : { ok: false, state: "failed", code: "INVALID_RESPONSE" };
+      } catch {
+        return { ok: false, state: "failed", code: "REQUEST_FAILED" };
+      }
+    },
     me: () => request("/v1/developer/me", developerMeSchema),
     createBatch: (snapshot: FnfSnapshot, key: string) => {
       const parsed = createBatchSchema.safeParse({ snapshot });
