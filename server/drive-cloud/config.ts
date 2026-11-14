@@ -32,8 +32,11 @@ export function drivePolicy(
     (env.VIDEO_DATABASE_TLS === "verify-full" &&
       Boolean(env.VIDEO_DATABASE_CA) &&
       dbLimitBytes > 0);
+  const resourcesVerified =
+    isolated || env.DRIVE_CLOUD_RESOURCES_VERIFIED === "true";
   const confirmed =
     env.DRIVE_CLOUD_TERMS_CONFIRMED === "true" &&
+    resourcesVerified &&
     monthlyYen <= 500 &&
     secureDatabase;
   return {
