@@ -62,6 +62,7 @@ Phase 2〜6:
 | NEXT_PUBLIC_DRIVE_CLOUD_UI                                                    | false。静的buildに対するUI flag                                               |
 | DRIVE_CLOUD_ENABLED                                                           | false。API/統合workerの受付flag                                               |
 | DRIVE_CLOUD_TERMS_CONFIRMED                                                   | false。年齢・地域・無料資格・請求条件等の確認後だけ                           |
+| DRIVE_CLOUD_RESOURCES_VERIFIED                                               | false。本番Workerの実メモリ・disk・停止復旧・資源計測の承認後だけ           |
 | DRIVE_CLOUD_MONTHLY_YEN                                                       | 501（不明なのでOFF）。全サービス合計・税込の固定見積。0〜500確認時のみ        |
 | DRIVE_CLOUD_DB_LIMIT_BYTES                                                    | 0（不明なので本番OFF）。実際のDB capを確認後だけ                              |
 | DRIVE_CLOUD_LIMIT_BYTES                                                       | 10737418240。追加の保守的なDrive上限であり契約容量ではない                    |
