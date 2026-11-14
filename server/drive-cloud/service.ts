@@ -148,6 +148,15 @@ export class DriveCloud {
     },
   ): Promise<Inventory> {
     if (!this.policy.enabled()) throw new ApiError(503, "DRIVE_CLOUD_HELD");
+    // Client-side preflight is advisory. The API must reject originals that
+    // this worker cannot possibly verify before reserving Drive storage.
+    // Render/candidate/output objects use the separately reserved job budget.
+    if (
+      (p.namespace ?? "original") === "original" &&
+      (p.size > this.policy.maxFileBytes ||
+        p.size + this.policy.marginBytes > this.policy.maxWorkBytes)
+    )
+      throw new ApiError(413, "DRIVE_VERIFY_LIMIT");
     const existing = await this.owner(
       owner,
       async (sql) =>
