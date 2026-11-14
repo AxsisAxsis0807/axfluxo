@@ -8,7 +8,7 @@ import { ApiError } from "../api/errors";
 import { GoogleDrive } from "../google-drive/google";
 import { sha256 } from "../google-drive/security";
 import { probeMedia } from "../worker/probe/media";
-import { ownerTransaction, driveCredentials } from "./credentials";
+import { ownerTransaction, driveCredentials, invalidateDriveAccess } from "./credentials";
 import { DriveTransfer, DRIVE_CHUNK } from "./transfer";
 import type { DrivePolicy } from "./config";
 export type Inventory = Row & {
@@ -54,7 +54,13 @@ export class DriveCloud {
     return new GoogleDrive(this.google.config, async (url, init) => {
       if (new URL(String(url)).hostname === "www.googleapis.com")
         await this.event(owner, "api", 0);
-      return this.google.transport(url, init);
+      const response = await this.google.transport(url, init);
+      if (response.status === 401) {
+        const auth = new Headers(init?.headers).get("authorization");
+        if (auth?.startsWith("Bearer "))
+          invalidateDriveAccess(this.db, owner, auth.slice("Bearer ".length));
+      }
+      return response;
     });
   }
   transfer(owner: string) {
@@ -164,6 +170,17 @@ export class DriveCloud {
       return r;
     };
     if (existing) return compatible(existing);
+    // Resource settings may shrink across a resumable upload. Preserve the
+    // previous idempotent reservation, but block *new* oversized originals.
+    // Client-side preflight is advisory. The API must reject originals that
+    // this worker cannot possibly verify before reserving Drive storage.
+    // Render/candidate/output objects use the separately reserved job budget.
+    if (
+      (p.namespace ?? "original") === "original" &&
+      (p.size > this.policy.maxFileBytes ||
+        p.size + this.policy.marginBytes > this.policy.maxWorkBytes)
+    )
+      throw new ApiError(413, "DRIVE_VERIFY_DISK_TOO_SMALL");
     await this.databaseRoom();
     const folders = await this.ensureFolder(owner, p.namespace);
     const capacity = await this.transfer(owner).capacity();
@@ -394,6 +411,7 @@ export class DriveCloud {
     offset: number,
     data: Uint8Array,
     hash: string,
+    signal?: AbortSignal,
   ) {
     if (!data.length || data.length > DRIVE_CHUNK || sha256(data) !== hash)
       throw new ApiError(422, "DRIVE_CHUNK_INVALID");
@@ -457,6 +475,7 @@ export class DriveCloud {
         Number(row.size),
         data,
         offset,
+        signal,
       );
       if (result.expired) {
         await this.update(

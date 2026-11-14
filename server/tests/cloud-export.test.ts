@@ -571,7 +571,7 @@ describe("cloud export worker queue", () => {
     );
     expect(head.status).toBe(200);
     expect(await head.text()).toBe("");
-  });
+  }, 15000); // >1MiB persisted stream + full/range/suffix/HEAD; CI shared-runner runtime exceeded 5s twice.
 
   it("rejects output before success and for another owner", async () => {
     const { job } = await queuedJob();

@@ -15,7 +15,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { testEngine, type TestEngine } from "./engine";
 import { DriveCloud } from "../drive-cloud/service";
 import { DriveTransfer, uploadUrl, DRIVE_CHUNK } from "../drive-cloud/transfer";
-import { drivePolicy } from "../drive-cloud/config";
+import { drivePolicy, maxVerifiableDriveBytes } from "../drive-cloud/config";
 import { driveCredentials } from "../drive-cloud/credentials";
 import { GoogleDrive } from "../google-drive/google";
 import { tokenVault, sha256 } from "../google-drive/security";
@@ -66,6 +66,8 @@ const transport: typeof fetch = async (input, init) => {
       ),
     });
   if (u.pathname === "/upload/drive/v3/files" && init?.method === "POST") {
+    expect(u.searchParams.get("uploadType")).toBe("resumable");
+    expect(u.searchParams.get("keepRevisionForever")).toBe("true");
     const meta = JSON.parse(String(init.body)),
       id = "session-" + ++serial;
     sessions.set(id, { id: meta.id, offset: 0, data: [], meta });
@@ -233,6 +235,103 @@ it("fails closed until both the operating gate and <=500 yen confirmation are su
   ).toBe(false);
   expect(policy().enabled()).toBe(true);
 });
+it("discloses that upload size is not worker verification capacity", () => {
+  const configured = policy();
+  expect(configured.maxFileBytes).toBeGreaterThan(configured.maxWorkBytes);
+  expect(maxVerifiableDriveBytes(configured)).toBe(
+    configured.maxWorkBytes - configured.marginBytes,
+  );
+  expect(maxVerifiableDriveBytes({ ...configured, maxWorkBytes: 1 })).toBe(0);
+});
+it("lists intermediate storage in read-only dry-run without removing files", async () => {
+  const reserved = await service().reserve(owner, {
+    key: randomUUID(),
+    size: data.length,
+    hash: sha256(data),
+    mime: "video/mp4",
+    name: "temporary.mp4",
+    namespace: "preview",
+  });
+  const response = await call("/cleanup-preview");
+  expect(response.status).toBe(200);
+  const report = await response.json();
+  expect(report).toMatchObject({
+    dryRun: true,
+    deletionEnabled: false,
+  });
+  expect(report.items).toContainEqual(
+    expect.objectContaining({
+      id: reserved.id,
+      namespace: "preview",
+      mayDelete: false,
+    }),
+  );
+  expect((await service().row(owner, reserved.id)).id).toBe(reserved.id);
+  const usage = await (await call("/usage")).json();
+  expect(usage.temporary).toContainEqual(
+    expect.objectContaining({ namespace: "preview", files: 1 }),
+  );
+});
+it("keeps production Cloud OFF until the actual worker resources are verified", () => {
+  const env = {
+    NODE_ENV: "production",
+    DRIVE_CLOUD_ENABLED: "true",
+    DRIVE_CLOUD_TERMS_CONFIRMED: "true",
+    DRIVE_CLOUD_MONTHLY_YEN: "0",
+    DRIVE_CLOUD_DB_LIMIT_BYTES: String(50 * 1024 ** 2),
+    VIDEO_DATABASE_TLS: "verify-full",
+    VIDEO_DATABASE_CA: "dummy-test-ca",
+  };
+  expect(drivePolicy(env).enabled()).toBe(false);
+  expect(drivePolicy({ ...env, DRIVE_CLOUD_RESOURCES_VERIFIED: "true" }).enabled()).toBe(true);
+});
+it("rejects a server-side oversized original before reserving Drive capacity", async () => {
+  const maximum = policy().maxWorkBytes - policy().marginBytes;
+  await expect(
+    service().reserve(owner, {
+      key: randomUUID(),
+      size: maximum + 1,
+      hash: "a".repeat(64),
+      mime: "video/mp4",
+      name: "cannot-verify.mp4",
+    }),
+  ).rejects.toMatchObject({ status: 413, code: "DRIVE_VERIFY_DISK_TOO_SMALL" });
+  const rows = await pg.query("SELECT * FROM axfluxo_video.drive_inventory");
+  expect(rows.rows).toHaveLength(0);
+  const capacity = await pg.query("SELECT * FROM axfluxo_video.drive_capacity");
+  expect(capacity.rows).toHaveLength(0);
+});
+it("keeps a previously reserved upload recoverable after worker disk limit shrinks", async () => {
+  const operation = randomUUID();
+  const first = await service().reserve(owner, {
+    key: operation,
+    size: data.length,
+    hash: sha256(data),
+    mime: "video/mp4",
+    name: "recovered.mp4",
+  });
+  const restricted = new CloudService(pg.asRole("axfluxo_video_api"), google, {
+    ...policy(),
+    maxWorkBytes: data.length,
+  });
+  const resumed = await restricted.reserve(owner, {
+    key: operation,
+    size: data.length,
+    hash: sha256(data),
+    mime: "video/mp4",
+    name: "recovered.mp4",
+  });
+  expect(resumed.id).toBe(first.id);
+  await expect(
+    restricted.reserve(owner, {
+      key: randomUUID(),
+      size: data.length,
+      hash: sha256(data),
+      mime: "video/mp4",
+      name: "new-oversize.mp4",
+    }),
+  ).rejects.toMatchObject({ status: 413, code: "DRIVE_VERIFY_DISK_TOO_SMALL" });
+});
 it("validates Google session URLs, rejecting SSRF and secret-bearing arbitrary hosts", () => {
   for (const url of [
     "http://www.googleapis.com/upload/drive/v3/files?upload_id=x",
@@ -241,6 +340,22 @@ it("validates Google session URLs, rejecting SSRF and secret-bearing arbitrary h
     "https://u:p@www.googleapis.com/upload/drive/v3/files?upload_id=x",
   ])
     expect(() => uploadUrl(url)).toThrow();
+});
+it("uses separate bounded transfer deadlines and honors caller cancellation", async () => {
+  const slow = new GoogleDrive(google.config, async (_input, init) => {
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    if (init?.signal?.aborted) throw Error("aborted");
+    return new Response(null, { status: 200 });
+  });
+  expect((await slow.send("https://www.googleapis.com/test", {}, 100)).ok).toBe(true);
+  await expect(slow.send("https://www.googleapis.com/test", {}, 5)).rejects.toMatchObject({
+    code: "DRIVE_UNAVAILABLE",
+  });
+  const controller = new AbortController();
+  controller.abort();
+  await expect(slow.send("https://www.googleapis.com/test", { signal: controller.signal }, 100)).rejects.toMatchObject({
+    code: "DRIVE_UNAVAILABLE",
+  });
 });
 it("reserves once, rejects different payloads, preserves capacity across month changes", async () => {
   const operation = randomUUID(),
@@ -357,10 +472,20 @@ it("isolates owners, protects immutable file IDs and cannot delete inventory", a
     }),
   ).rejects.toThrow();
 });
-it("serializes refresh with a bounded lease and fails closed after revocation", async () => {
-  const db = pg.asRole("axfluxo_video_api"),
-    get = driveCredentials(db, google, owner);
+it("reuses access tokens, single-flights concurrent refresh and fails closed after revocation", async () => {
+  const db = pg.asRole("axfluxo_video_api");
+  let refreshCount = 0;
+  const metered = new GoogleDrive(google.config, async (input, init) => {
+    if (String(input).includes("oauth2.googleapis.com")) refreshCount++;
+    return transport(input, init);
+  });
+  const get = driveCredentials(db, metered, owner);
+  await Promise.all(
+    Array.from({ length: 20 }, () => driveCredentials(db, metered, owner)()),
+  );
+  expect(refreshCount).toBe(1);
   await get();
+  expect(refreshCount).toBe(1);
   const row = (
     await pg.query(
       "SELECT refresh_cipher FROM axfluxo_video.drive_connections WHERE owner_id=$1",
@@ -370,9 +495,11 @@ it("serializes refresh with a bounded lease and fails closed after revocation", 
   expect(vault.open(String(row.refresh_cipher), owner + ":refresh")).toBe(
     "mock-rotated",
   );
+  // A new connection generation invalidates the cached access token.
+  // The existing remote refresh lease must still be honored.
   await pg.query(
-    "UPDATE axfluxo_video.drive_connections SET refresh_until=now()+interval '1 minute' WHERE owner_id=$1",
-    [owner],
+    "UPDATE axfluxo_video.drive_connections SET generation=$2,refresh_until=now()+interval '1 minute' WHERE owner_id=$1",
+    [owner, randomUUID()],
   );
   await expect(get()).rejects.toMatchObject({ code: "DRIVE_REFRESH_BUSY" });
   await pg.query(
@@ -391,6 +518,30 @@ it("serializes refresh with a bounded lease and fails closed after revocation", 
       )
     ).rows[0].connected,
   ).toBe(false);
+});
+it("provider 401 evicts only the rejected cached access token", async () => {
+  const db = pg.asRole("axfluxo_video_api");
+  let tokenCalls = 0;
+  let rejectOnce = true;
+  const metered = new GoogleDrive(google.config, async (input, init) => {
+    if (String(input).includes("oauth2.googleapis.com")) tokenCalls++;
+    if (
+      rejectOnce &&
+      String(input).includes("/about?") &&
+      new Headers(init?.headers).get("authorization") === "Bearer mock-access"
+    ) {
+      rejectOnce = false;
+      return Response.json({}, { status: 401 });
+    }
+    return transport(input, init);
+  });
+  const service = new CloudService(db, metered, policy());
+  await expect(service.transfer(owner).capacity()).rejects.toMatchObject({
+    code: "DRIVE_RECONNECT_REQUIRED",
+  });
+  const again = await service.transfer(owner).capacity();
+  expect(again.account).toBe("account");
+  expect(tokenCalls).toBe(2);
 });
 it("streams a synthetic 1.7 GB object with a fixed 64 KiB buffer", async () => {
   const size = 1700000000,
@@ -793,6 +944,77 @@ it("handles 100 concurrent admission requests without double reservations or quo
   ).rows[0];
   expect(Number(sum.total)).toBe(Number(cap.reserved_bytes));
 }, 60000);
+it("unequal-range Drive jobs and retries reserve the actual range peaks", async () => {
+  const original = await fixture();
+  const duration = original.snapshot.ranges[0].endUs;
+  const quarter = Math.floor(duration / 4);
+  const body = {
+    ...original,
+    snapshot: {
+      ...original.snapshot,
+      ranges: [
+        { startUs: 0, endUs: quarter },
+        { startUs: quarter, endUs: duration },
+      ],
+      names: ["part-one.mp4", "part-two.mp4"],
+    },
+  };
+  const accepted = await call("/batches", body);
+  expect(accepted.status).toBe(202);
+  const batch = await accepted.json();
+  expect(batch.jobs).toHaveLength(2);
+  const initial = (
+    await pg.query(
+      "SELECT job_id,remaining FROM axfluxo_video.drive_job_capacity WHERE owner_id=$1 AND job_id IN ($2,$3) ORDER BY remaining",
+      [owner, batch.jobs[0].id, batch.jobs[1].id],
+    )
+  ).rows;
+  expect(initial).toHaveLength(2);
+  expect(Number(initial[1].remaining)).toBeGreaterThan(Number(initial[0].remaining));
+  const longBytes = Math.ceil(((duration - quarter) / 1e6) * 8_000_000);
+  expect(Number(initial[1].remaining)).toBe(longBytes);
+  // Fail the LONG range: a retry must reserve its own peak rather than
+  // half the batch peak.
+  await pg.query(
+    "UPDATE axfluxo_video.render_jobs SET state='failed' WHERE owner_id=$1 AND id=$2",
+    [owner, batch.jobs[1].id],
+  );
+  const retried = await call("/jobs/" + batch.jobs[1].id + "/retry", {});
+  expect(retried.status).toBe(202);
+  const result = await retried.json();
+  const originalPeak = (
+    await pg.query(
+      "SELECT peak_bytes FROM axfluxo_video.drive_batches WHERE owner_id=$1 AND batch_id=$2",
+      [owner, batch.id],
+    )
+  ).rows[0].peak_bytes;
+  const retryBudget = (
+    await pg.query(
+      "SELECT remaining FROM axfluxo_video.drive_job_capacity WHERE owner_id=$1 AND job_id=$2",
+      [owner, result.job.id],
+    )
+  ).rows[0].remaining;
+  expect(Number(retryBudget)).toBe(longBytes);
+  expect(Number(retryBudget)).toBeGreaterThan(Number(originalPeak) / 2);
+}, 60000);
+it("never reads an uploading or held Drive inventory as a rendered resource", async () => {
+  const reserved = await reserve();
+  const storage = driveRenderStorage(service(), owner, randomUUID(), null);
+  await expect(storage.head(reserved.object_key)).rejects.toMatchObject({
+    code: "DRIVE_RESOURCE_MISSING",
+  });
+  await expect(storage.stream(reserved.object_key)).rejects.toMatchObject({
+    code: "DRIVE_RESOURCE_MISSING",
+  });
+  const blocked = await pg.query(
+    "UPDATE axfluxo_video.drive_inventory SET state='held' WHERE owner_id=$1 AND id=$2",
+    [owner, reserved.id],
+  );
+  expect(blocked.rows).toHaveLength(0);
+  await expect(storage.head(reserved.object_key)).rejects.toMatchObject({
+    code: "DRIVE_RESOURCE_MISSING",
+  });
+});
 it("holds a corrupt original without registering a ready resource or releasing its retained bytes", async () => {
   const row = await reserve(),
     bad = Buffer.alloc(data.length, 4);

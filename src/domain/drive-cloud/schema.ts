@@ -16,6 +16,8 @@ export const driveCloudStatus = z.object({
   connected: z.boolean(),
   chunkBytes: z.literal(4194304),
   maxFileBytes: z.number(),
+  // Optional to keep old/mock server responses readable during rollout.
+  maxVerifiableBytes: z.number().nonnegative().optional(),
   monthlyEstimateYen: z.number(),
   priceConfirmed: z.boolean(),
   allow1440: z.boolean(),
@@ -41,12 +43,14 @@ export const driveCloudCodes = [
   "DRIVE_CHUNK_CONFLICT",
   "DRIVE_IDENTITY_MISMATCH",
   "DRIVE_WORKER_NOT_READY",
+  "DRIVE_SOURCE_IMPORT_REQUIRED",
   "DRIVE_SNAPSHOT_INVALID",
   "DRIVE_NOT_RESUMABLE",
   "DRIVE_RETRY_LIMIT",
   "DRIVE_TICKET_EXPIRED",
   "DRIVE_OUTPUT_CHANGED",
   "DRIVE_VERIFY_LIMIT",
+  "DRIVE_VERIFY_DISK_TOO_SMALL",
   "DRIVE_RANGE_INVALID",
   "JOB_NOT_RESUMABLE",
 ] as const;

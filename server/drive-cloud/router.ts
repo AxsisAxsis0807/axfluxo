@@ -25,6 +25,7 @@ import type { Sql } from "../db/database";
 import { sha256, secret } from "../google-drive/security";
 import type { DriveCloud } from "./service";
 import { DRIVE_CHUNK } from "./transfer";
+import { maxVerifiableDriveBytes } from "./config";
 const prefix = "/v1/drive";
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
@@ -79,17 +80,27 @@ export function driveCloudRouter(
   const enabled = () => {
     if (!service.policy.enabled()) throw new ApiError(503, "DRIVE_CLOUD_HELD");
   };
+  // A long range needs more working space than a short range. Averages
+  // under-reserve the long one, especially when only one range is retried.
+  const rangePeak = (startUs: number, endUs: number): number => {
+    const bytes = Math.ceil(((endUs - startUs) / 1e6) * 8_000_000);
+    if (!Number.isSafeInteger(bytes) || bytes <= 0)
+      throw new ApiError(422, "DRIVE_CAPACITY_HELD");
+    return bytes;
+  };
   async function reserveJobs(
     sql: Sql,
     owner: string,
-    jobs: { id: string }[],
-    each: number,
+    jobs: { id: string; bytes: number }[],
   ) {
+    const total = jobs.reduce((sum, job) => sum + job.bytes, 0);
+    if (!Number.isSafeInteger(total) || total <= 0)
+      throw new ApiError(422, "DRIVE_CAPACITY_HELD");
     const room = await sql.query(
       "UPDATE axfluxo_video.drive_capacity SET reserved_bytes=reserved_bytes+$2::bigint WHERE owner_id=$1 AND observed_at>now()-interval '5 minutes' AND used_bytes+reserved_bytes+$2::bigint+$3::bigint<=LEAST(limit_bytes,$4::bigint) AND reserved_bytes+$2::bigint+$3::bigint<=observed_free RETURNING owner_id",
       [
         owner,
-        each * jobs.length,
+        total,
         service.policy.marginBytes,
         service.policy.limitBytes,
       ],
@@ -98,7 +109,7 @@ export function driveCloudRouter(
     for (const job of jobs)
       await sql.query(
         "INSERT INTO axfluxo_video.drive_job_capacity(owner_id,job_id,remaining) VALUES($1,$2,$3)",
-        [owner, job.id, each],
+        [owner, job.id, job.bytes],
       );
   }
   async function handler(
@@ -175,6 +186,7 @@ export function driveCloudRouter(
         connected: row?.connected ?? false,
         chunkBytes: DRIVE_CHUNK,
         maxFileBytes: service.policy.maxFileBytes,
+        maxVerifiableBytes: maxVerifiableDriveBytes(service.policy),
         monthlyEstimateYen: service.policy.monthlyYen,
         priceConfirmed: service.policy.enabled(),
         allow1440: service.policy.allow1440,
@@ -196,6 +208,13 @@ export function driveCloudRouter(
               [owner],
             )
           ).rows,
+          // Read-only inventory. This is not authorization to delete any file.
+          temporary: (
+            await sql.query(
+              "SELECT namespace,count(*)::integer AS files,coalesce(sum(size),0)::text AS bytes FROM axfluxo_video.drive_inventory WHERE owner_id=$1 AND namespace IN ('segment','candidate','preview') GROUP BY namespace ORDER BY namespace",
+              [owner],
+            )
+          ).rows,
           unconfirmed: Number(
             (
               await sql.query(
@@ -204,6 +223,29 @@ export function driveCloudRouter(
               )
             ).rows[0].count,
           ),
+        })),
+      );
+    if (path === prefix + "/cleanup-preview" && request.method === "GET")
+      return json(
+        await service.owner(owner, async (sql) => ({
+          dryRun: true,
+          deletionEnabled: false,
+          // Every entry is explicitly held until all references, retries,
+          // checkpoints and physical object generations are reconciled.
+          items: (
+            await sql.query(
+              "SELECT id,namespace,state,size,job_id,created_at FROM axfluxo_video.drive_inventory WHERE owner_id=$1 AND namespace IN ('segment','candidate','preview') ORDER BY created_at,id LIMIT 100",
+              [owner],
+            )
+          ).rows.map((row) => ({
+            id: row.id,
+            namespace: row.namespace,
+            state: row.state,
+            bytes: Number(row.size),
+            jobId: row.job_id,
+            mayDelete: false,
+            reason: "CHECKPOINT_AND_REFERENCE_REVIEW_REQUIRED",
+          })),
         })),
       );
     const upload =
@@ -271,6 +313,7 @@ export function driveCloudRouter(
             Number(upload[2]),
             Buffer.concat(chunks),
             upload[3],
+            request.signal,
           ),
         );
       }
@@ -329,14 +372,29 @@ export function driveCloudRouter(
                   [owner, r.versionId, r.fileId, r.hash],
                 )
               ).rows[0];
-              if (!row) throw new ApiError(409, "DRIVE_WORKER_NOT_READY");
+              if (!row) {
+                // An old R2/Local media version is not automatically backed by
+                // Google Drive. Give a migration action instead of claiming a
+                // Drive verification is merely pending.
+                const legacy = (
+                  await sql.query(
+                    "SELECT id FROM axfluxo_video.media_versions WHERE owner_id=$1 AND id::text=$2 AND asset_id::text=$3 AND hash=$4",
+                    [owner, r.versionId, r.fileId, r.hash],
+                  )
+                ).rows[0];
+                throw new ApiError(
+                  409,
+                  legacy ? "DRIVE_SOURCE_IMPORT_REQUIRED" : "DRIVE_WORKER_NOT_READY",
+                );
+              }
               sourceBytes += Number(row.size);
             }
-            const seconds = snapshot.ranges.reduce(
-                (n, r) => n + (r.endUs - r.startUs) / 1e6,
-                0,
-              ),
-              peak = Math.ceil(seconds * 2_000_000 * 4);
+            const rangePeaks = snapshot.ranges.map((r) =>
+                rangePeak(r.startUs, r.endUs),
+              );
+            const peak = rangePeaks.reduce((total, bytes) => total + bytes, 0);
+            if (!Number.isSafeInteger(peak))
+              throw new ApiError(422, "DRIVE_CAPACITY_HELD");
             if (
               sourceBytes + peak + service.policy.marginBytes >
               service.policy.maxWorkBytes
@@ -368,8 +426,10 @@ export function driveCloudRouter(
             await reserveJobs(
               sql,
               owner,
-              batch.jobs,
-              Math.ceil(peak / batch.jobs.length),
+              batch.jobs.map((job, index) => ({
+                id: job.id,
+                bytes: rangePeaks[index],
+              })),
             );
             await sql.query(
               "INSERT INTO axfluxo_video.drive_batches(owner_id,batch_id,peak_bytes) VALUES($1,$2,$3)",
@@ -420,7 +480,7 @@ export function driveCloudRouter(
           await sql.query("SELECT axfluxo_video.lock_render_slot()");
           const row = (
             await sql.query(
-              "SELECT j.batch_id,j.attempt,b.peak_bytes FROM axfluxo_video.render_jobs j JOIN axfluxo_video.drive_batches b ON b.owner_id=j.owner_id AND b.batch_id=j.batch_id WHERE j.owner_id=$1 AND j.id=$2 FOR UPDATE OF j",
+              "SELECT j.batch_id,j.attempt,j.range_index,b.peak_bytes,r.snapshot FROM axfluxo_video.render_jobs j JOIN axfluxo_video.drive_batches b ON b.owner_id=j.owner_id AND b.batch_id=j.batch_id JOIN axfluxo_video.render_batches r ON r.owner_id=j.owner_id AND r.id=j.batch_id WHERE j.owner_id=$1 AND j.id=$2 FOR UPDATE OF j",
               [owner, id],
             )
           ).rows[0];
@@ -451,7 +511,16 @@ export function driveCloudRouter(
               "INSERT INTO axfluxo_video.render_executions(owner_id,job_id,runs) VALUES($1,$2,$3)",
               [owner, next.job.id, Number(total.runs)],
             );
-            await reserveJobs(sql, owner, [next.job], Number(row.peak_bytes));
+            // Reserve the same range-specific peak as at first admission.
+            // In an uneven batch, dividing the overall peak by job count
+            // would under-reserve long ranges during retries.
+            const retrySnapshot = executionSnapshot(row.snapshot);
+            const retryRange = retrySnapshot.ranges[Number(row.range_index)];
+            if (!retryRange) throw new ApiError(409, "DRIVE_CAPACITY_HELD");
+            await reserveJobs(sql, owner, [{
+              id: next.job.id,
+              bytes: rangePeak(retryRange.startUs, retryRange.endUs),
+            }]);
             return { status: 202, body: next };
           });
         })

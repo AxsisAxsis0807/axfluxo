@@ -100,8 +100,12 @@ export default function DriveCloudPanel({
         DRIVE_DB_HELD: "DB容量の確認待ちです。新規受付を停止しました。",
         DRIVE_DISK_HELD:
           "Workerの一時作業領域が不足しています。画質を下げず保留しました。",
+        DRIVE_VERIFY_DISK_TOO_SMALL:
+          "選んだ素材が現在のWorker検証容量の設定上限を超えています。送信前に設定・実容量を確認してください。画質や原本は変更していません。",
         DRIVE_WORKER_NOT_READY:
           "Drive上の素材をWorkerが検証中です。まだSafariを閉じてよい段階ではありません。",
+        DRIVE_SOURCE_IMPORT_REQUIRED:
+          "このプロジェクトの素材はDriveで検証済みではありません。元のR2・ローカル素材を削除せず、Drive素材ライブラリで同じファイルを再登録してから書き出してください。",
         DRIVE_TRANSFER_BUSY:
           "転送処理中です。少し待って状態を再確認してください。",
       };
@@ -151,11 +155,23 @@ export default function DriveCloudPanel({
             : "月額・契約条件は未確認です。受付OFF。"}
         </p>
       )}
+      {status?.maxVerifiableBytes !== undefined && (
+        <p>
+          Workerが検証できる1素材の設定上限: {(status.maxVerifiableBytes / 1024 ** 2).toFixed(0)} MiB。
+          実際の空きディスクと動画処理用の追加容量は別途確認します。
+        </p>
+      )}
       <button
         disabled={!project || !available || busy}
         onClick={() =>
           void run(async () => {
             if (!client || !project) return;
+            if (
+              status?.maxVerifiableBytes !== undefined &&
+              (project.sources.some((s) => s.file.size > status.maxVerifiableBytes!) ||
+                (project.coverFile && project.coverFile.size > status.maxVerifiableBytes))
+            )
+              throw Error("DRIVE_VERIFY_DISK_TOO_SMALL");
             const owner = value(await client.me()).ownerId;
             frozen.current = {
               ...project,
@@ -229,7 +245,7 @@ export default function DriveCloudPanel({
               );
               setBatch(accepted);
               setNote(
-                "サーバー受領済み。検証済みDrive素材と現在の編集内容を固定して受け付けました。Safariを閉じてもWorkerが独立処理できる状態です。",
+                "サーバー受領済み。編集内容と検証済みDrive素材を確定しました。Safariを閉じてもジョブは保持されます。処理が進むのはWorker稼働中または復旧後です。",
               );
               return;
             }
@@ -269,7 +285,7 @@ export default function DriveCloudPanel({
             );
             setBatch(accepted);
             setNote(
-              "サーバー受領済み。Drive保存・検証・ジョブ受付が確定しました。Safariを閉じてもWorkerが処理を進められる状態です（Workerの実稼働条件は別途確認が必要）。",
+              "サーバー受領済み。Drive保存・素材検証・ジョブ受付が確定しました。Safariを閉じてもジョブは保持されます。Workerの実稼働・停止復旧は別途検証が必要です。",
             );
           })
         }
@@ -511,6 +527,13 @@ function UsageView({ usage }: { usage: unknown }) {
           operations: z.number(),
         }),
       ),
+      temporary: z.array(
+        z.object({
+          namespace: z.string(),
+          files: z.number(),
+          bytes: z.coerce.number(),
+        }),
+      ).optional(),
       unconfirmed: z.number(),
     })
     .safeParse(usage);
@@ -524,6 +547,13 @@ function UsageView({ usage }: { usage: unknown }) {
         {mib(u.monthly.find((m) => m.kind === "export")?.bytes ?? 0)}
       </p>
       <p>未確認の完成動画: {u.unconfirmed}件</p>
+      {u.temporary && (
+        <p>
+          Drive中間生成物: {u.temporary.reduce((n, item) => n + item.files, 0)}件／
+          {mib(u.temporary.reduce((n, item) => n + item.bytes, 0))}
+          （参照・再試行・checkpoint確認前の自動削除は行いません）
+        </p>
+      )}
       {u.capacity && (
         <p>
           保存中 {mib(u.capacity.used_bytes)}／予約中{" "}

@@ -10,6 +10,11 @@ export type DrivePolicy = {
   dbLimitBytes: number;
   allow1440: boolean;
 };
+/** Configuration-only bound: free disk space and render peak are checked separately. */
+export function maxVerifiableDriveBytes(policy: DrivePolicy): number {
+  return Math.max(0, Math.min(policy.maxFileBytes, policy.maxWorkBytes - policy.marginBytes));
+}
+
 export function drivePolicy(
   env: Record<string, string | undefined>,
 ): DrivePolicy {
@@ -27,8 +32,11 @@ export function drivePolicy(
     (env.VIDEO_DATABASE_TLS === "verify-full" &&
       Boolean(env.VIDEO_DATABASE_CA) &&
       dbLimitBytes > 0);
+  const resourcesVerified =
+    isolated || env.DRIVE_CLOUD_RESOURCES_VERIFIED === "true";
   const confirmed =
     env.DRIVE_CLOUD_TERMS_CONFIRMED === "true" &&
+    resourcesVerified &&
     monthlyYen <= 500 &&
     secureDatabase;
   return {
