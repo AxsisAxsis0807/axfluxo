@@ -16,6 +16,8 @@ export const driveCloudStatus = z.object({
   connected: z.boolean(),
   chunkBytes: z.literal(4194304),
   maxFileBytes: z.number(),
+  // Optional to keep old/mock server responses readable during rollout.
+  maxVerifiableBytes: z.number().nonnegative().optional(),
   monthlyEstimateYen: z.number(),
   priceConfirmed: z.boolean(),
   allow1440: z.boolean(),
