@@ -295,7 +295,7 @@ it("rejects a server-side oversized original before reserving Drive capacity", a
       mime: "video/mp4",
       name: "cannot-verify.mp4",
     }),
-  ).rejects.toMatchObject({ status: 413, code: "DRIVE_VERIFY_LIMIT" });
+  ).rejects.toMatchObject({ status: 413, code: "DRIVE_VERIFY_DISK_TOO_SMALL" });
   const rows = await pg.query("SELECT * FROM axfluxo_video.drive_inventory");
   expect(rows.rows).toHaveLength(0);
   const capacity = await pg.query("SELECT * FROM axfluxo_video.drive_capacity");
