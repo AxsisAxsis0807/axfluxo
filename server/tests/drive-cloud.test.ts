@@ -242,6 +242,22 @@ it("validates Google session URLs, rejecting SSRF and secret-bearing arbitrary h
   ])
     expect(() => uploadUrl(url)).toThrow();
 });
+it("uses separate bounded transfer deadlines and honors caller cancellation", async () => {
+  const slow = new GoogleDrive(google.config, async (_input, init) => {
+    await new Promise((resolve) => setTimeout(resolve, 35));
+    if (init?.signal?.aborted) throw Error("aborted");
+    return new Response(null, { status: 200 });
+  });
+  expect((await slow.send("https://www.googleapis.com/test", {}, 100)).ok).toBe(true);
+  await expect(slow.send("https://www.googleapis.com/test", {}, 5)).rejects.toMatchObject({
+    code: "DRIVE_UNAVAILABLE",
+  });
+  const controller = new AbortController();
+  controller.abort();
+  await expect(slow.send("https://www.googleapis.com/test", { signal: controller.signal }, 100)).rejects.toMatchObject({
+    code: "DRIVE_UNAVAILABLE",
+  });
+});
 it("reserves once, rejects different payloads, preserves capacity across month changes", async () => {
   const operation = randomUUID(),
     a = await reserve(operation),
@@ -357,10 +373,20 @@ it("isolates owners, protects immutable file IDs and cannot delete inventory", a
     }),
   ).rejects.toThrow();
 });
-it("serializes refresh with a bounded lease and fails closed after revocation", async () => {
-  const db = pg.asRole("axfluxo_video_api"),
-    get = driveCredentials(db, google, owner);
+it("reuses access tokens, single-flights concurrent refresh and fails closed after revocation", async () => {
+  const db = pg.asRole("axfluxo_video_api");
+  let refreshCount = 0;
+  const metered = new GoogleDrive(google.config, async (input, init) => {
+    if (String(input).includes("oauth2.googleapis.com")) refreshCount++;
+    return transport(input, init);
+  });
+  const get = driveCredentials(db, metered, owner);
+  await Promise.all(
+    Array.from({ length: 20 }, () => driveCredentials(db, metered, owner)()),
+  );
+  expect(refreshCount).toBe(1);
   await get();
+  expect(refreshCount).toBe(1);
   const row = (
     await pg.query(
       "SELECT refresh_cipher FROM axfluxo_video.drive_connections WHERE owner_id=$1",
@@ -370,9 +396,11 @@ it("serializes refresh with a bounded lease and fails closed after revocation", 
   expect(vault.open(String(row.refresh_cipher), owner + ":refresh")).toBe(
     "mock-rotated",
   );
+  // A new connection generation invalidates the cached access token.
+  // The existing remote refresh lease must still be honored.
   await pg.query(
-    "UPDATE axfluxo_video.drive_connections SET refresh_until=now()+interval '1 minute' WHERE owner_id=$1",
-    [owner],
+    "UPDATE axfluxo_video.drive_connections SET generation=$2,refresh_until=now()+interval '1 minute' WHERE owner_id=$1",
+    [owner, randomUUID()],
   );
   await expect(get()).rejects.toMatchObject({ code: "DRIVE_REFRESH_BUSY" });
   await pg.query(
