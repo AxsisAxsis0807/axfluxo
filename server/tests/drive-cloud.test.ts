@@ -270,6 +270,19 @@ it("lists intermediate storage in read-only dry-run without removing files", asy
     expect.objectContaining({ namespace: "preview", files: 1 }),
   );
 });
+it("keeps production Cloud OFF until the actual worker resources are verified", () => {
+  const env = {
+    NODE_ENV: "production",
+    DRIVE_CLOUD_ENABLED: "true",
+    DRIVE_CLOUD_TERMS_CONFIRMED: "true",
+    DRIVE_CLOUD_MONTHLY_YEN: "0",
+    DRIVE_CLOUD_DB_LIMIT_BYTES: String(50 * 1024 ** 2),
+    VIDEO_DATABASE_TLS: "verify-full",
+    VIDEO_DATABASE_CA: "dummy-test-ca",
+  };
+  expect(drivePolicy(env).enabled()).toBe(false);
+  expect(drivePolicy({ ...env, DRIVE_CLOUD_RESOURCES_VERIFIED: "true" }).enabled()).toBe(true);
+});
 it("validates Google session URLs, rejecting SSRF and secret-bearing arbitrary hosts", () => {
   for (const url of [
     "http://www.googleapis.com/upload/drive/v3/files?upload_id=x",
