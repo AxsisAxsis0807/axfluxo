@@ -86,6 +86,8 @@ export function outputsRouter(c: {
             )
           ).rows[0];
           if (!r) throw new ApiError(404, "NOT_FOUND");
+          if (r.storage_namespace === "drive-v1")
+            throw new ApiError(409, "DRIVE_CONFIRMATION_ROUTE_REQUIRED");
           if (r.version_id !== body.versionId || r.hash !== body.hash)
             throw new ApiError(409, "OUTPUT_IDENTITY_CHANGED");
           const legacy = r.storage_namespace !== "outputs-v1";

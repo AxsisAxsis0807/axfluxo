@@ -1,3 +1,6 @@
+import { DriveCloud } from "../drive-cloud/service";
+import { drivePolicy } from "../drive-cloud/config";
+import { driveCloudRouter } from "../drive-cloud/router";
 import { driveConfiguration } from "../google-drive/security";
 import { GoogleDrive } from "../google-drive/google";
 import { driveRouter } from "../google-drive/router";
@@ -74,6 +77,13 @@ export async function startApi(
     const drive = driveConfig
       ? driveRouter(db, new GoogleDrive(driveConfig))
       : null;
+    const driveCloud = driveConfig
+      ? driveCloudRouter(
+          new DriveCloud(db, new GoogleDrive(driveConfig), drivePolicy(env)),
+          config.unitsPerFrame,
+          cloud.previewUnitsPerSecond,
+        )
+      : null;
     const tickets = ticketDownload({ db: exportDb });
     const handler = createVideoApi({
       ...config,
@@ -110,16 +120,33 @@ export async function startApi(
       }),
       verify,
       response: async (request, owner) =>
+        (await driveCloud?.authenticated(request, owner)) ??
         (await drive?.authenticated(request, owner)) ??
         cloudExport(request, owner),
       public: async (request) =>
-        (await drive?.public(request)) ?? tickets(request),
+        (await driveCloud?.public(request)) ??
+        (await drive?.public(request)) ??
+        tickets(request),
     });
     stage = "http";
     const transfer = httpConfiguration(env);
-    const server = createHttpServer(handler, transfer, (incoming) =>
-      exportPolicyFor(incoming, transfer, exportApi.maxUploadBytes),
-    );
+    const server = createHttpServer(handler, transfer, (incoming) => {
+      const path = new URL(incoming.url ?? "/", "http://local").pathname;
+      if (
+        /^\/v1\/drive\/uploads\/[a-f0-9-]+\/chunks\/\d+\/[a-f0-9]{64}$/.test(
+          path,
+        ) &&
+        incoming.method === "POST"
+      )
+        return { ...transfer.chunk, bodyBytes: 4194304 };
+      if (
+        (path.startsWith("/v1/drive/download/") ||
+          path.startsWith("/v1/drive/media/")) &&
+        ["GET", "HEAD"].includes(incoming.method ?? "")
+      )
+        return transfer.download;
+      return exportPolicyFor(incoming, transfer, exportApi.maxUploadBytes);
+    });
     bridge = server;
     stage = "listen";
     await new Promise<void>((resolve, reject) => {

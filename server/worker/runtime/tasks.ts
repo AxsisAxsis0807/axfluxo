@@ -1,3 +1,16 @@
+import { drivePreviewStorage } from "../../drive-cloud/preview";
+import { databaseTls } from "../../db/tls";
+import {
+  singleThreaded,
+  DRIVE_RENDER_PROFILE,
+} from "../../drive-cloud/resources";
+import { driveConfiguration } from "../../google-drive/security";
+import { GoogleDrive } from "../../google-drive/google";
+import { DriveCloud } from "../../drive-cloud/service";
+import { drivePolicy } from "../../drive-cloud/config";
+import { driveRenderStorage } from "../../drive-cloud/storage";
+import { ownerTransaction } from "../../drive-cloud/credentials";
+import { finishFailure } from "../jobs/queue";
 import { access } from "node:fs/promises";
 import webpush from "web-push";
 import { postgresDatabase } from "../../db/postgres";
@@ -33,7 +46,13 @@ export async function workerTasks(env: Environment, only?: WorkerKind) {
       {
         connectionString: databaseUrl(env, key),
         max,
-        ssl: production(env) ? { rejectUnauthorized: true } : undefined,
+        ssl:
+          env.DRIVE_CLOUD_ENABLED === "true" &&
+          env.VIDEO_DATABASE_TLS === "verify-full"
+            ? databaseTls(env).ssl
+            : production(env)
+              ? { rejectUnauthorized: true }
+              : undefined,
       },
       role,
     );
@@ -47,6 +66,59 @@ export async function workerTasks(env: Environment, only?: WorkerKind) {
     if (!only && env.VIDEO_WORKER_ENABLED !== "true")
       return { tasks, close: async () => {} };
     const cloud = cloudConfiguration(env);
+    const driveConfig = driveConfiguration(env),
+      policy = drivePolicy(env);
+    const driveEnabled = Boolean(driveConfig) && policy.enabled();
+    if (driveEnabled && selected("probe")) {
+      const db = connect("axfluxo_video_probe"),
+        service = new DriveCloud(db, new GoogleDrive(driveConfig!), policy);
+      tasks.push({
+        name: "drive-verify",
+        enabled: policy.enabled,
+        async run(signal) {
+          const row = (
+            await db.transaction((sql) =>
+              sql.query(
+                "SELECT owner_id,id FROM axfluxo_video.drive_inventory WHERE namespace='original' AND state='verifying' AND (lease_until IS NULL OR lease_until<now()) ORDER BY created_at,id LIMIT 1",
+              ),
+            )
+          ).rows[0];
+          if (row)
+            await service.verify(String(row.owner_id), String(row.id), signal);
+        },
+      });
+    }
+    if (driveEnabled && selected("derivatives")) {
+      const db = connect("axfluxo_video_probe"),
+        service = new DriveCloud(db, new GoogleDrive(driveConfig!), policy);
+      tasks.push({
+        name: "drive-preview",
+        enabled: policy.enabled,
+        async run(signal) {
+          const r = (
+            await db.transaction((sql) =>
+              sql.query(
+                "SELECT p.owner_id,p.version_id FROM axfluxo_video.media_preview_jobs p JOIN axfluxo_video.drive_inventory i ON i.owner_id=p.owner_id AND i.version_id=p.version_id AND i.namespace='original' AND i.state='ready' WHERE p.state IN ('queued','generating') AND (p.lease_until IS NULL OR p.lease_until<now()) ORDER BY p.id LIMIT 1",
+              ),
+            )
+          ).rows[0];
+          if (r)
+            await singleThreaded(() =>
+              generatePreview(
+                db,
+                drivePreviewStorage(
+                  service,
+                  String(r.owner_id),
+                  String(r.version_id),
+                ),
+                String(r.owner_id),
+                String(r.version_id),
+                signal,
+              ),
+            );
+        },
+      });
+    }
     const probeEnabled = only === "probe" || env.VIDEO_PROBE_ENABLED === "true";
     const previewEnabled = env.CLOUD_PREVIEW_ENABLED === "true";
     if (
@@ -109,7 +181,9 @@ export async function workerTasks(env: Environment, only?: WorkerKind) {
             const row = (
               await db.transaction((sql) =>
                 sql.query(
-                  "SELECT owner_id,version_id FROM axfluxo_video.media_preview_jobs WHERE state IN ('queued','generating') AND (lease_until IS NULL OR lease_until<now()) ORDER BY id LIMIT 1",
+                  driveEnabled
+                    ? "SELECT p.owner_id,p.version_id FROM axfluxo_video.media_preview_jobs p WHERE p.state IN ('queued','generating') AND (p.lease_until IS NULL OR p.lease_until<now()) AND NOT EXISTS(SELECT 1 FROM axfluxo_video.drive_inventory i WHERE i.owner_id=p.owner_id AND i.version_id=p.version_id AND i.namespace='original' AND i.state='ready') ORDER BY p.id LIMIT 1"
+                    : "SELECT owner_id,version_id FROM axfluxo_video.media_preview_jobs WHERE state IN ('queued','generating') AND (lease_until IS NULL OR lease_until<now()) ORDER BY id LIMIT 1",
                 ),
               )
             ).rows[0];
@@ -128,25 +202,81 @@ export async function workerTasks(env: Environment, only?: WorkerKind) {
     if (
       selected("render") &&
       env.VIDEO_RENDER_ENABLED === "true" &&
-      cloud.storage?.putRender
+      (cloud.storage?.putRender || driveEnabled)
     ) {
       const config = renderConfiguration(env);
       await access(config.directory);
       const db = connect("axfluxo_video_render");
+      const driveInstalled =
+        (driveConfig || env.DRIVE_CLOUD_ENABLED !== undefined) &&
+        Boolean(
+          (
+            await db.transaction((sql) =>
+              sql.query(
+                "SELECT to_regclass('axfluxo_video.drive_batches') IS NOT NULL AS installed",
+              ),
+            )
+          ).rows[0]?.installed,
+        );
       const task: WorkerTask = {
         name: "render",
         enabled: config.enabled,
         async run(signal) {
           signal.throwIfAborted();
           const c = await claim(db);
-          if (c)
-            await executeRender(
-              db,
-              cloud.storage as RenderStorage,
-              c,
-              config,
-              signal,
-            );
+          if (c) {
+            const driveBatchRow =
+              driveInstalled &&
+              (
+                await ownerTransaction(db, c.owner, (sql) =>
+                  sql.query(
+                    "SELECT batch_id,render_profile FROM axfluxo_video.drive_batches WHERE owner_id=$1 AND batch_id=$2",
+                    [c.owner, c.batch],
+                  ),
+                )
+              ).rows[0];
+            const driveBatch = Boolean(driveBatchRow);
+            if (
+              driveBatchRow &&
+              driveBatchRow.render_profile !== DRIVE_RENDER_PROFILE
+            ) {
+              await finishFailure(db, c, "RESOURCE_LIMIT");
+              return;
+            }
+            if (driveBatch && !driveEnabled) {
+              await finishFailure(db, c, "STORAGE_REJECTED");
+              return;
+            }
+            const storage = driveBatch
+              ? driveRenderStorage(
+                  new DriveCloud(db, new GoogleDrive(driveConfig!), policy),
+                  c.owner,
+                  c.job,
+                  cloud.storage,
+                )
+              : (cloud.storage as RenderStorage);
+            if (!storage) {
+              await finishFailure(db, c, "STORAGE_REJECTED");
+              return;
+            }
+            const render = () =>
+              executeRender(
+                db,
+                storage,
+                c,
+                driveBatch
+                  ? {
+                      ...config,
+                      segmentFrames: 300,
+                      maxWorkBytes: policy.maxWorkBytes,
+                      minFreeBytes: policy.minFreeBytes,
+                    }
+                  : config,
+                signal,
+              );
+            if (driveBatch) await singleThreaded(render);
+            else await render();
+          }
         },
       };
       const index = tasks.findIndex((t) => t.name === "preview");

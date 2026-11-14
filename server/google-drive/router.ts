@@ -1,3 +1,4 @@
+import { driveCredentials } from "../drive-cloud/credentials";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Database, Sql, Row } from "../db/database";
@@ -43,6 +44,21 @@ export function driveRouter(db: Database, google: GoogleDrive) {
       )
     ).rows[0];
   async function access(owner: string) {
+    const modern = await owned(
+      owner,
+      async (sql) =>
+        (
+          await sql.query(
+            "SELECT to_regclass('axfluxo_video.drive_capacity') IS NOT NULL AS installed",
+          )
+        ).rows[0]?.installed,
+    );
+    if (modern) {
+      const token = await driveCredentials(db, google, owner)();
+      const row = await owned(owner, (sql) => connection(sql, owner));
+      if (!row?.connected) throw new ApiError(401, "DRIVE_RECONNECT_REQUIRED");
+      return { token, row };
+    }
     // Serialize refresh with disconnect/reconnect. A committed rotation survives later API failure.
     const result = await owned(owner, async (sql) => {
       const row = await connection(sql, owner, true);

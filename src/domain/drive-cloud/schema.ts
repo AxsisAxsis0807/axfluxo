@@ -1,0 +1,52 @@
+import { z } from "zod";
+import { mediaVersionRefSchema } from "../cloud-library/schema";
+export const driveUploadView = z.object({
+  id: z.uuid(),
+  state: z.enum(["uploading", "verifying", "ready", "held"]),
+  offset: z.number().int().nonnegative(),
+  size: z.number().int().positive(),
+  sha256: z.string(),
+  error: z.string().nullable(),
+  reference: mediaVersionRefSchema.nullable(),
+  probe: z.record(z.string(), z.unknown()).nullable(),
+});
+export type DriveUploadView = z.infer<typeof driveUploadView>;
+export const driveCloudStatus = z.object({
+  enabled: z.boolean(),
+  connected: z.boolean(),
+  chunkBytes: z.literal(4194304),
+  maxFileBytes: z.number(),
+  monthlyEstimateYen: z.number(),
+  priceConfirmed: z.boolean(),
+  allow1440: z.boolean(),
+});
+export const driveCloudCodes = [
+  "DRIVE_REVISION_UNAVAILABLE",
+  "DRIVE_CONFIRMATION_ROUTE_REQUIRED",
+  "DRIVE_DB_HELD",
+  "DRIVE_CLOUD_HELD",
+  "DRIVE_REFRESH_BUSY",
+  "DRIVE_CAPACITY_UNKNOWN",
+  "DRIVE_CAPACITY_HELD",
+  "DRIVE_DISK_HELD",
+  "DRIVE_PROFILE_HELD",
+  "DRIVE_NOT_READY",
+  "DRIVE_SESSION_INVALID",
+  "DRIVE_SESSION_EXPIRED",
+  "DRIVE_OFFSET_INVALID",
+  "DRIVE_TRANSFER_FAILED",
+  "DRIVE_TRANSFER_BUSY",
+  "DRIVE_LEASE_LOST",
+  "DRIVE_CHUNK_INVALID",
+  "DRIVE_CHUNK_CONFLICT",
+  "DRIVE_IDENTITY_MISMATCH",
+  "DRIVE_WORKER_NOT_READY",
+  "DRIVE_SNAPSHOT_INVALID",
+  "DRIVE_NOT_RESUMABLE",
+  "DRIVE_RETRY_LIMIT",
+  "DRIVE_TICKET_EXPIRED",
+  "DRIVE_OUTPUT_CHANGED",
+  "DRIVE_VERIFY_LIMIT",
+  "DRIVE_RANGE_INVALID",
+  "JOB_NOT_RESUMABLE",
+] as const;

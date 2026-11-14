@@ -1,3 +1,4 @@
+import { DRIVE_RENDER_PROFILE } from "../../drive-cloud/resources";
 import { mkdtemp, rm, stat, statfs, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database } from "../../db/database";
@@ -128,6 +129,9 @@ export async function executeRender(
       plan: plan.hash,
       version: RENDER_VERSION,
       encoder: version,
+      ...(storage.renderNamespace === "drive-v1"
+        ? { resourceProfile: DRIVE_RENDER_PROFILE }
+        : {}),
       ...(showcase ? { showcase } : {}),
     });
     await progress(db, c, 0, plan.frames);
@@ -340,6 +344,9 @@ export async function executeRender(
         ...validation,
         audioMode: result.audioMode,
         renderer: RENDER_VERSION,
+        ...(storage.renderNamespace === "drive-v1"
+          ? { resourceProfile: DRIVE_RENDER_PROFILE }
+          : {}),
         ...(showcase
           ? { templateRenderer: FNF_RENDERER, fontHash: FNF_FONT_HASH }
           : {}),

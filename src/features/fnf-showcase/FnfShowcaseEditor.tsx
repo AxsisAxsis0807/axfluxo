@@ -1,4 +1,6 @@
 "use client";
+import {driveCloudUiEnabled} from "../../services/video/public-config";
+import DriveCloudPanel from "../developer/DriveCloudPanel";
 import { LocalExport } from "../video-common/LocalExport";
 import {
   imageForEncode,
@@ -678,6 +680,16 @@ export function FnfShowcaseEditor({
               prepare={prepareLocal}
               disabled={!owner || busy || !session.ranges.length || !!mismatch}
             />
+            {driveCloudUiEnabled() && (
+              <DriveCloudPanel
+                prepared={() => {
+                  if (!session) throw Error("FNF_SOURCE_MISSING");
+                  const snapshot = session.snapshot(preferences);
+                  snapshot.id = session.source.reference.versionId;
+                  return { snapshot };
+                }}
+              />
+            )}
             <details>
               <summary>サーバーで書き出す</summary>
               <button

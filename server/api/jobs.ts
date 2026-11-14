@@ -149,8 +149,10 @@ export async function createBatch(
   owner: string,
   snapshot: FnfSnapshot,
   unitsPerFrame?: number,
+  providerCapacity?: () => Promise<void>,
 ): Promise<BatchView> {
-  await capacityGuard(sql, owner);
+  if (providerCapacity) await providerCapacity();
+  else await capacityGuard(sql, owner);
   await checkResources(sql, owner, snapshot);
   const costs = snapshot.ranges.map((_, i) => cost(snapshot, i, unitsPerFrame));
   await reserve(
@@ -203,6 +205,7 @@ export async function retryJob(
   owner: string,
   id: string,
   unitsPerFrame?: number,
+  providerCapacity?: () => Promise<void>,
 ) {
   const { rows } = await sql.query(
     `SELECT ${jobColumns},batch_id FROM axfluxo_video.render_jobs WHERE owner_id=$1 AND id=$2 FOR UPDATE`,
@@ -222,7 +225,8 @@ export async function retryJob(
     [owner, row.batch_id],
   );
   const snapshot = executionSnapshot(batch.rows[0].snapshot);
-  await capacityGuard(sql, owner);
+  if (providerCapacity) await providerCapacity();
+  else await capacityGuard(sql, owner);
   await checkResources(sql, owner, snapshot);
   const index = Number(row.rangeIndex),
     units = cost(snapshot, index, unitsPerFrame);
@@ -297,4 +301,44 @@ export async function capacityGuard(sql: Sql, owner: string) {
     )
   ).rows[0];
   if (!row) throw new ApiError(503, "CAPACITY_HELD");
+}
+
+/** Held executions keep their original ID, pins and compute reservation. Lock order matches claim. */
+export async function resumeJob(sql: Sql, owner: string, id: string) {
+  await sql.query("SELECT axfluxo_video.lock_render_slot()");
+  const row = (
+    await sql.query(
+      "SELECT state,batch_id FROM axfluxo_video.render_jobs WHERE owner_id=$1 AND id=$2 FOR UPDATE",
+      [owner, id],
+    )
+  ).rows[0];
+  if (!row) throw new ApiError(404, "NOT_FOUND");
+  const execution = (
+    await sql.query(
+      "SELECT runs FROM axfluxo_video.render_executions WHERE owner_id=$1 AND job_id=$2 FOR UPDATE",
+      [owner, id],
+    )
+  ).rows[0];
+  if (row.state !== "held" || Number(execution?.runs ?? 0) >= 3)
+    throw new ApiError(409, "JOB_NOT_RESUMABLE");
+  const reservation = (
+    await sql.query(
+      "SELECT id FROM axfluxo_video.usage_reservations WHERE owner_id=$1 AND job_id=$2 AND state='reserved' FOR UPDATE",
+      [owner, id],
+    )
+  ).rows[0];
+  if (!reservation) throw new ApiError(409, "JOB_NOT_RESUMABLE");
+  await sql.query(
+    "UPDATE axfluxo_video.render_jobs SET state='queued' WHERE owner_id=$1 AND id=$2",
+    [owner, id],
+  );
+  await sql.query(
+    "UPDATE axfluxo_video.render_executions SET error_code=NULL,next_at=now() WHERE owner_id=$1 AND job_id=$2",
+    [owner, id],
+  );
+  await sql.query(
+    "UPDATE axfluxo_video.outbox_events SET state='pending',locked_until=NULL WHERE owner_id=$1 AND job_id=$2 AND event_type='render.requested'",
+    [owner, id],
+  );
+  return getBatch(sql, owner, String(row.batch_id));
 }

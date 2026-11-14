@@ -281,8 +281,9 @@ export async function runExportWorker(
         idle = 0;
         continue;
       }
-      // Retention runs while idle so stale jobs never fill the free 1GB database.
-      if (idle++ % 60 === 0)
+      // Automatic retention requires separately approved deletion policy; default OFF.
+      if (process.env.EXPORT_RETENTION_PURGE_ENABLED === "true" &&
+          process.env.EXPORT_RETENTION_DELETION_APPROVED === "true" && idle++ % 60 === 0)
         await purgeExpired(db, config.retentionHours).catch(() => undefined);
       await sleep(config.pollMs, signal);
     }

@@ -6,11 +6,22 @@ import type { MultipartStorage } from "../../storage/multipart";
 import { fenced, type Claim } from "../jobs/queue";
 import { RenderError, storageError } from "../jobs/errors";
 import { fileHash } from "./process";
-export type RenderStorage = MultipartStorage & {
-  putRender: NonNullable<MultipartStorage["putRender"]>;
+export type ObjectReader = Pick<MultipartStorage, "head" | "stream">;
+export type RenderStorage = ObjectReader & {
+  renderNamespace?: string;
+  quotaManaged?: boolean;
+  forRenderObject?: (namespace: string) => ObjectReader;
+  putRender: (
+    key: string,
+    path: string,
+    size: number,
+    mime: string,
+    hash: string,
+    signal?: AbortSignal,
+  ) => Promise<void>;
 };
 export async function download(
-  storage: MultipartStorage,
+  storage: ObjectReader,
   key: string,
   path: string,
   size: number,
@@ -63,11 +74,22 @@ export async function storeObject(
   const id = randomUUID(),
     key = `render-${p.kind === "output" ? "outputs" : "staging"}/${c.owner}/${c.job}/${id}.mp4`;
   const row = await fenced(db, c, async (sql) => {
+    if (storage.renderNamespace === "drive-v1") {
+      const existing = (
+        await sql.query(
+          "SELECT * FROM axfluxo_video.render_objects WHERE owner_id=$1 AND job_id=$2 AND kind=$3 AND plan_hash=$4 AND hash=$5 AND size=$6 AND segment_index IS NOT DISTINCT FROM $7::integer ORDER BY ready DESC,created_at LIMIT 1",
+          [c.owner, c.job, p.kind, p.planHash, p.hash, p.size, p.index ?? null],
+        )
+      ).rows[0];
+      if (existing) return existing;
+    }
     // All retained candidates/checkpoints are charged, including abandoned objects.
-    const q = await sql.query(
-      "UPDATE axfluxo_video.media_quotas SET reserved_bytes=reserved_bytes+$2::bigint WHERE owner_id=$1 AND NOT blocked AND limit_bytes IS NOT NULL AND $2::bigint<=limit_bytes-reserved_bytes-used_bytes RETURNING owner_id",
-      [c.owner, p.size],
-    );
+    const q = storage.quotaManaged
+      ? { rows: [{}] }
+      : await sql.query(
+          "UPDATE axfluxo_video.media_quotas SET reserved_bytes=reserved_bytes+$2::bigint WHERE owner_id=$1 AND NOT blocked AND limit_bytes IS NOT NULL AND $2::bigint<=limit_bytes-reserved_bytes-used_bytes RETURNING owner_id",
+          [c.owner, p.size],
+        );
     if (!q.rows.length) throw new RenderError("QUOTA_EXCEEDED");
     return (
       await sql.query(
@@ -89,14 +111,22 @@ export async function storeObject(
       )
     ).rows[0];
   });
+  const objectKey = String(row.object_key);
   const remote =
     storage.forRenderObject?.(storage.renderNamespace ?? "legacy") ?? storage;
   try {
-    await storage.putRender(key, p.path, p.size, "video/mp4", p.hash);
+    await storage.putRender(
+      objectKey,
+      p.path,
+      p.size,
+      "video/mp4",
+      p.hash,
+      signal,
+    );
   } catch (error) {
     // A lost PUT/complete response may already have committed immutable bytes.
     try {
-      if ((await remote.head(key))?.size !== p.size) throw new Error();
+      if ((await remote.head(objectKey))?.size !== p.size) throw new Error();
     } catch {
       throw storageError(error);
     }
@@ -105,7 +135,7 @@ export async function storeObject(
   const h = createHash("sha256");
   let size = 0;
   try {
-    for await (const b of await remote.stream(key, signal)) {
+    for await (const b of await remote.stream(objectKey, signal)) {
       signal?.throwIfAborted();
       size += b.byteLength;
       if (size > p.size) throw new RenderError("VALIDATION_FAILED");
@@ -121,14 +151,16 @@ export async function storeObject(
   signal?.throwIfAborted();
   await fenced(db, c, async (sql) => {
     signal?.throwIfAborted();
+    if (row.ready) return;
     await sql.query(
       "UPDATE axfluxo_video.render_objects SET ready=true WHERE owner_id=$1 AND id=$2 AND NOT ready",
-      [c.owner, id],
+      [c.owner, row.id],
     );
-    await sql.query(
-      "UPDATE axfluxo_video.media_quotas SET reserved_bytes=reserved_bytes-$2::bigint,used_bytes=used_bytes+$2::bigint WHERE owner_id=$1",
-      [c.owner, p.size],
-    );
+    if (!storage.quotaManaged)
+      await sql.query(
+        "UPDATE axfluxo_video.media_quotas SET reserved_bytes=reserved_bytes-$2::bigint,used_bytes=used_bytes+$2::bigint WHERE owner_id=$1",
+        [c.owner, p.size],
+      );
   });
   if ((await fileHash(p.path)) !== p.hash)
     throw new RenderError("VALIDATION_FAILED");

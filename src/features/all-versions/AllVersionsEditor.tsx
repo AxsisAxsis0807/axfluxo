@@ -1,4 +1,6 @@
 "use client";
+import {driveCloudUiEnabled} from "../../services/video/public-config";
+import DriveCloudPanel from "../developer/DriveCloudPanel";
 import { LocalExport } from "../video-common/LocalExport";
 import {
   imageForEncode,
@@ -6,7 +8,7 @@ import {
 } from "../../services/video/local-encode";
 /* eslint-disable @next/next/no-img-element -- Private signed media and server-rasterized PNGs use native images without an optimization service. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { allVersionsDocumentSchema } from "../../domain/video/schema";
+import { allVersionsDocumentSchema,fnfSnapshotSchema } from "../../domain/video/schema";
 import {
   newProject,
   projectNames,
@@ -934,6 +936,11 @@ export function AllVersionsEditor({
             prepare={prepareLocal}
             disabled={!owner || issues.length > 0}
           />
+          {driveCloudUiEnabled() && <DriveCloudPanel prepared={() => {
+            if (!project.document) throw Error("MEDIA_REQUIRED");
+            const duration = project.document.clips.reduce((n,c) => n+c.interval.endUs-c.interval.startUs,0);
+            return {project,snapshot:fnfSnapshotSchema.parse({schemaVersion:1,id:project.id,document:project.document,ranges:[{startUs:0,endUs:duration}],names:["all-versions.mp4"]})};
+          }}/>}
           <details>
             <summary>サーバーで書き出す</summary>
             <button

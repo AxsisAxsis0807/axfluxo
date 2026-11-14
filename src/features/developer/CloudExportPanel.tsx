@@ -1,4 +1,5 @@
 "use client";
+import {publicVideoOrigin} from "../../services/video/public-config";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toFrame } from "../../domain/video/time";
 import {
@@ -171,7 +172,8 @@ export default function CloudExportPanel({
   cover?: File;
 }) {
   const client = useMemo<CloudExportClient | null>(() => {
-    const baseUrl = process.env.NEXT_PUBLIC_VIDEO_API_ORIGIN;
+    const baseUrl = publicVideoOrigin();
+    if (!baseUrl) return null;
     const session = currentVideoSessionSource() as VideoSessionSource | null;
     if (!baseUrl || !session) return null;
     try {

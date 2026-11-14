@@ -1,3 +1,4 @@
+import { threadArguments } from "../../drive-cloud/resources";
 import { spawnMedia as spawn } from "../runtime/process";
 import { isAbsolute } from "node:path";
 import { RenderError } from "../jobs/errors";
@@ -25,7 +26,13 @@ export async function mediaProcess(
   return new Promise<string>((resolve, reject) => {
     const child = spawn(
       program,
-      ["-v", "error", "-protocol_whitelist", "file,pipe", ...args],
+      [
+        "-v",
+        "error",
+        "-protocol_whitelist",
+        "file,pipe",
+        ...threadArguments(program, args),
+      ],
       {
         stdio: ["ignore", "pipe", "pipe"],
         signal: options.signal,

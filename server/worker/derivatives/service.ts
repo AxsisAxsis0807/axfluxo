@@ -1,6 +1,6 @@
 import { randomUUID, createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdtemp, stat, rm } from "node:fs/promises";
+import { mkdtemp, stat, rm, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { pipeline } from "node:stream/promises";
@@ -8,13 +8,16 @@ import type { Database } from "../../db/database";
 import type { MultipartStorage } from "../../storage/multipart";
 import { scoped } from "../../api/assets/library";
 import { generateMedia } from "./generate";
-export type DerivedStorage = MultipartStorage & {
+export type DerivedStorage = Pick<MultipartStorage, "head" | "stream"> & {
+  quotaManaged?: boolean;
+  resources?: { directory: string; maxBytes: number; minFreeBytes: number };
   putDerived(
     key: string,
     path: string,
     size: number,
     mime: string,
     sha256: string,
+    signal?: AbortSignal,
   ): Promise<void>;
 };
 type Plan = {
@@ -50,7 +53,9 @@ export async function generatePreview(
     return r.rows[0];
   });
   if (!job) return false;
-  const dir = await mkdtemp(join(tmpdir(), "axfluxo-preview-")),
+  const dir = await mkdtemp(
+      join(storage.resources?.directory ?? tmpdir(), "axfluxo-preview-"),
+    ),
     source = join(dir, "original"),
     stop = new AbortController();
   const relay = () => stop.abort();
@@ -81,6 +86,24 @@ export async function generatePreview(
         ).rows[0],
     );
     if (!row) throw new Error("SOURCE_MISSING");
+    if (storage.quotaManaged) {
+      if (Number(job.drive_runs) >= 3) throw new Error("PREVIEW_FAILED");
+      await scoped(db, owner, (sql) =>
+        sql.query(
+          "UPDATE axfluxo_video.media_preview_jobs SET drive_runs=drive_runs+1 WHERE owner_id=$1 AND version_id=$2 AND lease_token=$3",
+          [owner, version, token],
+        ),
+      );
+    }
+    if (storage.resources) {
+      const fs = await statfs(dir),
+        peak = Number(row.size) * 2 + 64 * 1024 ** 2;
+      if (
+        peak > storage.resources.maxBytes ||
+        fs.bavail * fs.bsize < peak + storage.resources.minFreeBytes
+      )
+        throw new Error("PREVIEW_FAILED");
+    }
     const body = await storage.stream(String(row.object_key), stop.signal);
     let received = 0;
     async function* bounded() {
@@ -132,10 +155,12 @@ export async function generatePreview(
       };
       const bytes = plan.files.reduce((n, f) => n + f.size, 0);
       await scoped(db, owner, async (sql) => {
-        const reserved = await sql.query(
-          "UPDATE axfluxo_video.media_quotas SET reserved_bytes=reserved_bytes+$2 WHERE owner_id=$1 AND NOT blocked AND $2::bigint<=limit_bytes-reserved_bytes-used_bytes RETURNING owner_id",
-          [owner, bytes],
-        );
+        const reserved = storage.quotaManaged
+          ? { rows: [{}] }
+          : await sql.query(
+              "UPDATE axfluxo_video.media_quotas SET reserved_bytes=reserved_bytes+$2 WHERE owner_id=$1 AND NOT blocked AND $2::bigint<=limit_bytes-reserved_bytes-used_bytes RETURNING owner_id",
+              [owner, bytes],
+            );
         if (!reserved.rows.length) throw new Error("PREVIEW_FAILED");
         const updated = await sql.query(
           "UPDATE axfluxo_video.media_preview_jobs SET plan=$4::jsonb,reserved_bytes=$5 WHERE owner_id=$1 AND version_id=$2 AND lease_token=$3 RETURNING id",
@@ -159,13 +184,14 @@ export async function generatePreview(
           file.size,
           file.mime,
           file.hash,
+          stop.signal,
         );
     }
     stop.signal.throwIfAborted();
     await scoped(db, owner, async (sql) => {
       stop.signal.throwIfAborted();
       const r = await sql.query(
-        "SELECT * FROM axfluxo_video.media_preview_jobs WHERE owner_id=$1 AND version_id=$2 AND lease_token=$3 FOR UPDATE",
+        "SELECT * FROM axfluxo_video.media_preview_jobs WHERE owner_id=$1 AND version_id=$2 AND lease_token=$3 AND lease_until>now() FOR UPDATE",
         [owner, version, token],
       );
       if (!r.rows.length) throw new Error("PREVIEW_FAILED");
@@ -174,10 +200,11 @@ export async function generatePreview(
           "INSERT INTO axfluxo_video.media_derivatives(id,owner_id,version_id,object_key,hash,kind) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO NOTHING",
           [f.id, owner, version, f.key, f.hash, f.kind],
         );
-      await sql.query(
-        "UPDATE axfluxo_video.media_quotas SET reserved_bytes=reserved_bytes-$2,used_bytes=used_bytes+$2 WHERE owner_id=$1",
-        [owner, r.rows[0].reserved_bytes],
-      );
+      if (!storage.quotaManaged)
+        await sql.query(
+          "UPDATE axfluxo_video.media_quotas SET reserved_bytes=reserved_bytes-$2,used_bytes=used_bytes+$2 WHERE owner_id=$1",
+          [owner, r.rows[0].reserved_bytes],
+        );
       await sql.query(
         "UPDATE axfluxo_video.usage_budgets SET reserved_units=reserved_units-$2,consumed_units=consumed_units+$2 WHERE owner_id=$1",
         [owner, r.rows[0].compute_units],

@@ -1,3 +1,4 @@
+import { threadArguments } from "../../drive-cloud/resources";
 import { spawnMedia as spawn } from "../runtime/process";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -5,7 +6,13 @@ export async function ffmpeg(args: string[], signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     const child = spawn(
       "ffmpeg",
-      ["-v", "error", "-protocol_whitelist", "file,pipe", ...args],
+      [
+        "-v",
+        "error",
+        "-protocol_whitelist",
+        "file,pipe",
+        ...threadArguments("ffmpeg", args),
+      ],
       {
         stdio: "ignore",
         signal,
