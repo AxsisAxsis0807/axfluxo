@@ -38,6 +38,18 @@ function forDatabase<T>(
 }
 
 /** Shared by API and independent worker. No Google request is made inside a SQL transaction. */
+/** Drop only the token that a Google 401 actually rejected. A delayed
+ * response from an old request must never evict a freshly refreshed token. */
+export function invalidateDriveAccess(
+  db: Database,
+  owner: string,
+  rejectedToken: string,
+): void {
+  const cached = accessCache.get(db)?.get(owner);
+  if (cached && cached.token === rejectedToken)
+    accessCache.get(db)?.delete(owner);
+}
+
 export function driveCredentials(
   db: Database,
   google: GoogleDrive,
