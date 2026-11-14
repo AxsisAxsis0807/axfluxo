@@ -198,6 +198,13 @@ export function driveCloudRouter(
               [owner],
             )
           ).rows,
+          // Read-only inventory. This is not authorization to delete any file.
+          temporary: (
+            await sql.query(
+              "SELECT namespace,count(*)::integer AS files,coalesce(sum(size),0)::text AS bytes FROM axfluxo_video.drive_inventory WHERE owner_id=$1 AND namespace IN ('segment','candidate','preview') GROUP BY namespace ORDER BY namespace",
+              [owner],
+            )
+          ).rows,
           unconfirmed: Number(
             (
               await sql.query(
@@ -206,6 +213,29 @@ export function driveCloudRouter(
               )
             ).rows[0].count,
           ),
+        })),
+      );
+    if (path === prefix + "/cleanup-preview" && request.method === "GET")
+      return json(
+        await service.owner(owner, async (sql) => ({
+          dryRun: true,
+          deletionEnabled: false,
+          // Every entry is explicitly held until all references, retries,
+          // checkpoints and physical object generations are reconciled.
+          items: (
+            await sql.query(
+              "SELECT id,namespace,state,size,job_id,created_at FROM axfluxo_video.drive_inventory WHERE owner_id=$1 AND namespace IN ('segment','candidate','preview') ORDER BY created_at,id LIMIT 100",
+              [owner],
+            )
+          ).rows.map((row) => ({
+            id: row.id,
+            namespace: row.namespace,
+            state: row.state,
+            bytes: Number(row.size),
+            jobId: row.job_id,
+            mayDelete: false,
+            reason: "CHECKPOINT_AND_REFERENCE_REVIEW_REQUIRED",
+          })),
         })),
       );
     const upload =
