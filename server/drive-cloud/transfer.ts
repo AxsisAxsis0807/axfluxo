@@ -81,7 +81,9 @@ export class DriveTransfer {
   }) {
     const response = await this.google.api(
       await this.token(),
-      "upload/drive/v3/files?uploadType=resumable&fields=id",
+      // Drive revision downloads require an explicitly retained blob revision.
+      // Each Drive Cloud object is immutable and created exactly once.
+      "upload/drive/v3/files?uploadType=resumable&fields=id&keepRevisionForever=true",
       {
         method: "POST",
         headers: {
