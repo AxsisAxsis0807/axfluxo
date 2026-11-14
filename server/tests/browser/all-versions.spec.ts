@@ -250,6 +250,19 @@ test("six-step editor keeps names, saves offline, synchronizes revisions, and us
   await page.getByRole("button", { name: "5. 全長preview" }).click();
   await expect(page.getByAltText("server生成の文字")).toBeVisible();
   expect(texts).toBeGreaterThan(0);
+  // New reference profile is opt-in; verify its timer and server-rendered title.
+  await page.getByRole("button", { name: "4. デザイン" }).click();
+  await page.getByLabel("表示テンプレート").selectOption("reference-pasa-v1");
+  await page.getByLabel("fadeInFrames").fill("9");
+  await page.getByLabel("fadeOutFrames").fill("9");
+  await page.getByRole("button", { name: "5. 全長preview" }).click();
+  await expect(page.getByAltText("server生成の文字")).toBeVisible();
+  await expect(page.locator('[aria-label="楽曲の経過時間"]')).toBeVisible();
+  await expect(page.locator('[aria-label="楽曲の経過時間"]')).toContainText(/\\d{2}:\\d{2}/);
+  await page.getByRole("button", { name: "4. デザイン" }).click();
+  await page.getByLabel("表示テンプレート").selectOption("provisional-v1");
+  await page.getByRole("button", { name: "5. 全長preview" }).click();
+  await expect(page.locator('[aria-label="楽曲の経過時間"]')).toHaveCount(0);
   await page.evaluate(() =>
     Object.defineProperty(navigator, "onLine", {
       configurable: true,
