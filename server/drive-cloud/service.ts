@@ -54,7 +54,13 @@ export class DriveCloud {
     return new GoogleDrive(this.google.config, async (url, init) => {
       if (new URL(String(url)).hostname === "www.googleapis.com")
         await this.event(owner, "api", 0);
-      return this.google.transport(url, init);
+      const response = await this.google.transport(url, init);
+      if (response.status === 401) {
+        const auth = new Headers(init?.headers).get("authorization");
+        if (auth?.startsWith("Bearer "))
+          invalidateDriveAccess(this.db, owner, auth.slice("Bearer ".length));
+      }
+      return response;
     });
   }
   transfer(owner: string) {
