@@ -104,6 +104,7 @@ export class DriveTransfer {
     size: number,
     data?: Uint8Array,
     offset = 0,
+    signal?: AbortSignal,
   ): Promise<{ offset: number; complete: boolean; expired: boolean }> {
     const token = await this.token();
     const response = await this.google.send(uploadUrl(url), {
@@ -116,7 +117,8 @@ export class DriveTransfer {
           : `bytes */${size}`,
       },
       body: data ? Buffer.from(data) : undefined,
-    });
+      signal,
+    }, data ? 120_000 : 10_000);
     if (response.status === 404 || response.status === 410)
       return { offset: 0, complete: false, expired: true };
     if (response.ok) return { offset: size, complete: true, expired: false };
