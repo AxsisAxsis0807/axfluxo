@@ -66,6 +66,8 @@ const transport: typeof fetch = async (input, init) => {
       ),
     });
   if (u.pathname === "/upload/drive/v3/files" && init?.method === "POST") {
+    expect(u.searchParams.get("uploadType")).toBe("resumable");
+    expect(u.searchParams.get("keepRevisionForever")).toBe("true");
     const meta = JSON.parse(String(init.body)),
       id = "session-" + ++serial;
     sessions.set(id, { id: meta.id, offset: 0, data: [], meta });
