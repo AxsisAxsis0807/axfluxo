@@ -100,6 +100,8 @@ export default function DriveCloudPanel({
         DRIVE_DB_HELD: "DB容量の確認待ちです。新規受付を停止しました。",
         DRIVE_DISK_HELD:
           "Workerの一時作業領域が不足しています。画質を下げず保留しました。",
+        DRIVE_VERIFY_DISK_TOO_SMALL:
+          "選んだ素材が現在のWorker検証容量の設定上限を超えています。送信前に設定・実容量を確認してください。画質や原本は変更していません。",
         DRIVE_WORKER_NOT_READY:
           "Drive上の素材をWorkerが検証中です。まだSafariを閉じてよい段階ではありません。",
         DRIVE_TRANSFER_BUSY:
@@ -151,11 +153,23 @@ export default function DriveCloudPanel({
             : "月額・契約条件は未確認です。受付OFF。"}
         </p>
       )}
+      {status?.maxVerifiableBytes !== undefined && (
+        <p>
+          Workerが検証できる1素材の設定上限: {(status.maxVerifiableBytes / 1024 ** 2).toFixed(0)} MiB。
+          実際の空きディスクと動画処理用の追加容量は別途確認します。
+        </p>
+      )}
       <button
         disabled={!project || !available || busy}
         onClick={() =>
           void run(async () => {
             if (!client || !project) return;
+            if (
+              status?.maxVerifiableBytes !== undefined &&
+              (project.sources.some((s) => s.file.size > status.maxVerifiableBytes!) ||
+                (project.coverFile && project.coverFile.size > status.maxVerifiableBytes))
+            )
+              throw Error("DRIVE_VERIFY_DISK_TOO_SMALL");
             const owner = value(await client.me()).ownerId;
             frozen.current = {
               ...project,
