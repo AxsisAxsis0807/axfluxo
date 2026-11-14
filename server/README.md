@@ -199,3 +199,5 @@ leave `VIDEO_WORKER_ENABLED=false`. No schema migration or user-data conversion
 is part of this phase. To remove source changes, reverse only the Phase 1 diff;
 do not reset the whole checkout. A patch reversing the API defaults is required
 to return to its former fixed loopback behavior. No external state was changed.
+
+Google Drive Phase 1の専用API・手動migration・秘密変数・iPhone設定手順は [連携手順](../docs/google-drive/phase1.md) を参照。既定は無効で、既存R2/S3・動画経路から独立する。

@@ -1,3 +1,4 @@
+import { driveCodes } from "../../domain/google-drive/schema";
 import { fnfCodes } from "../../domain/video/fnf-showcase";
 import { projectCodes } from "../../domain/video/all-versions";
 import { z } from "zod";
@@ -198,6 +199,7 @@ export function createVideoApiClient(options: {
             .strictObject({
               error: z.strictObject({
                 code: z.enum([
+                  ...driveCodes,
                   ...cloudErrorCodes,
                   ...projectCodes,
                   ...fnfCodes,
