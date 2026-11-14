@@ -527,6 +527,13 @@ function UsageView({ usage }: { usage: unknown }) {
           operations: z.number(),
         }),
       ),
+      temporary: z.array(
+        z.object({
+          namespace: z.string(),
+          files: z.number(),
+          bytes: z.coerce.number(),
+        }),
+      ).optional(),
       unconfirmed: z.number(),
     })
     .safeParse(usage);
@@ -540,6 +547,13 @@ function UsageView({ usage }: { usage: unknown }) {
         {mib(u.monthly.find((m) => m.kind === "export")?.bytes ?? 0)}
       </p>
       <p>未確認の完成動画: {u.unconfirmed}件</p>
+      {u.temporary && (
+        <p>
+          Drive中間生成物: {u.temporary.reduce((n, item) => n + item.files, 0)}件／
+          {mib(u.temporary.reduce((n, item) => n + item.bytes, 0))}
+          （参照・再試行・checkpoint確認前の自動削除は行いません）
+        </p>
+      )}
       {u.capacity && (
         <p>
           保存中 {mib(u.capacity.used_bytes)}／予約中{" "}
