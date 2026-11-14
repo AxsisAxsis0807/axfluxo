@@ -873,17 +873,17 @@ it("handles 100 concurrent admission requests without double reservations or quo
   ).rows[0];
   expect(Number(sum.total)).toBe(Number(cap.reserved_bytes));
 }, 60000);
-it("retry of a multi-range Drive batch reserves only one job's peak share", async () => {
+it("unequal-range Drive jobs and retries reserve the actual range peaks", async () => {
   const original = await fixture();
   const duration = original.snapshot.ranges[0].endUs;
-  const half = Math.floor(duration / 2);
+  const quarter = Math.floor(duration / 4);
   const body = {
     ...original,
     snapshot: {
       ...original.snapshot,
       ranges: [
-        { startUs: 0, endUs: half },
-        { startUs: half, endUs: duration },
+        { startUs: 0, endUs: quarter },
+        { startUs: quarter, endUs: duration },
       ],
       names: ["part-one.mp4", "part-two.mp4"],
     },
@@ -892,13 +892,23 @@ it("retry of a multi-range Drive batch reserves only one job's peak share", asyn
   expect(accepted.status).toBe(202);
   const batch = await accepted.json();
   expect(batch.jobs).toHaveLength(2);
-  // Simulate the existing worker having committed a terminal failure;
-  // the DB's capacity release trigger remains the authoritative path.
+  const initial = (
+    await pg.query(
+      "SELECT job_id,remaining FROM axfluxo_video.drive_job_capacity WHERE owner_id=$1 AND job_id IN ($2,$3) ORDER BY remaining",
+      [owner, batch.jobs[0].id, batch.jobs[1].id],
+    )
+  ).rows;
+  expect(initial).toHaveLength(2);
+  expect(Number(initial[1].remaining)).toBeGreaterThan(Number(initial[0].remaining));
+  const longBytes = Math.ceil(((duration - quarter) / 1e6) * 8_000_000);
+  expect(Number(initial[1].remaining)).toBe(longBytes);
+  // Fail the LONG range: a retry must reserve its own peak rather than
+  // half the batch peak.
   await pg.query(
     "UPDATE axfluxo_video.render_jobs SET state='failed' WHERE owner_id=$1 AND id=$2",
-    [owner, batch.jobs[0].id],
+    [owner, batch.jobs[1].id],
   );
-  const retried = await call("/jobs/" + batch.jobs[0].id + "/retry", {});
+  const retried = await call("/jobs/" + batch.jobs[1].id + "/retry", {});
   expect(retried.status).toBe(202);
   const result = await retried.json();
   const originalPeak = (
@@ -913,7 +923,8 @@ it("retry of a multi-range Drive batch reserves only one job's peak share", asyn
       [owner, result.job.id],
     )
   ).rows[0].remaining;
-  expect(Number(retryBudget)).toBe(Math.ceil(Number(originalPeak) / 2));
+  expect(Number(retryBudget)).toBe(longBytes);
+  expect(Number(retryBudget)).toBeGreaterThan(Number(originalPeak) / 2);
 }, 60000);
 it("holds a corrupt original without registering a ready resource or releasing its retained bytes", async () => {
   const row = await reserve(),
