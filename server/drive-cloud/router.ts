@@ -25,6 +25,7 @@ import type { Sql } from "../db/database";
 import { sha256, secret } from "../google-drive/security";
 import type { DriveCloud } from "./service";
 import { DRIVE_CHUNK } from "./transfer";
+import { maxVerifiableDriveBytes } from "./config";
 const prefix = "/v1/drive";
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "cache-control": "no-store" } });
@@ -175,6 +176,7 @@ export function driveCloudRouter(
         connected: row?.connected ?? false,
         chunkBytes: DRIVE_CHUNK,
         maxFileBytes: service.policy.maxFileBytes,
+        maxVerifiableBytes: maxVerifiableDriveBytes(service.policy),
         monthlyEstimateYen: service.policy.monthlyYen,
         priceConfirmed: service.policy.enabled(),
         allow1440: service.policy.allow1440,
