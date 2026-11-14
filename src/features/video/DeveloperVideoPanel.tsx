@@ -1,4 +1,5 @@
 "use client";
+import GoogleDrivePanel from "./GoogleDrivePanel";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
@@ -107,6 +108,7 @@ export default function DeveloperVideoPanel({
           </button>
         </form>
       )}
+      {authorized && client && <GoogleDrivePanel client={client} />}
       <p>
         <Link href="/">制作画面・ログインへ戻る</Link>
       </p>

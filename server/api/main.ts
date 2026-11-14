@@ -1,3 +1,6 @@
+import { driveConfiguration } from "../google-drive/security";
+import { GoogleDrive } from "../google-drive/google";
+import { driveRouter } from "../google-drive/router";
 // Standalone Node service. Never imported by src/ or by a Next route.
 import { createHttpServer, httpConfiguration } from "./http";
 import { isEntrypoint, runService } from "../runtime/lifecycle";
@@ -18,11 +21,7 @@ import {
 } from "../cloud-export/api";
 import { exportApiConfiguration } from "../cloud-export/config";
 import { ConfigurationError } from "../runtime/config";
-import {
-  StartupError,
-  startupFailureLine,
-  type StartupStage,
-} from "./startup";
+import { StartupError, startupFailureLine, type StartupStage } from "./startup";
 
 export async function startApi(
   env: Record<string, string | undefined> = process.env,
@@ -71,6 +70,11 @@ export async function startApi(
       retentionHours: exportApi.retentionHours,
       ticketSeconds: exportApi.ticketSeconds,
     });
+    const driveConfig = driveConfiguration(env);
+    const drive = driveConfig
+      ? driveRouter(db, new GoogleDrive(driveConfig))
+      : null;
+    const tickets = ticketDownload({ db: exportDb });
     const handler = createVideoApi({
       ...config,
       admissionEnabled: accepting,
@@ -105,8 +109,11 @@ export async function startApi(
         unitsPerFrame: config.unitsPerFrame,
       }),
       verify,
-      response: cloudExport,
-      public: ticketDownload({ db: exportDb }),
+      response: async (request, owner) =>
+        (await drive?.authenticated(request, owner)) ??
+        cloudExport(request, owner),
+      public: async (request) =>
+        (await drive?.public(request)) ?? tickets(request),
     });
     stage = "http";
     const transfer = httpConfiguration(env);
