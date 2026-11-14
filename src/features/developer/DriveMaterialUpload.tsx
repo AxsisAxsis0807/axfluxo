@@ -72,6 +72,13 @@ export default function DriveMaterialUpload({
               await client.request("/v1/drive/status", driveCloudStatus),
             );
             if (!status.enabled || !status.connected) throw Error();
+            if (
+              status.maxVerifiableBytes !== undefined &&
+              files.some((file) => file.size > status.maxVerifiableBytes!)
+            ) {
+              setNote(`選択した素材はWorker検証の設定上限 ${(status.maxVerifiableBytes / 1024 ** 2).toFixed(0)} MiBを超えています。送信せず保留しました。`);
+              return;
+            }
             const owner = unwrap(await client.me()).ownerId;
             stop.current = new AbortController();
             const result: DriveUploadView[] = [];
