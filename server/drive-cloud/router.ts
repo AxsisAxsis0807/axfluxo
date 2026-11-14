@@ -452,7 +452,22 @@ export function driveCloudRouter(
               "INSERT INTO axfluxo_video.render_executions(owner_id,job_id,runs) VALUES($1,$2,$3)",
               [owner, next.job.id, Number(total.runs)],
             );
-            await reserveJobs(sql, owner, [next.job], Number(row.peak_bytes));
+            // A batch can contain many ranges. Retry only the original
+            // per-job share, not the entire batch peak a second time.
+            const originalCount = (
+              await sql.query(
+                "SELECT count(*)::integer AS total FROM axfluxo_video.render_jobs WHERE owner_id=$1 AND batch_id=$2 AND attempt=1",
+                [owner, row.batch_id],
+              )
+            ).rows[0]?.total;
+            if (!Number.isSafeInteger(Number(originalCount)) || Number(originalCount) < 1)
+              throw new ApiError(409, "DRIVE_CAPACITY_HELD");
+            await reserveJobs(
+              sql,
+              owner,
+              [next.job],
+              Math.ceil(Number(row.peak_bytes) / Number(originalCount)),
+            );
             return { status: 202, body: next };
           });
         })
