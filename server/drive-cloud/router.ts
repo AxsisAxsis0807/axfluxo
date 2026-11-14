@@ -80,17 +80,27 @@ export function driveCloudRouter(
   const enabled = () => {
     if (!service.policy.enabled()) throw new ApiError(503, "DRIVE_CLOUD_HELD");
   };
+  // A long range needs more working space than a short range. Averages
+  // under-reserve the long one, especially when only one range is retried.
+  const rangePeak = (startUs: number, endUs: number): number => {
+    const bytes = Math.ceil(((endUs - startUs) / 1e6) * 8_000_000);
+    if (!Number.isSafeInteger(bytes) || bytes <= 0)
+      throw new ApiError(422, "DRIVE_CAPACITY_HELD");
+    return bytes;
+  };
   async function reserveJobs(
     sql: Sql,
     owner: string,
-    jobs: { id: string }[],
-    each: number,
+    jobs: { id: string; bytes: number }[],
   ) {
+    const total = jobs.reduce((sum, job) => sum + job.bytes, 0);
+    if (!Number.isSafeInteger(total) || total <= 0)
+      throw new ApiError(422, "DRIVE_CAPACITY_HELD");
     const room = await sql.query(
       "UPDATE axfluxo_video.drive_capacity SET reserved_bytes=reserved_bytes+$2::bigint WHERE owner_id=$1 AND observed_at>now()-interval '5 minutes' AND used_bytes+reserved_bytes+$2::bigint+$3::bigint<=LEAST(limit_bytes,$4::bigint) AND reserved_bytes+$2::bigint+$3::bigint<=observed_free RETURNING owner_id",
       [
         owner,
-        each * jobs.length,
+        total,
         service.policy.marginBytes,
         service.policy.limitBytes,
       ],
@@ -99,7 +109,7 @@ export function driveCloudRouter(
     for (const job of jobs)
       await sql.query(
         "INSERT INTO axfluxo_video.drive_job_capacity(owner_id,job_id,remaining) VALUES($1,$2,$3)",
-        [owner, job.id, each],
+        [owner, job.id, job.bytes],
       );
   }
   async function handler(
@@ -379,11 +389,12 @@ export function driveCloudRouter(
               }
               sourceBytes += Number(row.size);
             }
-            const seconds = snapshot.ranges.reduce(
-                (n, r) => n + (r.endUs - r.startUs) / 1e6,
-                0,
-              ),
-              peak = Math.ceil(seconds * 2_000_000 * 4);
+            const rangePeaks = snapshot.ranges.map((r) =>
+                rangePeak(r.startUs, r.endUs),
+              );
+            const peak = rangePeaks.reduce((total, bytes) => total + bytes, 0);
+            if (!Number.isSafeInteger(peak))
+              throw new ApiError(422, "DRIVE_CAPACITY_HELD");
             if (
               sourceBytes + peak + service.policy.marginBytes >
               service.policy.maxWorkBytes
@@ -415,8 +426,10 @@ export function driveCloudRouter(
             await reserveJobs(
               sql,
               owner,
-              batch.jobs,
-              Math.ceil(peak / batch.jobs.length),
+              batch.jobs.map((job, index) => ({
+                id: job.id,
+                bytes: rangePeaks[index],
+              })),
             );
             await sql.query(
               "INSERT INTO axfluxo_video.drive_batches(owner_id,batch_id,peak_bytes) VALUES($1,$2,$3)",
@@ -467,7 +480,7 @@ export function driveCloudRouter(
           await sql.query("SELECT axfluxo_video.lock_render_slot()");
           const row = (
             await sql.query(
-              "SELECT j.batch_id,j.attempt,b.peak_bytes FROM axfluxo_video.render_jobs j JOIN axfluxo_video.drive_batches b ON b.owner_id=j.owner_id AND b.batch_id=j.batch_id WHERE j.owner_id=$1 AND j.id=$2 FOR UPDATE OF j",
+              "SELECT j.batch_id,j.attempt,j.range_index,b.peak_bytes,r.snapshot FROM axfluxo_video.render_jobs j JOIN axfluxo_video.drive_batches b ON b.owner_id=j.owner_id AND b.batch_id=j.batch_id JOIN axfluxo_video.render_batches r ON r.owner_id=j.owner_id AND r.id=j.batch_id WHERE j.owner_id=$1 AND j.id=$2 FOR UPDATE OF j",
               [owner, id],
             )
           ).rows[0];
@@ -498,22 +511,16 @@ export function driveCloudRouter(
               "INSERT INTO axfluxo_video.render_executions(owner_id,job_id,runs) VALUES($1,$2,$3)",
               [owner, next.job.id, Number(total.runs)],
             );
-            // A batch can contain many ranges. Retry only the original
-            // per-job share, not the entire batch peak a second time.
-            const originalCount = (
-              await sql.query(
-                "SELECT count(*)::integer AS total FROM axfluxo_video.render_jobs WHERE owner_id=$1 AND batch_id=$2 AND attempt=1",
-                [owner, row.batch_id],
-              )
-            ).rows[0]?.total;
-            if (!Number.isSafeInteger(Number(originalCount)) || Number(originalCount) < 1)
-              throw new ApiError(409, "DRIVE_CAPACITY_HELD");
-            await reserveJobs(
-              sql,
-              owner,
-              [next.job],
-              Math.ceil(Number(row.peak_bytes) / Number(originalCount)),
-            );
+            // Reserve the same range-specific peak as at first admission.
+            // In an uneven batch, dividing the overall peak by job count
+            // would under-reserve long ranges during retries.
+            const retrySnapshot = executionSnapshot(row.snapshot);
+            const retryRange = retrySnapshot.ranges[Number(row.range_index)];
+            if (!retryRange) throw new ApiError(409, "DRIVE_CAPACITY_HELD");
+            await reserveJobs(sql, owner, [{
+              id: next.job.id,
+              bytes: rangePeak(retryRange.startUs, retryRange.endUs),
+            }]);
             return { status: 202, body: next };
           });
         })
