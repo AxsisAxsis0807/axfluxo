@@ -424,7 +424,7 @@ export function AllVersionsEditor({
               ctx.drawImage(overlays[i], 0, 0, 1920, 1080);
               ctx.globalAlpha = timerAlpha(frame, versions[i], project.design);
               ctx.fillStyle = "white";
-              ctx.font = "27.4px Arial, sans-serif";
+              ctx.font = `${1080 * REF.timerFontSize / REF.height}px Arial, sans-serif`;
               ctx.textBaseline = "middle";
               ctx.textAlign = "center";
               ctx.fillText(referenceTimerText(frame, versions[i]), 960,
@@ -668,22 +668,26 @@ export function AllVersionsEditor({
                   }}
                 />}
                 {project.design.layout === "reference-pasa-v1" && versions[index] && (
-                  <span
+                  <svg
+                    role="img"
                     aria-label="楽曲の経過時間"
-                    style={{
-                      position: "absolute",
-                      left: "50%",
-                      top: "87.5%",
-                      transform: "translate(-50%, -50%)",
-                      fontFamily: "Arial, sans-serif",
-                      color: "white",
-                      fontSize: "clamp(8px, 1.4vw, 22px)",
-                      whiteSpace: "nowrap",
-                      opacity: timerAlpha(frame, versions[index], project.design),
-                    }}
+                    viewBox={`0 0 ${REF.width} ${REF.height}`}
+                    preserveAspectRatio="none"
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
                   >
-                    {referenceTimerText(frame, versions[index])}
-                  </span>
+                    <text
+                      x={REF.width / 2}
+                      y={REF.timerCenterY}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={REF.timerFontSize}
+                      fontFamily="Arial, sans-serif"
+                      fill="white"
+                      opacity={timerAlpha(frame, versions[index], project.design)}
+                    >
+                      {referenceTimerText(frame, versions[index])}
+                    </text>
+                  </svg>
                 )}
                 {text && (
                   <img
