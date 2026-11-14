@@ -285,6 +285,22 @@ it("keeps production Cloud OFF until the actual worker resources are verified", 
   expect(drivePolicy(env).enabled()).toBe(false);
   expect(drivePolicy({ ...env, DRIVE_CLOUD_RESOURCES_VERIFIED: "true" }).enabled()).toBe(true);
 });
+it("rejects a server-side oversized original before reserving Drive capacity", async () => {
+  const maximum = policy().maxWorkBytes - policy().marginBytes;
+  await expect(
+    service().reserve(owner, {
+      key: randomUUID(),
+      size: maximum + 1,
+      hash: "a".repeat(64),
+      mime: "video/mp4",
+      name: "cannot-verify.mp4",
+    }),
+  ).rejects.toMatchObject({ status: 413, code: "DRIVE_VERIFY_LIMIT" });
+  const rows = await pg.query("SELECT * FROM axfluxo_video.drive_inventory");
+  expect(rows.rows).toHaveLength(0);
+  const capacity = await pg.query("SELECT * FROM axfluxo_video.drive_capacity");
+  expect(capacity.rows).toHaveLength(0);
+});
 it("validates Google session URLs, rejecting SSRF and secret-bearing arbitrary hosts", () => {
   for (const url of [
     "http://www.googleapis.com/upload/drive/v3/files?upload_id=x",
