@@ -17,7 +17,7 @@ export function driveRenderStorage(
       async (sql) =>
         (
           await sql.query<Inventory>(
-            "SELECT i.* FROM axfluxo_video.drive_inventory i WHERE i.owner_id=$1 AND (i.object_key=$2 OR (i.namespace='original' AND i.version_id IN (SELECT id FROM axfluxo_video.media_versions WHERE owner_id=$1 AND object_key=$2)))",
+            "SELECT i.* FROM axfluxo_video.drive_inventory i WHERE i.owner_id=$1 AND i.state='ready' AND (i.object_key=$2 OR (i.namespace='original' AND i.version_id IN (SELECT id FROM axfluxo_video.media_versions WHERE owner_id=$1 AND object_key=$2))) ORDER BY i.verified_at DESC NULLS LAST,i.created_at DESC,i.id DESC LIMIT 1",
             [owner, key],
           )
         ).rows[0],
