@@ -271,6 +271,7 @@ export function driveCloudRouter(
             Number(upload[2]),
             Buffer.concat(chunks),
             upload[3],
+            request.signal,
           ),
         );
       }
