@@ -10,6 +10,11 @@ export type DrivePolicy = {
   dbLimitBytes: number;
   allow1440: boolean;
 };
+/** Configuration-only bound: free disk space and render peak are checked separately. */
+export function maxVerifiableDriveBytes(policy: DrivePolicy): number {
+  return Math.max(0, Math.min(policy.maxFileBytes, policy.maxWorkBytes - policy.marginBytes));
+}
+
 export function drivePolicy(
   env: Record<string, string | undefined>,
 ): DrivePolicy {
