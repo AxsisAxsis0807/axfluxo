@@ -472,6 +472,30 @@ it("reuses access tokens, single-flights concurrent refresh and fails closed aft
     ).rows[0].connected,
   ).toBe(false);
 });
+it("provider 401 evicts only the rejected cached access token", async () => {
+  const db = pg.asRole("axfluxo_video_api");
+  let tokenCalls = 0;
+  let rejectOnce = true;
+  const metered = new GoogleDrive(google.config, async (input, init) => {
+    if (String(input).includes("oauth2.googleapis.com")) tokenCalls++;
+    if (
+      rejectOnce &&
+      String(input).includes("/about?") &&
+      new Headers(init?.headers).get("authorization") === "Bearer mock-access"
+    ) {
+      rejectOnce = false;
+      return Response.json({}, { status: 401 });
+    }
+    return transport(input, init);
+  });
+  const service = new CloudService(db, metered, policy());
+  await expect(service.transfer(owner).capacity()).rejects.toMatchObject({
+    code: "DRIVE_RECONNECT_REQUIRED",
+  });
+  const again = await service.transfer(owner).capacity();
+  expect(again.account).toBe("account");
+  expect(tokenCalls).toBe(2);
+});
 it("streams a synthetic 1.7 GB object with a fixed 64 KiB buffer", async () => {
   const size = 1700000000,
     block = Buffer.alloc(65536, 1);
