@@ -1,8 +1,18 @@
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   calls: [] as string[],
   roles: [] as string[],
   closed: 0,
+}));
+beforeEach(() => {
+  state.calls = [];
+  state.roles = [];
+  state.closed = 0;
+});
+vi.mock("../cloud-export/worker", () => ({
+  runExportPass: async () => {
+    state.calls.push("export");
+  },
 }));
 vi.mock("../db/postgres", () => ({
   postgresDatabase: (_config: unknown, role: string) => {
@@ -116,4 +126,48 @@ it("connects existing services in order with separate least-privilege pools, the
     "axfluxo_video_notify",
   ]);
   expect(state.closed).toBe(4);
+});
+
+it("services both busy queues once per pass without overlapping either render", async () => {
+  const { mkdtemp, mkdir, rm } = await import("node:fs/promises");
+  const root = await mkdtemp("/tmp/unified-both-");
+  await mkdir(`${root}/render`);
+  try {
+    const runtime = await workerTasks({
+      NODE_ENV: "test",
+      VIDEO_WORKER_ENABLED: "true",
+      EXPORT_UNIFIED_WORKER_ENABLED: "true",
+      EXPORT_WORK_DIR: `${root}/export`,
+      VIDEO_RENDER_ENABLED: "true",
+      VIDEO_RENDER_DISK: `${root}/render`,
+      VIDEO_RENDER_MAX_WORK_BYTES: "1073741824",
+      VIDEO_DATABASE_URL: "postgres://test:test@localhost/axfluxo_video_test",
+    });
+    const stop = new AbortController();
+    let passes = 0;
+    await runWorker(runtime.tasks, stop.signal, {
+      pause: async () => {
+        if (++passes === 3) stop.abort();
+      },
+    });
+    await runtime.close();
+    expect(state.calls).toEqual([
+      "export",
+      "claim",
+      "render",
+      "export",
+      "claim",
+      "render",
+      "export",
+      "claim",
+      "render",
+    ]);
+    expect(state.roles).toEqual([
+      "axfluxo_export_worker",
+      "axfluxo_video_render",
+    ]);
+    expect(state.closed).toBe(2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

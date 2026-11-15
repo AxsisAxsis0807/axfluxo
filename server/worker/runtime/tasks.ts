@@ -1,3 +1,4 @@
+import { exportTask } from "./export";
 import { drivePreviewStorage } from "../../drive-cloud/preview";
 import { databaseTls } from "../../db/tls";
 import {
@@ -37,7 +38,7 @@ export type WorkerKind =
 export async function workerTasks(env: Environment, only?: WorkerKind) {
   const tasks: WorkerTask[] = [];
   const pools: ReturnType<typeof postgresDatabase>[] = [];
-  const max = integerSetting(env, "VIDEO_WORKER_POOL_MAX", 1, 1, 3);
+  const closers: (() => Promise<void>)[] = [];
   const connect = (
     role: Parameters<typeof postgresDatabase>[1],
     key = "VIDEO_DATABASE_URL",
@@ -45,7 +46,7 @@ export async function workerTasks(env: Environment, only?: WorkerKind) {
     const db = postgresDatabase(
       {
         connectionString: databaseUrl(env, key),
-        max,
+        max: integerSetting(env, "VIDEO_WORKER_POOL_MAX", 1, 1, 3),
         ssl:
           env.DRIVE_CLOUD_ENABLED === "true" &&
           env.VIDEO_DATABASE_TLS === "verify-full"
@@ -65,10 +66,30 @@ export async function workerTasks(env: Environment, only?: WorkerKind) {
     // Disabled unified runtime is an inert process: no DB pools or cloud credentials required.
     if (!only && env.VIDEO_WORKER_ENABLED !== "true")
       return { tasks, close: async () => {} };
-    const cloud = cloudConfiguration(env);
-    const driveConfig = driveConfiguration(env),
-      policy = drivePolicy(env);
+    const mediaSelected =
+      selected("probe") || selected("derivatives") || selected("render");
+    const driveRequested = mediaSelected && env.DRIVE_CLOUD_ENABLED === "true";
+    const cloudRequested =
+      (selected("probe") &&
+        (only === "probe" || env.VIDEO_PROBE_ENABLED === "true")) ||
+      (selected("derivatives") && env.CLOUD_PREVIEW_ENABLED === "true") ||
+      (selected("render") && env.VIDEO_RENDER_ENABLED === "true");
+    const cloud = cloudConfiguration(cloudRequested ? env : {});
+    const driveConfig = driveRequested ? driveConfiguration(env) : null,
+      policy = drivePolicy(driveRequested ? env : {});
     const driveEnabled = Boolean(driveConfig) && policy.enabled();
+    if (!only && env.EXPORT_UNIFIED_WORKER_ENABLED === "true") {
+      const sharedMediaDisk =
+        driveEnabled ||
+        (env.VIDEO_RENDER_ENABLED === "true" &&
+          Boolean(cloud.storage?.putRender));
+      const legacy = await exportTask(
+        env,
+        sharedMediaDisk ? (env.VIDEO_RENDER_DISK ?? "/work") : undefined,
+      );
+      tasks.push(legacy.task);
+      closers.push(legacy.close);
+    }
     if (driveEnabled && selected("probe")) {
       const db = connect("axfluxo_video_probe"),
         service = new DriveCloud(db, new GoogleDrive(driveConfig!), policy);
@@ -356,11 +377,17 @@ export async function workerTasks(env: Environment, only?: WorkerKind) {
     return {
       tasks,
       close: async () => {
-        await Promise.all(pools.map((db) => db.close()));
+        await Promise.all([
+          ...pools.map((db) => db.close()),
+          ...closers.map((close) => close()),
+        ]);
       },
     };
   } catch {
-    await Promise.all(pools.map((db) => db.close()));
+    await Promise.all([
+      ...pools.map((db) => db.close()),
+      ...closers.map((close) => close()),
+    ]);
     throw Error("Worker configuration failed");
   }
 }

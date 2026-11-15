@@ -123,9 +123,10 @@ export async function runExportPass(
   signal: AbortSignal,
   render: typeof renderExport = renderExport,
 ): Promise<boolean> {
+  signal.throwIfAborted();
   const job: Claim | null = await claim(db);
   if (!job) return false;
-  const dir = await mkdtemp(join(config.workDirectory, "export-"));
+  let dir: string | undefined;
   const stop = new AbortController();
   const relay = () => stop.abort();
   signal.addEventListener("abort", relay, { once: true });
@@ -135,19 +136,26 @@ export async function runExportPass(
     timedOut = true;
     stop.abort();
   }, config.sessionTimeoutMs);
-  let beating = false;
+  let beating: Promise<void> | undefined;
+  let heartbeatError: unknown;
   let outputBlobId: string | null = null;
   const heartbeatTimer = setInterval(() => {
     if (beating || stop.signal.aborted) return;
-    beating = true;
-    void heartbeat(db, job)
-      .then(() => checkDisk(dir, config))
-      .catch(() => stop.abort())
+    beating = heartbeat(db, job)
+      .then(async () => {
+        if (dir) await checkDisk(dir, config);
+      })
+      .catch((error: unknown) => {
+        heartbeatError = error;
+        stop.abort();
+      })
       .finally(() => {
-        beating = false;
+        beating = undefined;
       });
   }, 15000);
   try {
+    stop.signal.throwIfAborted();
+    dir = await mkdtemp(join(config.workDirectory, "export-"));
     await checkDisk(dir, config);
     const sources: ExportSource[] = [];
     for (const clip of job.spec.clips) {
@@ -208,6 +216,7 @@ export async function runExportPass(
     stop.signal.throwIfAborted();
     if ((await exportFileHash(rendered.path)) !== rendered.sha256)
       throw new ExportError("EXPORT_OUTPUT_INVALID");
+    stop.signal.throwIfAborted();
     await publish(db, job, {
       blobId: outputBlobId,
       size: rendered.size,
@@ -221,16 +230,19 @@ export async function runExportPass(
     });
     return true;
   } catch (error) {
-    const code: string = stop.signal.aborted && !timedOut
-      ? "EXPORT_CANCELLED"
+    // Drain a pending heartbeat before recording the attempt or releasing its slot.
+    clearInterval(heartbeatTimer);
+    await beating;
+    const code = signal.aborted
+      ? "EXPORT_WORKER_LOST"
       : timedOut
         ? "EXPORT_TIMEOUT"
-        : exportCodeOf(error);
+        : exportCodeOf(heartbeatError ?? error);
     if (code !== "EXPORT_LEASE_LOST")
       await finishFailure(
         db,
         job,
-        new ExportError(code as ReturnType<typeof exportCodeOf>),
+        new ExportError(code),
       ).catch(() => undefined);
     return true;
   } finally {
@@ -238,7 +250,9 @@ export async function runExportPass(
     clearInterval(heartbeatTimer);
     signal.removeEventListener("abort", relay);
     stop.abort();
-    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    await beating;
+    if (dir)
+      await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
 }
 

@@ -114,6 +114,7 @@ it("imports every main without starting listeners, signal handlers or loops", as
     import("../worker/deletion/main"),
     import("../worker/notifications/main"),
     import("../worker/runtime/main"),
+    import("../cloud-export/worker"),
   ]);
   expect(process.listenerCount("SIGTERM")).toBe(term);
   expect(process.listenerCount("SIGINT")).toBe(interrupt);
@@ -157,31 +158,35 @@ it("kills a TERM-resistant child after a finite grace and removes abort listener
   expect(await closed).toBe("SIGKILL");
 });
 
-it("SIGTERM stops subsequent claims, waits for the child and closes resources in a real process", async () => {
-  const { spawn } = await import("node:child_process");
-  const child = spawn(
-    process.execPath,
-    ["--import", "tsx", "server/tests/runtime-fixture.ts"],
-    { stdio: ["ignore", "pipe", "pipe"] },
-  );
-  let output = "",
-    errors = "";
-  child.stderr!.on("data", (b) => {
-    errors += b;
-  });
-  child.stdout!.on("data", (b) => {
-    output += b;
-    if (output.includes("child-ready") && !output.includes("child-closed"))
-      child.kill("SIGTERM");
-  });
-  const code = await new Promise<number | null>((resolve) =>
-    child.once("close", resolve),
-  );
-  expect(errors).toBe("");
-  expect(code).toBe(0);
-  expect(output).toContain("child-closed\npool-closed");
-  expect(output).not.toContain("unexpected-claim");
-}, 10000);
+it.each(["SIGTERM", "SIGINT"] as const)(
+  "%s stops subsequent claims, waits for the child and closes resources in a real process",
+  async (signal) => {
+    const { spawn } = await import("node:child_process");
+    const child = spawn(
+      process.execPath,
+      ["--import", "tsx", "server/tests/runtime-fixture.ts"],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let output = "",
+      errors = "";
+    child.stderr!.on("data", (b) => {
+      errors += b;
+    });
+    child.stdout!.on("data", (b) => {
+      output += b;
+      if (output.includes("child-ready") && !output.includes("child-closed"))
+        child.kill(signal);
+    });
+    const code = await new Promise<number | null>((resolve) =>
+      child.once("close", resolve),
+    );
+    expect(errors).toBe("");
+    expect(code).toBe(0);
+    expect(output).toContain("child-closed\npool-closed");
+    expect(output).not.toContain("unexpected-claim");
+  },
+  10000,
+);
 
 it("settles a final-line parser error after the process has closed", async () => {
   await expect(
