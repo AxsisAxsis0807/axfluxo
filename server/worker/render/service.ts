@@ -129,13 +129,14 @@ export async function executeRender(
       plan: plan.hash,
       version: RENDER_VERSION,
       encoder: version,
-      // A change to either opt-in compositor is a different checkpoint profile.
-      // Do not mix previously encoded segments with a newly selected path.
-      ...(c.project
-        ? { staticComposite: process.env.VIDEO_RENDER_STATIC_COMPOSITE === "true" }
+      // Keep v4.1 checkpoint identity byte-for-byte when optimizations are OFF:
+      // the original segment encoder is unchanged. Add a new cache profile only
+      // for an enabled alternate compositor, preventing incompatible reuse.
+      ...(c.project && process.env.VIDEO_RENDER_STATIC_COMPOSITE === "true"
+        ? { staticComposite: "static-base-v1" }
         : {}),
-      ...(showcase
-        ? { fnfFixedCanvas: process.env.VIDEO_RENDER_FNF_FIXED_CANVAS === "true" }
+      ...(showcase && process.env.VIDEO_RENDER_FNF_FIXED_CANVAS === "true"
+        ? { fnfFixedCanvas: "fixed-canvas-v1" }
         : {}),
       ...(storage.renderNamespace === "drive-v1"
         ? { resourceProfile: DRIVE_RENDER_PROFILE }

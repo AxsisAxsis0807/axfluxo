@@ -3,7 +3,7 @@ import { type FnfSnapshot } from "../../../src/domain/video/schema";
 import { executionSnapshot } from "../../contracts/snapshot";
 import { digest } from "../../api/jobs";
 import { RenderError } from "../jobs/errors";
-export const RENDER_VERSION = "axfluxo-render-v4.2";
+export const RENDER_VERSION = "axfluxo-render-v4.1";
 export type RenderMode = "fnf" | "all-versions";
 export type Piece = {
   clipIndex: number;
