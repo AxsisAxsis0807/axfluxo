@@ -608,6 +608,7 @@ it("admission closed leaves snapshots/jobs/reservations untouched", async () => 
 it("uses one fixed-canvas overlay when gameplay cannot obscure title, retaining 60fps and colors", async () => {
   const stage = await mkdtemp(join(dir, "fnf-fixed-"));
   const p = prefs();
+  session.name(session.ranges[0].id, "Fixture");
   const snap = session.snapshot(p);
   const plan = renderPlan(snap, 0, "fnf", 30);
   const segment = plan.segments[0];
