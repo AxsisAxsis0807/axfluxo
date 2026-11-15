@@ -15,7 +15,7 @@ import {
   type AllVersionsProject,
 } from "../../../src/domain/video/all-versions";
 import { allVersionsDocumentSchema } from "../../../src/domain/video/schema";
-import { textImage } from "../../worker/templates/all-versions/graphics";
+import { textImage, retainStaticComposite } from "../../worker/templates/all-versions/graphics";
 import {
   projectPlan,
   prepareGraphics,
@@ -570,3 +570,16 @@ it("caches an opaque All Versions static frame without changing CFR or visible p
   for (let i = 0; i < a.length; i++) delta += Math.abs(a[i] - b[i]);
   expect(delta / a.length).toBeLessThan(1);
 }, 120000);
+it("bounds static image cache to two files and evicts only local reusable PNGs", async () => {
+  const temp = await mkdtemp(join(dir, "static-cache-"));
+  const map = new Map<number, string>();
+  for (let i = 0; i < 3; i++) {
+    const path = join(temp, `version-${i}.png`);
+    await writeFile(path, "png-fixture");
+    await retainStaticComposite(map, i, path);
+  }
+  expect([...map.keys()]).toEqual([1, 2]);
+  await expect(stat(join(temp, "version-0.png"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await stat(join(temp, "version-1.png"))).size).toBeGreaterThan(0);
+  expect((await stat(join(temp, "version-2.png"))).size).toBeGreaterThan(0);
+}, 30000);

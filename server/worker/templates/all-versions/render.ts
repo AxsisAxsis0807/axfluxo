@@ -9,7 +9,7 @@ import { renderPlan, type RenderPlan, type Segment } from "../../render/plan";
 import type { FnfSnapshot } from "../../../../src/domain/video/schema";
 import { digest } from "../../../api/jobs";
 import { RenderError } from "../../jobs/errors";
-import { textImage, backgroundImage, dimensions } from "./graphics";
+import { textImage, backgroundImage, dimensions, retainStaticComposite } from "./graphics";
 import { mediaProcess } from "../../render/process";
 import { encoding } from "../../render/encode";
 import { encodeReferenceProjectSegment } from "./reference-render";
@@ -102,7 +102,7 @@ export async function encodeProjectSegment(
         ],
         { signal },
       );
-      graphics.staticComposites.set(index, composite);
+      await retainStaticComposite(graphics.staticComposites, index, composite);
     }
     await mediaProcess(
       "ffmpeg",

@@ -5,7 +5,7 @@ import { versionIntervals, type AllVersionsProject } from "../../../../src/domai
 import type { RenderPlan, Segment } from "../../render/plan";
 import { encoding } from "../../render/encode";
 import { mediaProcess } from "../../render/process";
-import { referenceTitleImage } from "./graphics";
+import { referenceTitleImage, retainStaticComposite } from "./graphics";
 
 /**
  * Reference layout is opt-in; legacy encoding remains in render.ts.
@@ -98,7 +98,7 @@ export async function encodeReferenceProjectSegment(
           ":shortest=1:format=auto,format=rgba[v]",
         "-map", "[v]", "-frames:v", "1", "-update", "1", "-y", composite,
       ], { signal });
-      graphics.staticComposites.set(index, composite);
+      await retainStaticComposite(graphics.staticComposites, index, composite);
     }
     await mediaProcess("ffmpeg", [
       "-nostdin", "-xerror", "-filter_threads", "1",
