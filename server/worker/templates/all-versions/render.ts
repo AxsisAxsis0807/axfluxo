@@ -48,7 +48,11 @@ export async function prepareGraphics(
 ) {
   const bg = join(dir, "background.png");
   await writeFile(bg, await backgroundImage(project, cover));
-  return { bg, texts: new Map<number, string>() };
+  return {
+    bg,
+    texts: new Map<number, string>(),
+    staticComposites: new Map<number, string>(),
+  };
 }
 export async function encodeProjectSegment(
   project: AllVersionsProject,
@@ -73,7 +77,47 @@ export async function encodeProjectSegment(
     await writeFile(text, (await textImage(project, index)).png);
     graphics.texts.set(index, text);
   }
-  const offset = (s.outputStartFrame - v.startFrame) / 60,
+  // Whole segments outside both fades may use a cached, opaque image.
+  // Overlapping fades and frame boundaries retain the original alpha path.
+  const start = s.outputStartFrame - v.startFrame;
+  const end = start + s.frames;
+  const length = v.endFrame - v.startFrame;
+  if (
+    process.env.VIDEO_RENDER_STATIC_COMPOSITE === "true" &&
+    start >= project.design.fadeInFrames &&
+    end <= length - project.design.fadeOutFrames
+  ) {
+    let composite = graphics.staticComposites.get(index);
+    if (!composite) {
+      composite = join(dir, `av-static-${index}.png`);
+      await mediaProcess(
+        "ffmpeg",
+        [
+          "-nostdin", "-xerror", "-filter_complex_threads", "1",
+          "-loop", "1", "-framerate", "1", "-i", graphics.bg,
+          "-loop", "1", "-framerate", "1", "-i", text,
+          "-filter_complex",
+          "[0:v][1:v]overlay=shortest=1:format=auto,format=rgba[v]",
+          "-map", "[v]", "-frames:v", "1", "-update", "1", "-y", composite,
+        ],
+        { signal },
+      );
+      graphics.staticComposites.set(index, composite);
+    }
+    await mediaProcess(
+      "ffmpeg",
+      [
+        "-nostdin", "-xerror", "-loop", "1", "-framerate", "60",
+        "-i", composite,
+        "-vf", "format=yuv420p,setsar=1,setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709",
+        "-an", "-frames:v", String(s.frames),
+        ...encoding, "-bf", "0", "-map_metadata", "-1", "-y", path,
+      ],
+      { signal },
+    );
+    return;
+  }
+  const offset = start / 60,
     filters = ["format=rgba", `setpts=PTS+${offset}/TB`];
   if (project.design.fadeInFrames)
     filters.push(
