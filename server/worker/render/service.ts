@@ -129,6 +129,14 @@ export async function executeRender(
       plan: plan.hash,
       version: RENDER_VERSION,
       encoder: version,
+      // A change to either opt-in compositor is a different checkpoint profile.
+      // Do not mix previously encoded segments with a newly selected path.
+      ...(c.project
+        ? { staticComposite: process.env.VIDEO_RENDER_STATIC_COMPOSITE === "true" }
+        : {}),
+      ...(showcase
+        ? { fnfFixedCanvas: process.env.VIDEO_RENDER_FNF_FIXED_CANVAS === "true" }
+        : {}),
       ...(storage.renderNamespace === "drive-v1"
         ? { resourceProfile: DRIVE_RENDER_PROFILE }
         : {}),
