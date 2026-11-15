@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createVideoApi } from "../api/app";
@@ -17,9 +17,14 @@ import {
   publish,
   purgeExpired,
 } from "../cloud-export/queue";
+import { runExportPass } from "../cloud-export/worker";
+import { ExportError } from "../cloud-export/errors";
 import { beginBlob, storeBlob, discardBlob } from "../cloud-export/storage";
 import { testEngine, type TestEngine } from "./engine";
-import { exportLimits, EXPORT_PROFILE } from "../../src/domain/cloud-export/schema";
+import {
+  exportLimits,
+  EXPORT_PROFILE,
+} from "../../src/domain/cloud-export/schema";
 
 const origin = "https://editor.example";
 let pg: TestEngine, directory: string;
@@ -112,7 +117,11 @@ function jobBody(overrides: Record<string, unknown> = {}) {
     ],
     names: ["version one"],
     coverBlobId: randomUUID(),
-    design: { height: EXPORT_PROFILE.height, fadeInFrames: 9, fadeOutFrames: 9 },
+    design: {
+      height: EXPORT_PROFILE.height,
+      fadeInFrames: 9,
+      fadeOutFrames: 9,
+    },
     ...overrides,
   };
 }
@@ -286,11 +295,18 @@ describe("cloud export jobs", () => {
     const cover = await upload("image", bytes(1024, 3));
     const valid = jobBody({
       clips: [
-        { blobId: video.body.blob.id, startUs: 0, endUs: 2_000_000, markersUs: [] },
+        {
+          blobId: video.body.blob.id,
+          startUs: 0,
+          endUs: 2_000_000,
+          markersUs: [],
+        },
       ],
       coverBlobId: cover.body.blob.id,
     });
-    expect((await app()(post("/v1/cloud-export/jobs", valid))).status).toBe(202);
+    expect((await app()(post("/v1/cloud-export/jobs", valid))).status).toBe(
+      202,
+    );
     const nameMismatch = jobBody({
       clips: [
         {
@@ -330,7 +346,12 @@ describe("cloud export jobs", () => {
     const cover = await upload("image", bytes(1024, 3));
     const body = jobBody({
       clips: [
-        { blobId: video.body.blob.id, startUs: 0, endUs: 1_000_000, markersUs: [] },
+        {
+          blobId: video.body.blob.id,
+          startUs: 0,
+          endUs: 1_000_000,
+          markersUs: [],
+        },
       ],
       coverBlobId: cover.body.blob.id,
     });
@@ -344,11 +365,7 @@ describe("cloud export jobs", () => {
     expect(a.id).toBe(b.id);
     expect(a.totalFrames).toBe(60);
     const changed = await app()(
-      post(
-        "/v1/cloud-export/jobs",
-        { ...body, names: ["version two"] },
-        key,
-      ),
+      post("/v1/cloud-export/jobs", { ...body, names: ["version two"] }, key),
     );
     expect(changed.status).toBe(409);
   });
@@ -494,6 +511,76 @@ describe("cloud export worker queue", () => {
     expect((await getJob(db, owner, job.id)).state).toBe("cancelled");
   });
 
+  it("normal shutdown retries with a new fence, preserves foreign work, and stops at the existing attempt limit", async () => {
+    const { job } = await queuedJob();
+    const work = await mkdtemp(join(tmpdir(), "export-stop-"));
+    const sentinel = join(work, "other-checkpoint");
+    await writeFile(sentinel, "keep");
+    const config = {
+      workDirectory: work,
+      maxWorkBytes: 2 * 1024 ** 3,
+      minFreeBytes: 64 * 1024 ** 2,
+      segmentFrames: 60,
+      sessionTimeoutMs: 60000,
+      maxOwnerBytes: 256 * 1024 ** 2,
+    };
+    try {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const stop = new AbortController();
+        await runExportPass(workerDb, config, stop.signal, async () => {
+          stop.abort();
+          throw new ExportError("EXPORT_LEASE_LOST");
+        });
+        const view = await getJob(db, owner, job.id);
+        expect(view.state).toBe(attempt < 3 ? "queued" : "failed");
+        expect(view.errorCode).toBe(attempt < 3 ? null : "EXPORT_WORKER_LOST");
+        expect(await readdir(work)).toEqual(["other-checkpoint"]);
+        expect(await readFile(sentinel, "utf8")).toBe("keep");
+      }
+      expect(await claim(workerDb)).toBeNull();
+      expect(
+        (
+          await pg.query(
+            "SELECT count(*)::int AS n FROM axfluxo_export.jobs WHERE id=$1 AND output_blob_id IS NOT NULL",
+            [job.id],
+          )
+        ).rows[0].n,
+      ).toBe(0);
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
+  });
+
+  it("does not claim after abort and records explicit cancellation during shutdown as cancelled", async () => {
+    const { job } = await queuedJob();
+    const work = await mkdtemp(join(tmpdir(), "export-cancel-"));
+    const config = {
+      workDirectory: work,
+      maxWorkBytes: 2 * 1024 ** 3,
+      minFreeBytes: 64 * 1024 ** 2,
+      segmentFrames: 60,
+      sessionTimeoutMs: 60000,
+      maxOwnerBytes: 256 * 1024 ** 2,
+    };
+    try {
+      const aborted = new AbortController();
+      aborted.abort();
+      await expect(
+        runExportPass(workerDb, config, aborted.signal),
+      ).rejects.toThrow();
+      expect((await getJob(db, owner, job.id)).state).toBe("queued");
+      const stop = new AbortController();
+      await runExportPass(workerDb, config, stop.signal, async () => {
+        await cancelJob(db, owner, job.id);
+        stop.abort();
+        throw new ExportError("EXPORT_CANCELLED");
+      });
+      expect((await getJob(db, owner, job.id)).state).toBe("cancelled");
+    } finally {
+      await rm(work, { recursive: true, force: true });
+    }
+  });
+
   it("serves stored output with byte ranges and refuses foreign ranges", async () => {
     const { job } = await queuedJob();
     const claimed = await claim(workerDb);
@@ -561,13 +648,10 @@ describe("cloud export worker queue", () => {
       `bytes */${output.byteLength}`,
     );
     const head = await app()(
-      new Request(
-        `https://api.example/v1/cloud-export/jobs/${job.id}/output`,
-        {
-          method: "HEAD",
-          headers: { origin, authorization: `Bearer ${ownerToken}` },
-        },
-      ),
+      new Request(`https://api.example/v1/cloud-export/jobs/${job.id}/output`, {
+        method: "HEAD",
+        headers: { origin, authorization: `Bearer ${ownerToken}` },
+      }),
     );
     expect(head.status).toBe(200);
     expect(await head.text()).toBe("");
@@ -576,10 +660,9 @@ describe("cloud export worker queue", () => {
   it("rejects output before success and for another owner", async () => {
     const { job } = await queuedJob();
     const early = await app()(
-      new Request(
-        `https://api.example/v1/cloud-export/jobs/${job.id}/output`,
-        { headers: { origin, authorization: `Bearer ${ownerToken}` } },
-      ),
+      new Request(`https://api.example/v1/cloud-export/jobs/${job.id}/output`, {
+        headers: { origin, authorization: `Bearer ${ownerToken}` },
+      }),
     );
     expect(early.status).toBe(409);
     const foreign = await app()(
