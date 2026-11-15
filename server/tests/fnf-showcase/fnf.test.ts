@@ -19,9 +19,13 @@ import {
 import { claim, finishFailure } from "../../worker/jobs/queue";
 import { executeRender } from "../../worker/render/service";
 import { fileHash, probe } from "../../worker/render/process";
+import { renderPlan } from "../../worker/render/plan";
+import { validateVideo } from "../../worker/validation/output";
 import { probeMedia } from "../../worker/probe/media";
 import {
   fnfOverlay,
+  prepareFnf,
+  encodeFnfSegment,
   gameplayGeometry,
   sourceGeometry,
 } from "../../worker/templates/fnf-showcase/render";
@@ -600,3 +604,31 @@ it("admission closed leaves snapshots/jobs/reservations untouched", async () => 
     ).rows,
   ).toHaveLength(0);
 });
+
+it("uses one fixed-canvas overlay when gameplay cannot obscure title, retaining 60fps and colors", async () => {
+  const stage = await mkdtemp(join(dir, "fnf-fixed-"));
+  const p = prefs();
+  const snap = session.snapshot(p);
+  const plan = renderPlan(snap, 0, "fnf", 30);
+  const segment = plan.segments[0];
+  const input = { path: source, info: await probe(source) };
+  const overlay = await prepareFnf(p, stage);
+  const original = join(stage, "old.mp4");
+  const optimized = join(stage, "optimized.mp4");
+  vi.stubEnv("VIDEO_RENDER_FNF_FIXED_CANVAS", "false");
+  await encodeFnfSegment(input, segment, plan, p, overlay, original);
+  vi.stubEnv("VIDEO_RENDER_FNF_FIXED_CANVAS", "true");
+  await encodeFnfSegment(input, segment, plan, p, overlay, optimized);
+  expect(overlay.ready).toBe(true);
+  await validateVideo(original, { ...plan, frames: segment.frames });
+  await validateVideo(optimized, { ...plan, frames: segment.frames });
+  const sample = (file: string) => execFileSync("ffmpeg", [
+    "-v", "error", "-i", file, "-frames:v", "1",
+    "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1",
+  ], { maxBuffer: 8 * 1024 ** 2 });
+  const a = sample(original), b = sample(optimized);
+  expect(a.length).toBe(b.length);
+  let total = 0;
+  for (let i = 0; i < a.length; i++) total += Math.abs(a[i] - b[i]);
+  expect(total / a.length).toBeLessThan(1);
+}, 120000);
