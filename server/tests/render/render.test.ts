@@ -415,11 +415,14 @@ it("renders, validates, survives upload failure and reuses hash-verified video c
   // The final bytes are uploaded once, without an abandoned duplicate candidate.
   const completedObjects = (
     await engine.query(
-      "SELECT kind FROM axfluxo_video.render_objects WHERE owner_id=$1 AND job_id=$2 AND kind IN ('candidate','output')",
+      "SELECT kind,ready FROM axfluxo_video.render_objects WHERE owner_id=$1 AND job_id=$2 AND kind IN ('candidate','output')",
       [owner, c.job],
     )
   ).rows;
-  expect(completedObjects.map((row) => row.kind)).toEqual(["output"]);
+  // A failed immutable PUT can leave an unready output reservation: only the
+  // ready object may be published, and no duplicate candidate is uploaded.
+  expect(completedObjects.some((row) => row.kind === "candidate")).toBe(false);
+  expect(completedObjects.filter((row) => row.ready).map((row) => row.kind)).toEqual(["output"]);
   expect(
     [...storage.objects.keys()].filter((key) =>
       key.startsWith(`render-outputs/${owner}/${c.job}/`),
