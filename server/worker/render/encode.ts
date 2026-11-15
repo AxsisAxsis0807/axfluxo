@@ -160,43 +160,22 @@ export async function assemble(
   preciseMovieTime = false,
 ) {
   const list = join(directory, "segments.txt"),
-    video = join(directory, "joined.mp4"),
     output = join(directory, "candidate.mp4");
   await writeFile(
     list,
     segments.map((p) => `file '${localPath(p)}'`).join("\n"),
   );
-  await mediaProcess(
-    "ffmpeg",
-    [
-      "-nostdin",
-      "-xerror",
-      "-f",
-      "concat",
-      "-safe",
-      "0",
-      "-i",
-      list,
-      "-map",
-      "0:v:0",
-      "-c:v",
-      "copy",
-      "-an",
-      "-video_track_timescale",
-      "60000",
-      "-y",
-      video,
-    ],
-    { signal },
-  );
+  // Finished H.264 segments already share a validated encoding contract.
+  // Read their concat list directly during the final audio mux: do not write
+  // another full-size joined.mp4 copy to the constrained work directory.
+  const videoInput = ["-f", "concat", "-safe", "0", "-i", list];
   if (canCopyAudio(plan, inputs)) {
     await mediaProcess(
       "ffmpeg",
       [
         "-nostdin",
         "-xerror",
-        "-i",
-        video,
+        ...videoInput,
         "-i",
         inputs[plan.pieces[0].clipIndex].path,
         "-map",
@@ -232,8 +211,7 @@ export async function assemble(
       "-xerror",
       "-filter_complex_threads",
       "1",
-      "-i",
-      video,
+      ...videoInput,
       ...plan.pieces.flatMap((p) => [
         "-copyts",
         "-i",
