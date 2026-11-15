@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { createCanvas } from "@napi-rs/canvas";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -96,6 +96,27 @@ it("renders reference title and resettable mm:ss clock using real FFmpeg across 
       expect(frames(path)).toBe(s.length);
       files.push(path);
     }
+    // The middle of a version is title-static but the frame-accurate clock
+    // remains dynamic. Compare representative title and timer regions.
+    const middle = { outputStartFrame: 30, frames: 30 } as Segment;
+    const before = join(dir, "reference-middle-before.mp4");
+    const after = join(dir, "reference-middle-after.mp4");
+    vi.stubEnv("VIDEO_RENDER_STATIC_COMPOSITE", "false");
+    await encodeProjectSegment(p, middle, plan, graphics, dir, before);
+    vi.stubEnv("VIDEO_RENDER_STATIC_COMPOSITE", "true");
+    await encodeProjectSegment(p, middle, plan, graphics, dir, after);
+    vi.unstubAllEnvs();
+    expect(graphics.staticComposites.size).toBe(1);
+    expect(frames(after)).toBe(30);
+    for (const n of [0, 6, 20]) {
+      expect(meanAbsolutePixelDifference(timerRegion(before, n), timerRegion(after, n))).toBeLessThan(1);
+    }
+    const titleRegion = (file: string) => execFileSync("ffmpeg", [
+      "-v", "error", "-i", file, "-vf",
+      "select=\u0027eq(n,10)\u0027,crop=1300:160:310:470,format=rgb24",
+      "-frames:v", "1", "-f", "rawvideo", "-",
+    ], { maxBuffer: 1300 * 160 * 3 + 16384 });
+    expect(meanAbsolutePixelDifference(titleRegion(before), titleRegion(after))).toBeLessThan(1);
     // At relative frame 20 in either version, the same 00:01 should be shown.
     // Different title text changes H.264 macroblock decisions. Compare the
     // displayed clock region with a measured tolerance instead of exact bytes.

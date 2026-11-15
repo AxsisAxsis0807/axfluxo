@@ -5,14 +5,14 @@ import { versionIntervals, type AllVersionsProject } from "../../../../src/domai
 import type { RenderPlan, Segment } from "../../render/plan";
 import { encoding } from "../../render/encode";
 import { mediaProcess } from "../../render/process";
-import { referenceTitleImage } from "./graphics";
+import { referenceTitleImage, retainStaticComposite } from "./graphics";
 
 /**
  * Reference layout is opt-in; legacy encoding remains in render.ts.
  * The timer is generated on the server at 60fps, with no per-frame PNG files.
  * Keep alpha curves aligned with referenceOpacity in all-versions-reference.ts.
  */
-type Graphics = { bg: string; texts: Map<number, string> };
+type Graphics = { bg: string; texts: Map<number, string>; staticComposites: Map<number, string> };
 const clamp = (expr: string) => "max(0,min(1," + expr + "))";
 function alphaExpression(
   track: "title" | "timer",
@@ -76,6 +76,43 @@ export async function encodeReferenceProjectSegment(
   const titleTop = Math.round(plan.height * REF.titleBandTop / REF.height);
   const timerSize = Math.round(plan.height * REF.timerFontSize / REF.height);
   const clock = clockExpansion(offsetFrames);
+  // The reference clock must remain live even when the title has settled.
+  // Cache only the finished title/background, preserving the existing
+  // non-linear title/timer alpha expressions on every fade frame.
+  const staticTitle = process.env.VIDEO_RENDER_STATIC_COMPOSITE === "true" &&
+    offsetFrames >= project.design.fadeInFrames &&
+    offsetFrames + segment.frames <=
+      version.endFrame - version.startFrame - project.design.fadeOutFrames;
+  if (staticTitle) {
+    let composite = graphics.staticComposites.get(index);
+    if (!composite) {
+      composite = join(dir, "reference-static-" + index + ".png");
+      const titleOpacity = REF.titleOpacityScale;
+      await mediaProcess("ffmpeg", [
+        "-nostdin", "-xerror", "-filter_complex_threads", "1",
+        "-loop", "1", "-framerate", "1", "-i", graphics.bg,
+        "-loop", "1", "-framerate", "1", "-i", titleFile,
+        "-filter_complex",
+        "[1:v]format=rgba,geq=r=\u0027r(X,Y)\u0027:g=\u0027g(X,Y)\u0027:b=\u0027b(X,Y)\u0027:a=\u0027alpha(X,Y)*" + titleOpacity + "\u0027[title];" +
+          "[0:v][title]overlay=x=(W-w)/2:y=" + titleTop +
+          ":shortest=1:format=auto,format=rgba[v]",
+        "-map", "[v]", "-frames:v", "1", "-update", "1", "-y", composite,
+      ], { signal });
+      await retainStaticComposite(graphics.staticComposites, index, composite);
+    }
+    await mediaProcess("ffmpeg", [
+      "-nostdin", "-xerror", "-filter_threads", "1",
+      "-loop", "1", "-framerate", "60", "-i", composite,
+      "-vf",
+      "drawtext=fontfile=" + fontFile + ":text=\u0027" + clock + "\u0027:fontsize=" + timerSize +
+        ":fontcolor=white:x=(w-text_w)/2:y=" + (plan.height * REF.timerCenterY / REF.height) +
+        "-text_h/2:alpha=" + REF.timerOpacityScale +
+        ",format=yuv420p,setsar=1,setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709",
+      "-an", "-frames:v", String(segment.frames),
+      ...encoding, "-bf", "0", "-map_metadata", "-1", "-y", outputPath,
+    ], { signal });
+    return;
+  }
   const graph = [
     "[1:v]format=rgba,setpts=PTS+" + offset + "/TB,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*" + titleAlpha + "'[title]",
     "[0:v]setpts=PTS+" + offset + "/TB[bg]",

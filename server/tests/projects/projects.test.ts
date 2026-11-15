@@ -15,7 +15,7 @@ import {
   type AllVersionsProject,
 } from "../../../src/domain/video/all-versions";
 import { allVersionsDocumentSchema } from "../../../src/domain/video/schema";
-import { textImage } from "../../worker/templates/all-versions/graphics";
+import { textImage, retainStaticComposite } from "../../worker/templates/all-versions/graphics";
 import {
   projectPlan,
   prepareGraphics,
@@ -534,3 +534,52 @@ it.each(["mp4", "mov"])(
   },
   120000,
 );
+
+it("caches an opaque All Versions static frame without changing CFR or visible pixels", async () => {
+  const dir2 = await mkdtemp(join(dir, "static-compare-"));
+  p.namesText = "One";
+  p.document!.clips[0].markersUs = [];
+  p.document!.clips[0].interval.endUs = 100000;
+  p.design.fadeInFrames = 0;
+  p.design.fadeOutFrames = 0;
+  const snap = {
+    schemaVersion: 1 as const, id: "static-test", document: p.document!,
+    ranges: [{ startUs: 0, endUs: 100000 }], names: ["video.mp4"],
+  };
+  const plan = projectPlan(p, snap, 3);
+  const graphics = await prepareGraphics(p, cover, dir2);
+  const first = plan.segments[0];
+  const standard = join(dir2, "standard.mp4");
+  const optimized = join(dir2, "optimized.mp4");
+  vi.stubEnv("VIDEO_RENDER_STATIC_COMPOSITE", "false");
+  await encodeProjectSegment(p, first, plan, graphics, dir2, standard);
+  vi.stubEnv("VIDEO_RENDER_STATIC_COMPOSITE", "true");
+  await encodeProjectSegment(p, first, plan, graphics, dir2, optimized);
+  expect(graphics.staticComposites.size).toBe(1);
+  await encodeProjectSegment(p, plan.segments[1], plan, graphics, dir2, join(dir2, "optimized-2.mp4"));
+  expect(graphics.staticComposites.size).toBe(1);
+  await validateVideo(standard, { ...plan, frames: first.frames });
+  await validateVideo(optimized, { ...plan, frames: first.frames });
+  const pixels = (file: string) => execFileSync("ffmpeg", [
+    "-v", "error", "-i", file, "-frames:v", "1",
+    "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1",
+  ], { maxBuffer: 8 * 1024 ** 2 });
+  const a = pixels(standard), b = pixels(optimized);
+  expect(a.length).toBe(b.length);
+  let delta = 0;
+  for (let i = 0; i < a.length; i++) delta += Math.abs(a[i] - b[i]);
+  expect(delta / a.length).toBeLessThan(1);
+}, 120000);
+it("bounds static image cache to two files and evicts only local reusable PNGs", async () => {
+  const temp = await mkdtemp(join(dir, "static-cache-"));
+  const map = new Map<number, string>();
+  for (let i = 0; i < 3; i++) {
+    const path = join(temp, `version-${i}.png`);
+    await writeFile(path, "png-fixture");
+    await retainStaticComposite(map, i, path);
+  }
+  expect([...map.keys()]).toEqual([1, 2]);
+  await expect(stat(join(temp, "version-0.png"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await stat(join(temp, "version-1.png"))).size).toBeGreaterThan(0);
+  expect((await stat(join(temp, "version-2.png"))).size).toBeGreaterThan(0);
+}, 30000);

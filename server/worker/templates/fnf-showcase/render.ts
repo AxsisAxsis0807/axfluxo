@@ -95,14 +95,18 @@ export function gameplayGeometry(
 export async function prepareFnf(p: FnfPreferences, dir: string) {
   const path = join(dir, "fnf-overlay.png");
   await writeFile(path, (await fnfOverlay(p)).png);
-  return path;
+  return {
+    text: path,
+    fixedCanvas: join(dir, "fnf-fixed-canvas.png"),
+    ready: false,
+  };
 }
 export async function encodeFnfSegment(
   input: Input,
   s: Segment,
   plan: RenderPlan,
   p: FnfPreferences,
-  overlay: string,
+  overlay: Awaited<ReturnType<typeof prepareFnf>>,
   path: string,
   signal?: AbortSignal,
 ) {
@@ -111,6 +115,33 @@ export async function encodeFnfSegment(
   const geometry = gameplayGeometry(p, sourceGeometry(v)),
     origin = decimalUs(input.info.format.start_time ?? "0"),
     sec = (us: number) => (us / 1e6).toFixed(6);
+  // Precompose opaque background + fixed text only if the gameplay rectangle
+  // cannot cover the text bands. Otherwise keep the original overlay order.
+  const fixed = process.env.VIDEO_RENDER_FNF_FIXED_CANVAS === "true" &&
+    geometry.y >= 400 && geometry.x >= 0 &&
+    geometry.x + geometry.width <= 1080 &&
+    geometry.y + geometry.height <= 1920;
+  if (fixed && !overlay.ready) {
+    await mediaProcess(
+      "ffmpeg",
+      [
+        "-nostdin", "-xerror", "-filter_complex_threads", "1",
+        "-f", "lavfi", "-i", "color=c=black:s=1080x1920:r=1:d=1",
+        "-loop", "1", "-framerate", "1", "-i", overlay.text,
+        "-filter_complex",
+        "[0:v][1:v]overlay=0:0:shortest=1:format=auto,format=rgba[v]",
+        "-map", "[v]", "-frames:v", "1", "-update", "1", "-y", overlay.fixedCanvas,
+      ],
+      { signal },
+    );
+    overlay.ready = true;
+  }
+  const backgroundInput = fixed
+    ? ["-loop", "1", "-framerate", "60", "-i", overlay.fixedCanvas]
+    : [
+        "-f", "lavfi", "-i", `color=c=black:s=1080x1920:r=60:d=${s.frames / 60}`,
+        "-loop", "1", "-framerate", "60", "-i", overlay.text,
+      ];
   const filter = [
     `setpts=PTS-(${sec(origin)})/TB`,
     `trim=start=${sec(Math.max(0, s.sourceStartUs - 1_000_000))}:end=${sec(s.sourceEndUs)}`,
@@ -144,18 +175,13 @@ export async function encodeFnfSegment(
       "-noautorotate",
       "-i",
       input.path,
-      "-f",
-      "lavfi",
-      "-i",
-      `color=c=black:s=1080x1920:r=60:d=${s.frames / 60}`,
-      "-loop",
-      "1",
-      "-framerate",
-      "60",
-      "-i",
-      overlay,
+      ...backgroundInput,
       "-filter_complex",
-      `[0:v]${filter}[game];[1:v][game]overlay=x=(W-w)/2:y=(H-h)/2:shortest=1:format=auto[base];[base][2:v]overlay=0:0:shortest=1:format=auto,format=yuv420p,setsar=1,setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709[out]`,
+      `[0:v]${filter}[game];` +
+        (fixed
+          ? "[1:v][game]overlay=x=(W-w)/2:y=(H-h)/2:shortest=1:format=auto"
+          : "[1:v][game]overlay=x=(W-w)/2:y=(H-h)/2:shortest=1:format=auto[base];[base][2:v]overlay=0:0:shortest=1:format=auto") +
+        ",format=yuv420p,setsar=1,setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709[out]",
       "-map",
       "[out]",
       "-an",

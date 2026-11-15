@@ -412,6 +412,22 @@ it("renders, validates, survives upload failure and reuses hash-verified video c
     )
   ).rows;
   expect(outputs).toHaveLength(1);
+  // The final bytes are uploaded once, without an abandoned duplicate candidate.
+  const completedObjects = (
+    await engine.query(
+      "SELECT kind,ready FROM axfluxo_video.render_objects WHERE owner_id=$1 AND job_id=$2 AND kind IN ('candidate','output')",
+      [owner, c.job],
+    )
+  ).rows;
+  // A failed immutable PUT can leave an unready output reservation: only the
+  // ready object may be published, and no duplicate candidate is uploaded.
+  expect(completedObjects.some((row) => row.kind === "candidate")).toBe(false);
+  expect(completedObjects.filter((row) => row.ready).map((row) => row.kind)).toEqual(["output"]);
+  expect(
+    [...storage.objects.keys()].filter((key) =>
+      key.startsWith(`render-outputs/${owner}/${c.job}/`),
+    ),
+  ).toHaveLength(1);
   expect(Number(outputs[0].frame_count)).toBe(60);
   const router = renderRouter({
     db: engine.asRole("axfluxo_video_api"),
@@ -476,6 +492,9 @@ it("frame-boundary segments have no audio; final AAC is encoded once with one pr
   }
   const result = await assemble(plan, [input], paths, stage);
   expect(result.audioMode).toBe("encoded");
+  await expect(stat(join(stage, "joined.mp4"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
   const v = await validateVideo(result.path, { ...plan, audio: true });
   expect(v.frames).toBe(60);
   expect(v.audioSamples).toBeGreaterThanOrEqual(48000);

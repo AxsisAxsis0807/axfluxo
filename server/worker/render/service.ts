@@ -129,6 +129,15 @@ export async function executeRender(
       plan: plan.hash,
       version: RENDER_VERSION,
       encoder: version,
+      // Keep v4.1 checkpoint identity byte-for-byte when optimizations are OFF:
+      // the original segment encoder is unchanged. Add a new cache profile only
+      // for an enabled alternate compositor, preventing incompatible reuse.
+      ...(c.project && process.env.VIDEO_RENDER_STATIC_COMPOSITE === "true"
+        ? { staticComposite: "static-base-v1" }
+        : {}),
+      ...(showcase && process.env.VIDEO_RENDER_FNF_FIXED_CANVAS === "true"
+        ? { fnfFixedCanvas: "fixed-canvas-v1" }
+        : {}),
       ...(storage.renderNamespace === "drive-v1"
         ? { resourceProfile: DRIVE_RENDER_PROFILE }
         : {}),
@@ -296,12 +305,13 @@ export async function executeRender(
       await progress(db, c, s.outputStartFrame + s.frames, plan.frames);
       await disk();
     }
-    // Reserve seekable disk for joined video + candidate. ENOSPC also stops into held state.
+    // Reserve only the final seekable MP4; concat reads existing segment files.
+    // Preserve a conservative audio/MP4 overhead allowance and the hard disk gate.
     const segmentBytes = (await Promise.all(paths.map((p) => stat(p)))).reduce(
       (n, s) => n + s.size,
       0,
     );
-    await disk(segmentBytes * 2 + Math.ceil((plan.frames / 60) * 50000));
+    await disk(segmentBytes + Math.ceil((plan.frames / 60) * 50000));
     const result = await assemble(
       plan,
       inputs,
@@ -321,13 +331,8 @@ export async function executeRender(
       size: validation.size,
       planHash: plan.hash,
     };
-    await storeObject(
-      db,
-      storage,
-      c,
-      { ...common, kind: "candidate" },
-      stop.signal,
-    );
+    // Only one fully verified object is retained and charged. Its output kind
+    // does not grant access: access requires the fenced artifact publication.
     const object = await storeObject(
       db,
       storage,

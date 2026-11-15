@@ -1,5 +1,5 @@
 import { createCanvas, GlobalFonts, loadImage } from "@napi-rs/canvas";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import {
@@ -10,6 +10,19 @@ import {
 } from "../../../../src/domain/video/all-versions";
 import { ApiError } from "../../../api/errors";
 import { ALL_VERSIONS_REFERENCE as REF } from "../../../../src/domain/video/all-versions-reference";
+/** Limit full-resolution static PNGs to a small, bounded working set. */
+export async function retainStaticComposite(
+  cache: Map<number, string>,
+  index: number,
+  path: string,
+) {
+  cache.set(index, path);
+  while (cache.size > 2) {
+    const [oldIndex, oldPath] = cache.entries().next().value as [number, string];
+    cache.delete(oldIndex);
+    await rm(oldPath, { force: true });
+  }
+}
 export const fontPath = () =>
   resolve(
     process.env.VIDEO_ALEO_FONT ??
