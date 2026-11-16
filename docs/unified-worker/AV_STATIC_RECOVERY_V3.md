@@ -1,6 +1,6 @@
 # 静止画合成 停止・復旧 v3
 
-判定 **PARTIAL**。単体レンダラーの実プロセス停止・再生成は確認した。静止画ONを使う実WorkerのDB/checkpoint/publication一体での停止復旧までは認証していない。
+判定 **PARTIAL**。単体レンダラーの実プロセス停止・再生成は確認した。静止画ONの実Workerでupload失敗後のcheckpoint再利用まで確認したが、PNG生成中などの実停止を同じDB/Workerで一体検証する範囲は未完了。
 
 ## 実停止
 
@@ -26,7 +26,7 @@
 - PNG名はversion index別。cacheは最大2、eviction時はmapにある自身のPNGだけ削除。単体cacheテストで古い自身のPNG削除とforeign checkpoint保持を確認。
 - Generic Workerは毎回mkdtempでjob work directoryを分離。前jobのPNGを参照するmapを共有しない。finallyのcleanupは自身のwork directoryのみ。fixtureは測定証拠保持のためcleanupせず、これをWorkerのcleanup実行証拠にはしない。
 - Generic Workerはplan hashにencoder versionとON時static-base-v1を含める。OFFのcheckpoint識別は維持。readyでowner/job/plan/segment一致のcheckpointだけ選択し、download時size/hashと動画検証を実施。不正なcheckpointはCHECKPOINT_CORRUPTとして停止。
-- 認証/RLS/fencing/lease/cancel/retry/publicationの本番コード変更なし。実DB統合での静止ON固有の停止点試験は未実施。
+- 認証/RLS/fencing/lease/cancel/retry/publicationの本番コード変更なし。実DB統合のupload失敗/再試行は追加確認済み。PNG生成などのSIGKILL停止点を含む統合試験は未実施。
 
 ## Mockと実DBを分離
 
@@ -37,3 +37,11 @@
 - Generic Render25件は、実claim childをSIGKILLしてlease回復とdead tokenのfencing、破損checkpoint拒否、upload失敗後のhash検証済segment再利用、出力1件、公開transaction rollback、cancel/retry/auth等を含む。これは既存Generic Renderの証拠であり、静止ONの統合成功には置き換えない。
 
 本番DB、実ストレージ、元メディア、既存checkpointは操作していない。DB監査containerは既存scriptのfinallyで停止し、DB volume/dataは保存した。消したのは今回作成した停止済みメディア診断containerだけであり、/work全体とhash/logを先に保存している。
+
+## 追加: 静止ONの実Worker/実DB統合
+
+新規専用loopback PostgreSQL17で `projects.test.ts` のv3ケース **1件PASS（他13件は選択外）**。素材は1秒1タイトル/60frames、12-frame segment（0/4がfade、1/2/3がstatic）。5秒/60-frame segmentの資源測定とは区別し、このケースには512MB資源判定を付けない。FFmpeg・SQL・Workerは実処理、ストレージだけFakeStorage、upload障害は意図的な503注入。mediaProcess spyは元関数を実行する観測で、mock実装に差し替えない。
+
+最初の実行でPNG生成1・静止入力encode3を観測し、ready checkpoint5件/公開0件をSQL確認。upload障害を解除して新lease tokenで再試行、静止PNGの生成/使用encode0、既存checkpointから出力1件/60frames、原本hash不変を確認。ON識別profileを含む同じplanの再利用であり、OFF checkpoint混用はしない。ログは[native-static.log](evidence/av-static-v3/native-static.log)、結果は[native-static-results.json](evidence/av-static-v3/native-static-results.json)。
+
+既存47件とこの新規1件は別集計。実Blitz/実クラウドstorage/本番imageでの保証ではない。

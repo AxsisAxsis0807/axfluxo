@@ -1,6 +1,6 @@
 # 新All Versions 静止画合成 512MB監査 v3
 
-最終総合判定: **HOLD（512MB・512MiB）**。静止画方式は実際に動作するが、5秒合成ジョブは512,000,000 Bでも536,870,912 BでもOFF/ON各2回OOM。1GB単体・短時間の予備評価は完了。Blitz Small対応、本番運用PASSとは判定しない。
+最終総合判定: **HOLD（512MB・512MiB）**。静止画方式は実際に動作するが、5秒合成ジョブは512,000,000 Bでも536,870,912 BでもOFF/ON各2回OOM。1GB単体の予備評価と実Worker統合smokeは別条件で実施。Blitz Small対応、本番運用PASSとは判定しない。
 
 本番Cloud受付・静止画合成のデフォルトはOFFのまま。デプロイ、マージ、新PR、公開、Blitz設定、実データ/本番DB/課金操作なし。v2資料は保持。
 
@@ -8,7 +8,7 @@
 
 2026-11-16にGitHubでPR #35を再確認: open / draft / merged=false、HEAD `498bf9d64f1329fbec6b04b6ce7679a0cd094049`、head `codex/unified-resource-audit-v2`、base `codex/unified-worker-v1` (`81d6c739a797e95386855ad1b78313a88e9b1077`)。指定と差なし。ローカル既存checkoutは `1c88efb614e3d15ef9a8f371e8016076a8c7ef68` だったため保持し、指定SHAから `/workspace/axfluxo-av-v3`、`codex/av-static-512mb-audit-v3` を作成。
 
-測定時HEADは起点SHA、診断変更は未コミットだった。全ケースのバンドルSHA・image ID・入力SHA・実効環境値をJSONに保存。完成コードから再ビルドしたバンドルは測定バンドルと `cmp` 一致、preload/sampleもイメージ内コピーと一致。測定後の診断集計・停止ハーネス変更はレンダーバンドルに入らない。本番レンダラーの差分はゼロ。
+B/C/D/E測定時HEADは起点SHA、診断変更は未コミットだった。追加F測定時HEADは最初の監査コミット `77b735194c3af0d80fc5733d06c8effe66cd7d14`。いずれも同じ凍結済みレンダーバンドル/imageを使用した。全ケースのバンドルSHA・image ID・入力SHA・実効環境値をJSONに保存。完成コードから再ビルドしたバンドルは測定バンドルと `cmp` 一致、preload/sampleもイメージ内コピーと一致。測定後の診断集計・停止ハーネス変更はレンダーバンドルに入らない。本番レンダラーの差分はゼロ。
 
 OFF/ONとも同じcandidate.mjsを使用。baseline.mjsはpack互換用の同一コピーであり、旧コミット比較ではない。Node 24.19.0、ローカルFFmpeg等のバイナリハッシュは [binary-manifest.json](evidence/av-static-v3/binary-manifest.json)。診断用FROM scratchイメージであり本番Dockerfileイメージではない。
 
@@ -22,6 +22,8 @@ OFF/ONとも同じcandidate.mjsを使用。baseline.mjsはpack互換用の同一
 - 入力は各コンテナで同じ決定的手順から再生成し、ハッシュで同一性を事後検証。生成工程の資源もジョブ全体に含む。原本/ユーザーメディアは使わない。
 
 ## 実測
+
+表の制限値はDocker要求値。512,000,000 B、536,870,912 B、2GiBの実memory.maxは指定どおり。1GB要求1,000,000,000 Bだけはkernelの4096-byte page単位で **999,997,440 B** に切り下げ（2,560 B厳しい）。E/Fすべて同じ実値を前後JSONで確認。最終照合の「全要求と実値が完全一致」assertionが検出した差であり、測定値や制限を緩めて解消していない。
 
 | ケース | 制限 B / CPU | OFF/ON | cgroup memory.peak B | oom_kill増分 | CPU秒¹ | wall秒 | ディスクピーク B² | 結果 |
 |---|---|---|---:|---:|---:|---:|---:|---|
@@ -43,12 +45,18 @@ OFF/ONとも同じcandidate.mjsを使用。baseline.mjsはpack互換用の同一
 | E-A-off-2 | 1000000000 / 1 | OFF | 653,537,280 | 0 | 36.806 | 37.025 | 24,177,904 | COMPLETED |
 | E-A-on-1 | 1000000000 / 1 | ON | 651,083,776 | 0 | 31.431 | 31.671 | 24,406,023 | COMPLETED |
 | E-A-on-2 | 1000000000 / 1 | ON | 656,060,416 | 0 | 30.447 | 30.675 | 24,354,652 | COMPLETED |
+| F-B-off | 1000000000 / 1 | OFF | 807,362,560 | 0 | 226.151 | 228.159 | 142,664,634 | COMPLETED |
+| F-B-on | 1000000000 / 1 | ON | 777,261,056 | 0 | 158.804 | 159.119 | 141,466,350 | COMPLETED |
 
 ¹ cgroup `cpu.stat` usage_usec差分（sampler等込み）。子孫を含むNodeのwaited CPU秒はJSON summary.cpuSecondsに別記。² 25ms間隔の監査出力ディレクトリ論理サイズ、ログ・合成入力込み。Docker VFSの実ホスト占有とは別。
 
 512MB/MiBのmemory.peakが上限と同値なのは制限到達・OOMであり成功/必要量の推定ではない。8ケースすべてNode終了1、FFmpeg child #4 SIGKILL、oom_kill +1。Docker OOMKilled=falseでも子のOOMを検出。最初の動的フェードsegment-0が未完了、中間静止画へ到達ゼロ。これらONケースはジョブ失敗の有効証拠だが、静止画経路評価として **INVALID_TEST_NO_COMPLETED_STATIC_PATH**。成功に数えない。
 
 1GBの全4ケースは完成、OOMなし、ON各3静止セグメント完了。OFF最大662,364,160 B、ON最大656,060,416 B。各2回平均はOFF657,950,720 B、ON653,572,096 B（差4,378,624 B、約0.67%）。この少数試行から安定したジョブ全体削減効果を一般化しない。2GiBのA単発は削減、B/C単発はONの全体ピークがOFFより増加した。
+
+## 追加Phase F（1GB限定）
+
+短時間1GBの2回成功を受け、1GB/1CPU/swap0で30秒3タイトル（境界10/20秒、1800frames、60-frame×30segment）をOFF/ON各1回。OFF807,362,560 B、ON777,261,056 B、OOMなしで完成。ONはstatic24segment、PNG生成3・再利用21、動的fade6segment。完成MP4 hashも一致（品質資料参照）。平均/再現性の認証ではない。F-OFFの一部は別cgroupのnative統合チェックと重複し、wall差の厳密な因果比較には使わない。512MB長尺は未実施でありSmall判定はHOLDを維持。30秒1回を長尺連続運用の保証に拡大しない。
 
 ## どの段階が重いか
 
@@ -64,7 +72,7 @@ Node起動/合成入力生成/graphics前後/各encode/検証/mux/最終検証/i
 
 memory.current/peak/max/events/stat/swap.current/swap.max、cpu.stat/maxを前後および標本で取得。Node RSS/heap/external、FFmpeg RSS/PSS/USS/threads、ツリーRSS等、CPU、終了signal、ディスクを保存。cgroup memoryはRSS合計の代用品ではない。
 
-Smallの公表予約0.05 CPUと上限0.5 CPUは別。本試験は上限quotaであり継続的な予約分の処理能力を保証しない。nr_throttled/throttled_usecもJSONに保存。0.05 CPU連続試験は未実施。
+Smallの公表予約0.05 CPUと上限0.5 CPUは別。本試験は上限quotaであり継続的な予約分の処理能力を保証しない。nr_throttled/throttled_usecもJSONに保存。512MB4ケースではnr_throttled=216〜227、throttled_usec=43,484,429〜45,495,062。複数スレッドの累積値なのでwall秒との単純比をCPU率にしない。0.05 CPU連続試験は未実施。
 
 開始空き64,132,923,392 B、依存・診断イメージ構築後60,096,602,112 B。Docker storage driverはvfs。コンテナ層複製で途中37,987,614,720 Bまで減少したため、専用コンテナの/workを保存しハッシュを記録してから停止済みだけ削除。画像655.2MB、当時17コンテナのwritable表示591MB（基礎層複製のホスト占有はこの表示に含まれない）。prune/共有volume削除なし。各ケース前2GiB reserve、前後空き量、整理ログを保存。ENOSPC・BLOCKED_DISKは今回発生なし。診断用syntheticファイル/ログはローカル保持、大容量動画はGitに含めない。
 
@@ -76,14 +84,18 @@ Smallの公表予約0.05 CPUと上限0.5 CPUは別。本試験は上限quotaで�
 | 第2周 コード | PASS | strict boolean allowlist、Node実効値、同一bundle/image/input、診断コードのみ。production差分ゼロ |
 | 第3周 セキュリティ | PASS | メディア試験network none、合成素材、DBは専用loopbackのみ、秘匿環境非継承。元データ・本番未操作 |
 | 第4周 資源 | HOLD | 正しいdecimal/binary制限とCPU/swap下でOOMを反復再現。資源計測自体は成立 |
-| 第5周 品質・復旧 | PARTIAL | 全デコード/音声一致、停止後再生成、既存DB復旧試験は合格。静止ONの実Worker全経路・本番画像・長尺は未認証 |
+| 第5周 品質・復旧 | PARTIAL | 全デコード/音声一致、停止後再生成、既存DB復旧試験は合格。静止ONの実Worker停止全経路・本番画像・長期連続jobは未認証 |
 
 これは異なる観点の自己監査であり、外部独立レビューではない。
+
+## 追加統合試験の範囲
+
+専用loopback PostgreSQLで、新All Versions静止ONを実Workerで通す追加1件がPASS。1秒1タイトルを12-frame segmentへ分割する条件でPNG生成1・static encode3・ready checkpoint5を観測。出力upload障害後、新lease tokenで検証済checkpointを再利用（static encode0）、出力1件・原本hash不変を確認した。FakeStorageの障害注入であり、512MB資源試験や本番storage試験と混同しない。実WorkerのPNG各段階SIGKILL統合は未検証。
 
 ## 次の一手
 
 1. まずフェード区間のFFmpeg内訳（PNG入力queue/format変換/filter/x264）を、既存設定固定の段階再生診断で分離。静止区間だけ最適化しても先頭OOMを解消できない。
 2. 追加decoder buffer、Canvas native lifetime、PNG/encodeの重複を一候補ずつ検証。今回の11threads観測からfilter並列が原因と決めつけない。encoder/lookahead変更は別案として互換検証が必要。
-3. 1GBの実Worker静止ON→checkpoint復旧→30秒以上の順に別検証。Small向け試験は今回OOMのためPhase Fへ進めない。1GBは短時間の予備評価のみ、Medium本番保証なし。
+3. 1GBの実Worker資源測定と長い連続jobを次の別検証とする。Small向け長尺は短時間OOMのため進めない。1GBの予備評価はMedium本番保証ではない。
 
 [品質](AV_STATIC_QUALITY_V3.md) / [復旧](AV_STATIC_RECOVERY_V3.md) / [release gates](AV_STATIC_RELEASE_GATES_V3.md) / [machine measurements](evidence/av-static-v3/measurements.json)

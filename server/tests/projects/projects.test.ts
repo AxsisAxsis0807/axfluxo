@@ -583,3 +583,52 @@ it("bounds static image cache to two files and evicts only local reusable PNGs",
   expect((await stat(join(temp, "version-1.png"))).size).toBeGreaterThan(0);
   expect((await stat(join(temp, "version-2.png"))).size).toBeGreaterThan(0);
 }, 30000);
+it("v3: static ON completes real Worker checkpoints and reuses them after failed upload", async () => {
+  // Integration-only fixture: a single 60-frame version split into 12-frame
+  // segments supplies three eligible middles plus both fades. Not a memory run.
+  p.namesText = "Aleo One";
+  p.document!.clips[0].markersUs = [];
+  vi.stubEnv("VIDEO_RENDER_STATIC_COMPOSITE", "true");
+  const processes = await import("../../worker/render/process");
+  const observation = vi.spyOn(processes, "mediaProcess");
+  const originalHash = await fileHash(source);
+  const put = vi.spyOn(storage, "putRender").mockImplementation(async (key, path) => {
+    if (key.startsWith("render-outputs/"))
+      throw Object.assign(new Error("synthetic upload interruption"), { $metadata: { httpStatusCode: 503 } });
+    if (storage.objects.has(key)) throw new Error("immutable");
+    storage.objects.set(key, await readFile(path));
+  });
+  try {
+    await request(`/projects/${p.id}`, p);
+    expect((await request(`/projects/${p.id}/render`, {}, 1)).status).toBe(202);
+    const worker = engine.asRole("axfluxo_video_render");
+    const c = await claim(worker);
+    expect(c?.project).toEqual(p);
+    const settings = { directory: dir, maxWorkBytes: 1024 ** 3, minFreeBytes: 64 * 1024 ** 2, segmentFrames: 12 };
+    expect(await executeRender(worker, storage, c!, settings)).toMatchObject({ state: "stopped", code: "STORAGE_TRANSIENT" });
+    const staticCalls = observation.mock.calls.filter(([program, args]) =>
+      program === "ffmpeg" && args.some((arg, i) => arg === "-i" && /av-static-0\.png$/.test(args[i + 1] ?? "")),
+    );
+    expect(staticCalls).toHaveLength(3);
+    const generated = observation.mock.calls.filter(([program, args]) => program === "ffmpeg" && /av-static-0\.png$/.test(args.at(-1) ?? ""));
+    expect(generated).toHaveLength(1);
+    // A ready checkpoint exists only after real encode and full video validation.
+    const ready = await engine.query("SELECT * FROM axfluxo_video.render_objects WHERE job_id=$1 AND kind='segment' AND ready", [c!.job]);
+    expect(ready.rows).toHaveLength(5);
+    expect((await engine.query("SELECT * FROM axfluxo_video.render_outputs WHERE job_id=$1", [c!.job])).rows).toHaveLength(0);
+    put.mockRestore();
+    observation.mockClear();
+    await engine.query("UPDATE axfluxo_video.render_executions SET next_at=clock_timestamp()-interval '1 second' WHERE job_id=$1", [c!.job]);
+    const retry = await claim(worker);
+    expect(retry?.job).toBe(c!.job);
+    expect(BigInt(retry!.token)).toBeGreaterThan(BigInt(c!.token));
+    expect(await executeRender(worker, storage, retry!, settings)).toMatchObject({ state: "succeeded" });
+    expect(observation.mock.calls.some(([program, args]) => program === "ffmpeg" && args.some(arg => /av-static-0\.png$/.test(arg)))).toBe(false);
+    const outputs = await engine.query("SELECT * FROM axfluxo_video.render_outputs WHERE job_id=$1", [c!.job]);
+    expect(outputs.rows).toHaveLength(1);
+    expect(Number(outputs.rows[0].frame_count)).toBe(60);
+    expect(await fileHash(source)).toBe(originalHash);
+  } finally {
+    put.mockRestore(); observation.mockRestore(); vi.unstubAllEnvs();
+  }
+}, 120000);

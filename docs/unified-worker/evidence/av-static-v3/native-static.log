@@ -1,0 +1,8 @@
+
+ RUN  v5.0.5 /workspace/axfluxo-av-v3
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 13 skipped (14)
+   Start at  09:22:26
+   Duration  19.88s (tests 96%, import 3%, transform 1%)

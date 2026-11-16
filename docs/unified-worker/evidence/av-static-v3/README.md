@@ -1,15 +1,15 @@
 # v3 evidence
 
-- `measurements.json`: 18独立ケース（Phase B6 + C4 + D4 + E4）、cgroup前後・CPU・Node・process phase sampled peaks・raw log hash。
+- `measurements.json`: 独立ケース（Phase B6 + C4 + D4 + E4、追加Phase F2は1GB/30秒の別条件）、cgroup前後・CPU・Node・process phase sampled peaks・raw log hash。
 - `binary-manifest.json`: image rootfsのファイルSHA/サイズ。機密設定/環境は含めない。
 - `path-verification.json`: 適用条件/実FFmpeg正常close/cache再利用の突合。512MB/MiB ONはstatic未到達INVALID。
-- `quality-A/B/C/E1/E2.json`: 全framehash/PTS、probe、完成hash、decoded PCM hash。
+- `quality-A/B/C/E1/E2/F.json`: 全framehash/PTS、probe、完成hash、decoded PCM hash。
 - `timer-templates.json`: Reference ONの指定9frameに対する既知時計文字列の最小画素誤差。
 - `recovery-synchronous.json`, `recovery-poison.json`: 性能試験とは別の実停止・再生成。
 - `native-results.json`, `tests-*.log`: 隔離loopback PostgreSQLの既存47件（末尾空白のみ正規化、rawはローカル保持）。
 - `cleanup.jsonl`: この監査の停止済みコンテナを/work全保存後に削除した記録。画像/volume/prune操作なし。
 
-Raw logs、全25ms samples、画像/MP4、Docker archiveは`/workspace/axfluxo-av-v3/work/av-v3`に保持。Gitには合成メディアを含めない。各caseのimage/bundle SHAを照合して再現する。実Worker静止ON、本番image、Blitz cgroup、長尺は未検証。
+Raw logs、全25ms samples、画像/MP4、Docker archiveは`/workspace/axfluxo-av-v3/work/av-v3`に保持。Gitには合成メディアを含めない。各caseのimage/bundle SHAを照合して再現する。実Worker静止ONは1秒/12-frame segmentのupload/checkpoint統合smokeのみ。本番image、Blitz cgroup、長期連続jobは未検証。
 
 再現:
 
@@ -33,3 +33,5 @@ python3 scripts/resource-audit/stop-v3.py work/av-v3/NEW_RECOVERY
 ```
 
 必要な場合だけ、`cleanup-static-v3.py`で今回の正確な診断image/label/prefixと停止状態を検査し、全/workとSHAを保存してから対象containerのみ削除する。既存/稼働中container、image、volumeは削除しない。Docker VFSではルート層複製があり、writable表示だけから空き容量を推定しない。
+
+追加統合再現: `python3 scripts/resource-audit/native-tests.py NEW_DIR --static-v3-projects`（専用loopback DBのみ、既存DB不使用）。

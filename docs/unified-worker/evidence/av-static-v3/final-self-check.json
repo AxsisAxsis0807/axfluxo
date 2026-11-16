@@ -1,0 +1,35 @@
+{
+  "checks": {
+    "oneFrozenImage": true,
+    "oneFrozenBundle": true,
+    "finalBundleMatches": true,
+    "allEffectiveNodeFlagsMatch": true,
+    "dockerMemoryRequestsExact": true,
+    "smallCgroupLimitsExact": true,
+    "actualLimitsMatch4096ByteFloor": true,
+    "noAdditionalSwap": true,
+    "cpuLimitsExact": true,
+    "smallOomRepeated": true,
+    "fiveSecondInputsIdentical": true,
+    "successfulOutputsNoOom": true,
+    "noProductionCodeDiff": true,
+    "allQualityPairsExact": true,
+    "diskReservesMet": true,
+    "fiveSynchronousStopsRestart": true,
+    "poisonRegeneratedForeignPreserved": true
+  },
+  "auditViews": {
+    "spec": "PASS",
+    "code": "PASS",
+    "security": "PASS",
+    "resources": "HOLD",
+    "qualityRecovery": "PARTIAL"
+  },
+  "observations": {
+    "oneGbRequestedBytes": 1000000000,
+    "oneGbActualCgroupBytes": 999997440,
+    "exactAllLimitsInitialCheck": false,
+    "reason": "1GB is rounded down by 2560 bytes to 4096-byte pages; Small limits exact, no relaxation."
+  },
+  "note": "Self-audit only. Passing evidence-integrity checks do not make the 512MB job pass."
+}

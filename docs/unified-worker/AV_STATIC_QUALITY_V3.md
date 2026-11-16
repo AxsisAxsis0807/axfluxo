@@ -1,6 +1,6 @@
 # 静止画合成 品質 v3
 
-対象は単体新All VersionsレンダラーのA（5秒1タイトル）、B（15秒3タイトル）、C（15秒Reference3タイトル）、1GBのA独立2組。OFF/ONは同じimage/bundle/input。画質パラメーター変更なし。
+対象は単体新All VersionsレンダラーのA（5秒1タイトル）、B（15秒3タイトル）、C（15秒Reference3タイトル）、1GBのA独立2組と追加F（30秒3タイトル/1GB）ペア。OFF/ONは同じimage/bundle/input。画質パラメーター変更なし。
 
 ## 全フレーム・音声
 
@@ -13,6 +13,10 @@
 1GB Aの4出力もAと同じSHA/size。映像全デコードframehash SHA-256、フレームPTS/duration、48kHz stereo PCMデコードSHA/サンプル数を比較。完成MP4が完全同一なので、この入力ではタイトル位置・背景・カバー・フェード・タイマー・セグメント境界もOFF/ON間で同一。目視だけの判定ではない。PSNR/SSIMはバイト/画素一致時には不要（PSNRは無限大相当、SSIM=1相当）。差異がある場合に計算するスクリプトも用意。
 
 1920×1080、H.264、60/1、yuv420p、BT.709 metadataをprobe保存。300/900 frames、video duration5/15秒。AACのdecoded audioSamplesはA240,640、B/C720,896（AAC frame padding込み）でOFF/ON一致。48kHz換算5/15秒の内容とパディングを区別する。新たな境界音声primingを足していない。`assemble`の既存encode-once/検証仕様は保持。
+
+## 追加F（1GB・30秒）
+
+OFF/ONとも1800frames、audioSamples1,440,768、完成2,678,108 B、MP4 SHA `21708b54a7b32e133e47e9eb6cda0d7cb87da4d23ddeb267993ce86ba2e56fc0`。30セグメントを検証後結合。静止24segment、PNG生成3・再利用21、各バージョン両端のfade6segment。全デコード/PTS/PCMの比較結果は[quality-F.json](evidence/av-static-v3/quality-F.json)。1GBで1組の予備評価であり、512MB長尺の品質/資源PASSではない。
 
 ## 適用区間
 
@@ -28,4 +32,4 @@ C-ONの静止区間に対して、既知の文字列00:01〜00:05を同じフォ
 
 ## 限界
 
-完全一致はこの合成入力と診断バイナリに限る。1GBでの複数タイトル/Reference反復、30秒以上、本番Dockerfile、実ユーザーメディア、静止ONの実Worker統合は未検証。512MB/MiBでは完成動画なし、品質PASSは付けない。[quality-A/B/C/E1/E2 JSON](evidence/av-static-v3/quality-A.json)に映像stream/全PTS/framehash/音声hashを保存。
+完全一致はこの合成入力と診断バイナリに限る。1GBでの複数タイトル/Reference反復、本番Dockerfile、実ユーザーメディア、静止ON実Workerの512MB資源試験は未検証。512MB/MiBでは完成動画なし、品質PASSは付けない。[quality-A/B/C/E1/E2 JSON](evidence/av-static-v3/quality-A.json)に映像stream/全PTS/framehash/音声hashを保存。

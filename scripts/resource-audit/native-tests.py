@@ -29,6 +29,8 @@ try:
     records = []
     repos = [arg for arg in sys.argv[2:] if not arg.startswith("--")] or [str(Path.cwd())]
     suites = ["drive-cloud.test.ts"] if "--drive-only" in sys.argv else ["cloud-export.test.ts", "cloud-export-render.test.ts", "render/render.test.ts", "drive-cloud.test.ts"]
+    if "--static-v3-projects" in sys.argv:
+        suites = ["projects/projects.test.ts"]
     if "--no-drive" in sys.argv:
         suites = [suite for suite in suites if suite != "drive-cloud.test.ts"]
     for index, repo in enumerate(repos):
@@ -40,7 +42,7 @@ try:
             subprocess.run(["docker", "exec", name, "createdb", "-U", "postgres", dbname], check=True)
             test_env = dict(os.environ, AXFLUXO_TEST_POSTGRES_URL=f"postgres://postgres:{env['POSTGRES_PASSWORD']}@127.0.0.1:{port}/{dbname}")
             with (out / f"tests-{index}-{suite_index}.log").open("w") as log:
-                result = subprocess.run(["./node_modules/.bin/vitest", "run", "server/tests/" + suite, "--maxWorkers=1"],
+                result = subprocess.run(["./node_modules/.bin/vitest", "run", "server/tests/" + suite, "--maxWorkers=1", *( ["-t", "v3: static ON"] if "--static-v3-projects" in sys.argv else [])],
                                         cwd=repo, env=test_env, stdout=log, stderr=subprocess.STDOUT)
             records.append(dict(repo=str(repo), suite=suite, exitCode=result.returncode))
             (out / "results.json").write_text(json.dumps(dict(container=name, results=records), indent=2))
