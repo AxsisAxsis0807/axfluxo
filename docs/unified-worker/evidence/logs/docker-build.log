@@ -1,0 +1,148 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 3.40kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:24.19.0-bookworm-slim
+#2 DONE 5.6s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 239B done
+#3 DONE 0.0s
+
+#4 [build 1/9] FROM docker.io/library/node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df
+#4 resolve docker.io/library/node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df done
+#4 ...
+
+#5 [internal] load build context
+#5 transferring context: 10.78MB 0.1s done
+#5 DONE 0.1s
+
+#4 [build 1/9] FROM docker.io/library/node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df
+#4 sha256:990581063f5c8a03a57db7a0d116679ea6e6e335d4ac48ef457f26f82d917eba 0B / 3.32kB 0.2s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 0B / 50.50MB 0.2s
+#4 sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df 3.93kB / 3.93kB done
+#4 sha256:e5a8dee7bc1e6a215d224a7ef8206f7e77271bc3cabd5febf2beafac0674f174 1.93kB / 1.93kB done
+#4 sha256:622f209f6c16ba5af4d9a337cae6577d096f17174b904cfc6a5b0c81a2679c24 6.76kB / 6.76kB done
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 0B / 28.23MB 0.2s
+#4 sha256:990581063f5c8a03a57db7a0d116679ea6e6e335d4ac48ef457f26f82d917eba 3.32kB / 3.32kB 1.6s done
+#4 sha256:f95897c2a1fb7bce26b018dd74b2845f816f7b86d5adff2939c6482b1d5b474c 0B / 1.71MB 1.7s
+#4 sha256:f95897c2a1fb7bce26b018dd74b2845f816f7b86d5adff2939c6482b1d5b474c 1.05MB / 1.71MB 3.1s
+#4 sha256:f95897c2a1fb7bce26b018dd74b2845f816f7b86d5adff2939c6482b1d5b474c 1.71MB / 1.71MB 3.5s done
+#4 sha256:c35748eaa5ecc949b0f7cc349a9f7c4a5417dc008e2d9bebd53678d87238fcbf 0B / 450B 3.6s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 2.10MB / 28.23MB 3.7s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 3.15MB / 50.50MB 4.3s
+#4 sha256:c35748eaa5ecc949b0f7cc349a9f7c4a5417dc008e2d9bebd53678d87238fcbf 450B / 450B 4.7s done
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 4.19MB / 28.23MB 5.2s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 6.29MB / 50.50MB 6.4s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 6.29MB / 28.23MB 6.6s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 8.39MB / 28.23MB 8.1s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 9.44MB / 50.50MB 8.6s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 10.49MB / 28.23MB 9.4s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 12.58MB / 50.50MB 10.6s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 12.58MB / 28.23MB 10.8s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 14.68MB / 28.23MB 12.3s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 15.73MB / 50.50MB 12.8s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 16.78MB / 28.23MB 13.7s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 18.87MB / 50.50MB 14.9s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 18.87MB / 28.23MB 15.1s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 20.97MB / 28.23MB 16.6s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 22.02MB / 50.50MB 17.1s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 23.07MB / 28.23MB 18.1s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 25.17MB / 50.50MB 19.1s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 25.17MB / 28.23MB 19.7s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 27.26MB / 28.23MB 21.0s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 28.31MB / 50.50MB 21.3s
+#4 sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 28.23MB / 28.23MB 21.7s done
+#4 extracting sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 0.1s
+#4 extracting sha256:a8ac7f6c67abc236e4c745052c404112b8fab6fe8ac3a329d1ef3b867ad67c71 0.9s done
+#4 extracting sha256:990581063f5c8a03a57db7a0d116679ea6e6e335d4ac48ef457f26f82d917eba done
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 31.46MB / 50.50MB 23.4s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 34.60MB / 50.50MB 25.6s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 37.75MB / 50.50MB 27.6s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 40.89MB / 50.50MB 29.8s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 44.04MB / 50.50MB 32.0s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 47.19MB / 50.50MB 34.1s
+#4 sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 50.50MB / 50.50MB 35.2s done
+#4 extracting sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4
+#4 extracting sha256:4996e33358abd29e5daf56cdda6681efb4db3bd55b5ab63a7d3d44f8400195a4 1.5s done
+#4 extracting sha256:f95897c2a1fb7bce26b018dd74b2845f816f7b86d5adff2939c6482b1d5b474c
+#4 extracting sha256:f95897c2a1fb7bce26b018dd74b2845f816f7b86d5adff2939c6482b1d5b474c 0.4s done
+#4 extracting sha256:c35748eaa5ecc949b0f7cc349a9f7c4a5417dc008e2d9bebd53678d87238fcbf done
+#4 DONE 37.9s
+
+#6 [build 2/9] WORKDIR /app
+#6 DONE 0.8s
+
+#7 [runtime 3/4] RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work
+#7 ...
+
+#8 [build 3/9] COPY package.json package-lock.json ./
+#8 DONE 1.0s
+
+#9 [build 4/9] COPY server/package.json server/package.json
+#9 DONE 0.6s
+
+#7 [runtime 3/4] RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work
+#7 1.425 Ign:1 http://deb.debian.org/debian bookworm InRelease
+#7 1.426 Ign:2 http://deb.debian.org/debian bookworm-updates InRelease
+#7 1.426 Ign:3 http://deb.debian.org/debian-security bookworm-security InRelease
+#7 7.433 Ign:1 http://deb.debian.org/debian bookworm InRelease
+#7 ...
+
+#10 [build 5/9] RUN npm ci --ignore-scripts --workspace=axfluxo-video-server --include-workspace-root=false
+#10 ...
+
+#7 [runtime 3/4] RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work
+#7 12.44 Ign:2 http://deb.debian.org/debian bookworm-updates InRelease
+#7 17.44 Ign:3 http://deb.debian.org/debian-security bookworm-security InRelease
+#7 22.45 Ign:1 http://deb.debian.org/debian bookworm InRelease
+#7 27.46 Ign:2 http://deb.debian.org/debian bookworm-updates InRelease
+#7 32.46 Ign:3 http://deb.debian.org/debian-security bookworm-security InRelease
+#7 37.47 Err:1 http://deb.debian.org/debian bookworm InRelease
+#7 37.47   Temporary failure resolving 'deb.debian.org'
+#7 47.48 Err:2 http://deb.debian.org/debian bookworm-updates InRelease
+#7 47.48   Temporary failure resolving 'deb.debian.org'
+#7 57.49 Err:3 http://deb.debian.org/debian-security bookworm-security InRelease
+#7 57.49   Temporary failure resolving 'deb.debian.org'
+#7 57.49 Reading package lists...
+#7 57.50 W: Failed to fetch http://deb.debian.org/debian/dists/bookworm/InRelease  Temporary failure resolving 'deb.debian.org'
+#7 57.50 W: Failed to fetch http://deb.debian.org/debian/dists/bookworm-updates/InRelease  Temporary failure resolving 'deb.debian.org'
+#7 57.50 W: Failed to fetch http://deb.debian.org/debian-security/dists/bookworm-security/InRelease  Temporary failure resolving 'deb.debian.org'
+#7 57.50 W: Some index files failed to download. They have been ignored, or old ones used instead.
+#7 57.51 Reading package lists...
+#7 57.52 E: Unable to locate package ffmpeg
+#7 57.52 E: Package 'ca-certificates' has no installation candidate
+#7 57.52 Building dependency tree...
+#7 57.52 Reading state information...
+#7 57.52 Package ca-certificates is not available, but is referred to by another package.
+#7 57.52 This may mean that the package is missing, has been obsoleted, or
+#7 57.52 is only available from another source
+#7 57.52 
+#7 ERROR: process "/bin/sh -c apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work" did not complete successfully: exit code: 100
+
+#10 [build 5/9] RUN npm ci --ignore-scripts --workspace=axfluxo-video-server --include-workspace-root=false
+#10 CANCELED
+------
+ > [runtime 3/4] RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work:
+57.50 W: Some index files failed to download. They have been ignored, or old ones used instead.
+57.51 Reading package lists...
+57.52 E: Unable to locate package ffmpeg
+57.52 E: Package 'ca-certificates' has no installation candidate
+57.52 Building dependency tree...
+57.52 Reading state information...
+57.52 Package ca-certificates is not available, but is referred to by another package.
+57.52 This may mean that the package is missing, has been obsoleted, or
+57.52 is only available from another source
+57.52 
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NODE_ENV=production VIDEO_RENDER_DISK=/work VIDEO_RENDER_ENABLED=false VIDEO_ALEO_FONT=/app/assets/Aleo.ttf VIDEO_FNF_FONT=/app/assets/NotoSansJP.ttf AXFLUXO_MIGRATIONS_DIR=/app/migrations
+  18 |     STOPSIGNAL SIGTERM
+  19 | >>> RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work
+  20 |     COPY --from=build /runtime/ ./
+  21 |     USER node:node
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work" did not complete successfully: exit code: 100

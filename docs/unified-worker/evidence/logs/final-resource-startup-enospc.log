@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/app/sample.py", line 24, in <module>
+    out.mkdir(parents=True, mode=0o700)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/pathlib/_local.py", line 724, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+OSError: [Errno 28] No space left on device: '/work/result'

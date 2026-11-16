@@ -1,0 +1,45 @@
+
+> axfluxo@0.1.0 prebuild
+> node scripts/build-boundary-worker.mjs
+
+
+> axfluxo@0.1.0 build
+> next build
+
+▲ Next.js 16.4.2 (Turbopack)
+✓ Running next.config.ts took 24ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 7.1s
+  Running TypeScript ...
+  Finished TypeScript in 4.4s ...
+  Collecting page data using 2 workers ...
+  Generating static pages using 2 workers (0/9) ...
+  Generating static pages using 2 workers (2/9) 
+  Generating static pages using 2 workers (4/9) 
+  Generating static pages using 2 workers (6/9) 
+✓ Generating static pages using 2 workers (9/9) in 227ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /developer/all-versions
+├ ○ /developer/fnf-showcase
+├ ○ /developer/library
+├ ○ /developer/preview
+├ ○ /developer/studio
+└ ○ /developer/video
+
+
+○  (Static)  prerendered as static content
+
+
+> axfluxo@0.1.0 postbuild
+> node scripts/postbuild.mjs
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice

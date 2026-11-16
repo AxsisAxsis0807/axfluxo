@@ -1,0 +1,52 @@
+
+> build:worker
+> esbuild worker/runtime/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/worker.mjs
+
+
+  ../work/video-server/worker.mjs  247.3kb
+
+⚡ Done in 107ms
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+
+> build:export-worker
+> esbuild cloud-export/worker.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/export-worker.mjs
+
+
+  ../work/video-server/export-worker.mjs  85.4kb
+
+⚡ Done in 24ms
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+
+> build:render
+> esbuild worker/render/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/render.mjs
+
+
+  ../work/video-server/render.mjs  247.4kb
+
+⚡ Done in 92ms
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+
+> build
+> esbuild api/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/api.mjs
+
+
+  ../work/video-server/api.mjs  255.6kb
+
+⚡ Done in 98ms
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice

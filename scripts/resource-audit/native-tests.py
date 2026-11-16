@@ -29,6 +29,8 @@ try:
     records = []
     repos = [arg for arg in sys.argv[2:] if not arg.startswith("--")] or [str(Path.cwd())]
     suites = ["drive-cloud.test.ts"] if "--drive-only" in sys.argv else ["cloud-export.test.ts", "cloud-export-render.test.ts", "render/render.test.ts", "drive-cloud.test.ts"]
+    if "--no-drive" in sys.argv:
+        suites = [suite for suite in suites if suite != "drive-cloud.test.ts"]
     for index, repo in enumerate(repos):
         for suite_index, suite in enumerate(suites):
             if shutil.disk_usage(Path.cwd()).free < 512 * 1024 ** 2:

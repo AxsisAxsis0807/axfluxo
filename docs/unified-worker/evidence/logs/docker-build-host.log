@@ -1,0 +1,88 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 3.40kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:24.19.0-bookworm-slim
+#2 DONE 0.7s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 239B done
+#3 DONE 0.0s
+
+#4 [build 1/9] FROM docker.io/library/node:24.19.0-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df
+#4 DONE 0.0s
+
+#5 [build 2/9] WORKDIR /app
+#5 CACHED
+
+#6 [internal] load build context
+#6 transferring context: 9.06kB done
+#6 DONE 0.0s
+
+#7 [build 3/9] COPY package.json package-lock.json ./
+#7 CACHED
+
+#8 [build 4/9] COPY server/package.json server/package.json
+#8 CACHED
+
+#9 [build 5/9] RUN npm ci --ignore-scripts --workspace=axfluxo-video-server --include-workspace-root=false
+#9 ...
+
+#10 [runtime 3/4] RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work
+#10 4.430 Ign:1 http://deb.debian.org/debian bookworm InRelease
+#10 9.433 Ign:2 http://deb.debian.org/debian bookworm-updates InRelease
+#10 9.435 Ign:3 http://deb.debian.org/debian-security bookworm-security InRelease
+#10 14.44 Ign:1 http://deb.debian.org/debian bookworm InRelease
+#10 14.44 Ign:2 http://deb.debian.org/debian bookworm-updates InRelease
+#10 19.45 Ign:3 http://deb.debian.org/debian-security bookworm-security InRelease
+#10 19.45 Ign:1 http://deb.debian.org/debian bookworm InRelease
+#10 24.47 Ign:2 http://deb.debian.org/debian bookworm-updates InRelease
+#10 24.48 Ign:3 http://deb.debian.org/debian-security bookworm-security InRelease
+#10 29.49 Err:1 http://deb.debian.org/debian bookworm InRelease
+#10 29.49   Temporary failure resolving 'deb.debian.org'
+#10 29.49 Err:2 http://deb.debian.org/debian bookworm-updates InRelease
+#10 29.49   Temporary failure resolving 'deb.debian.org'
+#10 34.50 Err:3 http://deb.debian.org/debian-security bookworm-security InRelease
+#10 34.50   Temporary failure resolving 'deb.debian.org'
+#10 34.50 Reading package lists...
+#10 34.51 W: Failed to fetch http://deb.debian.org/debian/dists/bookworm/InRelease  Temporary failure resolving 'deb.debian.org'
+#10 34.51 W: Failed to fetch http://deb.debian.org/debian/dists/bookworm-updates/InRelease  Temporary failure resolving 'deb.debian.org'
+#10 34.51 W: Failed to fetch http://deb.debian.org/debian-security/dists/bookworm-security/InRelease  Temporary failure resolving 'deb.debian.org'
+#10 34.51 W: Some index files failed to download. They have been ignored, or old ones used instead.
+#10 34.52 Reading package lists...
+#10 34.53 Building dependency tree...
+#10 34.53 Reading state information...
+#10 34.53 Package ca-certificates is not available, but is referred to by another package.
+#10 34.53 This may mean that the package is missing, has been obsoleted, or
+#10 34.53 is only available from another source
+#10 34.53 
+#10 34.53 E: Unable to locate package ffmpeg
+#10 34.53 E: Package 'ca-certificates' has no installation candidate
+#10 ERROR: process "/bin/sh -c apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work" did not complete successfully: exit code: 100
+
+#9 [build 5/9] RUN npm ci --ignore-scripts --workspace=axfluxo-video-server --include-workspace-root=false
+#9 CANCELED
+------
+ > [runtime 3/4] RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work:
+34.51 W: Some index files failed to download. They have been ignored, or old ones used instead.
+34.52 Reading package lists...
+34.53 Building dependency tree...
+34.53 Reading state information...
+34.53 Package ca-certificates is not available, but is referred to by another package.
+34.53 This may mean that the package is missing, has been obsoleted, or
+34.53 is only available from another source
+34.53 
+34.53 E: Unable to locate package ffmpeg
+34.53 E: Package 'ca-certificates' has no installation candidate
+------
+Dockerfile:19
+--------------------
+  17 |     ENV NODE_ENV=production VIDEO_RENDER_DISK=/work VIDEO_RENDER_ENABLED=false VIDEO_ALEO_FONT=/app/assets/Aleo.ttf VIDEO_FNF_FONT=/app/assets/NotoSansJP.ttf AXFLUXO_MIGRATIONS_DIR=/app/migrations
+  18 |     STOPSIGNAL SIGTERM
+  19 | >>> RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work
+  20 |     COPY --from=build /runtime/ ./
+  21 |     USER node:node
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* && mkdir -p /work && chown node:node /work" did not complete successfully: exit code: 100

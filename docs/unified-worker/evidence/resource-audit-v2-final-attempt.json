@@ -1,0 +1,503 @@
+{
+  "schema": 1,
+  "manifests": [
+    {
+      "image": "sha256:0046f2ff40892f91ff23d0641763567524d7d75efc860f4507fcff2ac61f6f75",
+      "baseline": "81d6c739a797e95386855ad1b78313a88e9b1077",
+      "candidateGit": "b60c7372cf449d10c2984453a598dee20692855e",
+      "bundles": {
+        "baseline": "6b489b8ccd332bc69858fc27cb628949d2441d04bde5e04e7bb78c4c4dcbf555",
+        "candidate": "87dd7ed28e69792cd6764e992433e72418eca62c2312b09e2f1c639575d1e780"
+      },
+      "cpuLimit": 1,
+      "swap": "disabled: memory-swap equals memory",
+      "profiles": {
+        "U": 2147483648,
+        "M": 1000000000,
+        "S": 536870912
+      },
+      "kind": "synthetic offline render; no DB/publish/provider"
+    }
+  ],
+  "records": [
+    {
+      "label": "U-legacy-1-simple-1-60-baseline-1",
+      "container": "axfluxo-audit-1794815110-u-legacy-1-simple-1-60-baseline-1",
+      "profile": "U",
+      "version": "baseline",
+      "fixture": [
+        "legacy",
+        1,
+        "simple",
+        1,
+        60
+      ],
+      "repeat": 1,
+      "artifactCopyExit": 1,
+      "dockerStartExit": 1,
+      "state": {
+        "ExitCode": 1,
+        "OOMKilled": false,
+        "Error": ""
+      }
+    },
+    {
+      "label": "U-legacy-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-legacy-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-legacy-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-unified-1-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-unified-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-unified-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-unified-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-render-1-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-render-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-render-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-render-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-fnf-1-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-fnf-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-fnf-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-fnf-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "U-legacy-5-complex-3-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "U-legacy-5-complex-3-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "U-unified-5-complex-3-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "U-unified-5-complex-3-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "U-render-5-complex-3-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "U-render-5-complex-3-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "U-fnf-5-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "U-fnf-5-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "U-legacy-30-complex-3-300-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "U-legacy-30-complex-3-300-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "U-unified-30-complex-3-300-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "U-unified-30-complex-3-300-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "U-render-30-complex-3-300-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "U-render-30-complex-3-300-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "M-legacy-1-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-legacy-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-legacy-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-legacy-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-unified-1-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-unified-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-unified-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-unified-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-render-1-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-render-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-render-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-render-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-fnf-1-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-fnf-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-fnf-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-fnf-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "M-legacy-5-complex-3-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "M-legacy-5-complex-3-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "M-unified-5-complex-3-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "M-unified-5-complex-3-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "M-render-5-complex-3-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "M-render-5-complex-3-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "M-fnf-5-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "M-fnf-5-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 578813952
+    },
+    {
+      "label": "M-legacy-30-complex-3-300-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "M-legacy-30-complex-3-300-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "M-unified-30-complex-3-300-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "M-unified-30-complex-3-300-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "M-render-30-complex-3-300-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "M-render-30-complex-3-300-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 2399141888
+    },
+    {
+      "label": "S-legacy-1-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-legacy-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-legacy-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-legacy-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-unified-1-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-unified-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-unified-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-unified-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-render-1-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-render-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-render-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-render-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-fnf-1-simple-1-60-baseline-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-fnf-1-simple-1-60-baseline-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-fnf-1-simple-1-60-candidate-1",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    },
+    {
+      "label": "S-fnf-1-simple-1-60-candidate-2",
+      "status": "BLOCKED_DISK",
+      "freeBytes": 0,
+      "requiredFreeBytes": 545259520
+    }
+  ],
+  "comparisons": [],
+  "gitHeadAtEvidenceGeneration": "b60c7372cf449d10c2984453a598dee20692855e",
+  "sourceHashesAtEvidenceGeneration": {
+    "server/worker/templates/all-versions/render.ts": "eef4e217cc7a9eef1bdb65d1d1b450c252c9d622d11f7b0edeb3ccc8a60c5ba3",
+    "server/worker/templates/all-versions/reference-render.ts": "f32c54cac7e8e6f3d9aa248c04bc802a441b7e16be8399ba8f06beb095424241",
+    "server/worker/templates/fnf-showcase/render.ts": "f512a266bc75e491a9bd0715f5572f75f635ef13beb05ff5f7e72300a9263689",
+    "server/tests/resource-audit-fixture.ts": "5234b67c092669fbb04c265bdead58cbbd22530daa0096bb28d3a5ac8d5fa301"
+  }
+}
