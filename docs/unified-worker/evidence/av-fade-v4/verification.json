@@ -1,0 +1,25 @@
+{
+  "checks": {
+    "baselineInputMatchesV3": true,
+    "runtimeFilesMatchV3": true,
+    "allFinalized": true,
+    "memoryPageFloor": true,
+    "zeroSwap": true,
+    "cpuQuota": true,
+    "containerIsolation": true,
+    "diskReserves": true,
+    "ownStoppedArchived": true,
+    "baselineOomRepeat": true,
+    "candidateAStaticOomRepeat": true,
+    "candidateBShort3CompleteNoOom": true,
+    "staticActuallyCompleted": true,
+    "sameBInputCodeImage": true,
+    "longerOomNotHidden": true,
+    "noLonger512AfterOom": true,
+    "qualityAllExact": true,
+    "productionCodeUnchanged": true
+  },
+  "status": "PASS_EVIDENCE_INVARIANTS",
+  "overall": "HOLD",
+  "reason": "candidate B 15-second 512MB OOM; short-job pass is limited, no release approval"
+}

@@ -1,0 +1,16 @@
+{
+  "bundles": {
+    "base": "bbe143e2b06298e5585e7c57b4d141bea8e53c611024122252a7722489cc25d6",
+    "B": "7dd1614130de08a3baa4a14bc0fa88f4753452c6586fdda0bfc4e99d7cbd5e2f"
+  },
+  "markersUs": [
+    4250000,
+    9100000
+  ],
+  "versionFrames": [
+    255,
+    291,
+    354
+  ],
+  "productionRenderer": "base unchanged; candidate-B renderers unchanged; only fixture markers/evidence extension"
+}

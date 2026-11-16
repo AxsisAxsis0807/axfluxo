@@ -1,0 +1,67 @@
+{
+  "overall": "HOLD",
+  "views": [
+    {
+      "round": 1,
+      "view": "spec/design",
+      "status": "PASS",
+      "evidence": [
+        "runtime-identity.json",
+        "quality-Reference.json",
+        "quality-boundary.json"
+      ]
+    },
+    {
+      "round": 2,
+      "view": "code/implementation",
+      "status": "PASS",
+      "evidence": [
+        "checks.json",
+        "source-manifest.json",
+        "verification.json"
+      ]
+    },
+    {
+      "round": 3,
+      "view": "resource/reproducibility",
+      "status": "HOLD",
+      "evidence": [
+        "measurements.json",
+        "RESULTS.md"
+      ],
+      "reason": "candidate B 15s 512MB segment5 OOM"
+    },
+    {
+      "round": 4,
+      "view": "quality/recovery",
+      "status": "PARTIAL",
+      "evidence": [
+        "quality-30.json",
+        "recovery.json",
+        "recovery-invalid-png.json",
+        "checks.json"
+      ],
+      "reason": "no full Worker+real-storage SIGKILL/publication-boundary integration"
+    },
+    {
+      "round": 5,
+      "view": "security/release",
+      "status": "PASS",
+      "evidence": [
+        "pr-status-final.json",
+        "verification.json"
+      ],
+      "reason": "production unchanged; no merge/deploy/admission/payment/production-data operation"
+    }
+  ],
+  "selfAuditOnly": true,
+  "externalIndependentReview": false,
+  "diskFinal": {
+    "total": 67586535424,
+    "used": 17484771328,
+    "free": 46649016320
+  },
+  "preservedDbContainers": 2,
+  "preservedDbVolumes": 2,
+  "allOwnedMediaContainersArchivedThenRemoved": true
+}

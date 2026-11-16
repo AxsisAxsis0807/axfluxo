@@ -1,0 +1,33 @@
+{
+  "baseline": "4159f194f6e9f37a9f402ed84542df18f04ba22f",
+  "initialLocalHead": "1c88efb614e3d15ef9a8f371e8016076a8c7ef68",
+  "initialBranch": "work",
+  "initialDirty": false,
+  "remoteV3": "4159f194f6e9f37a9f402ed84542df18f04ba22f",
+  "remoteV4InitiallyAbsent": true,
+  "binaryManifestDifferences": {},
+  "baselineBundleSha256": "f3d031760b2b5874636d4c9f5bb31845f1144142fb26dfc129cd15796c09d2de",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "disk": {
+    "total": 67586535424,
+    "used": 6470144000,
+    "free": 57663643648
+  },
+  "hostCgroupMax": "8589934592",
+  "baselineBundleMatchesV3": true,
+  "observationAddition": "preload-v4.mjs; observes argv and last 32768 bytes stderr without rewriting arguments",
+  "inspectedSourceFiles": {
+    "server/worker/templates/all-versions/render.ts": "eef4e217cc7a9eef1bdb65d1d1b450c252c9d622d11f7b0edeb3ccc8a60c5ba3",
+    "server/worker/templates/all-versions/reference-render.ts": "f32c54cac7e8e6f3d9aa248c04bc802a441b7e16be8399ba8f06beb095424241",
+    "server/worker/templates/all-versions/graphics.ts": "bbfd2a4202c16836b65e1aa49549d37be79b985ba0b4e02391eec086b105b06e",
+    "server/worker/render/encode.ts": "a276a6c8aaf4bf10e17c2011774bc04a690fbe237ae935a44d3a6f391482b8d7",
+    "server/worker/render/process.ts": "b071e96f710766e8a0a37cb2d989a230481280c45e46370f60b363478614898a",
+    "server/worker/render/plan.ts": "a05cb6b4c1ab889c8ea49e0aa02a05f4110c93b40cceb17c76dba592a82e8d5b",
+    "server/tests/resource-audit-fixture.ts": "8c91d11454a065029dff62ca6b1c5de6d92cee920cd38a3b7c1a22729d57cbb5",
+    "scripts/resource-audit/sample.py": "718cb589e69d35538ceb2d6d2358647d11cd5fdc0caada68de5920f969fde81e",
+    "scripts/resource-audit/static-v3.py": "388f54fd42305116264f81053671d8fc0b4bc12ae677fce7f0412c28fa2f4774"
+  },
+  "v3MeasurementsSha256": "92d7bd391cc513250bfb4b48b0387fe66ef97257b1e280fd6c55a7b87ba6b228",
+  "candidateImplementationLocation": "/workspace/axfluxo-av-fade-v4-candidate; source moved outside tsconfig include scope after frozen builds; patches preserved in evidence; no production source adoption",
+  "runtimeFilesMatchV3ExceptObservation": true
+}

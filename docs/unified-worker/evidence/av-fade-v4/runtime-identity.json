@@ -1,0 +1,40 @@
+{
+  "manifestSha256": "60e166e828ceaea8dd24d2d49cd3a063fbdc0321a0df9d63bde2cd8fe478befe",
+  "v3SameFiles": true,
+  "addedOrChanged": {
+    "app/preload-v4.mjs": {
+      "bytes": 900,
+      "sha256": "80a3261b2c3c5d9b3d25cf0a0fd7e7fe3b970d69f401b614ab8c21def16bf13c"
+    }
+  },
+  "core": {
+    "usr/bin/node": {
+      "bytes": 125989464,
+      "sha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12"
+    },
+    "usr/bin/ffmpeg": {
+      "bytes": 366984,
+      "sha256": "e8a8d46f5225f3062cec7c07fb145d58ae73c603cb740dcd5bad34bfb54e455a"
+    },
+    "usr/bin/ffprobe": {
+      "bytes": 206504,
+      "sha256": "cefc5f81c0b18429cdbf8fa5a89e1e9c759235e10f93f9b329ff1b2fdff26f46"
+    },
+    "app/baseline.mjs": {
+      "bytes": 834209,
+      "sha256": "f3d031760b2b5874636d4c9f5bb31845f1144142fb26dfc129cd15796c09d2de"
+    },
+    "app/sample.py": {
+      "bytes": 6716,
+      "sha256": "718cb589e69d35538ceb2d6d2358647d11cd5fdc0caada68de5920f969fde81e"
+    },
+    "app/preload.mjs": {
+      "bytes": 2036,
+      "sha256": "e5808423909c3ec9ce4851169d8c412cd4e37f57f5a8cc622763ef9c3d156b95"
+    },
+    "app/preload-v4.mjs": {
+      "bytes": 900,
+      "sha256": "80a3261b2c3c5d9b3d25cf0a0fd7e7fe3b970d69f401b614ab8c21def16bf13c"
+    }
+  }
+}

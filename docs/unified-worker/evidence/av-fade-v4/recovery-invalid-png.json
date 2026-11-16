@@ -1,0 +1,61 @@
+{
+  "truncatedPngInjected": true,
+  "foreignSentinelPreserved": true,
+  "point": "png-generating",
+  "container": "axfluxo-av-fade-v4-stop-1794829544373341441",
+  "restart": "axfluxo-av-fade-v4-stop-1794829544373341441-restart",
+  "observation": {
+    "point": "png-generating",
+    "event": "png-process-spawned",
+    "nodePid": 7,
+    "mediaPid": 80,
+    "pngs": []
+  },
+  "validation": {
+    "schemaVersion": 1,
+    "width": 1920,
+    "height": 1080,
+    "codec": "h264",
+    "fps": 60,
+    "frames": 300,
+    "durationUs": 5000000,
+    "audioSamples": 240640,
+    "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+    "size": 488611
+  },
+  "scope": "standalone restart, NOT checkpoint/DB recovery",
+  "containerStates": {
+    "axfluxo-av-fade-v4-stop-1794829544373341441": {
+      "Status": "exited",
+      "Running": false,
+      "Paused": false,
+      "Restarting": false,
+      "OOMKilled": false,
+      "Dead": false,
+      "Pid": 0,
+      "ExitCode": 137,
+      "Error": "",
+      "StartedAt": "2026-11-16T11:45:49.022383073Z",
+      "FinishedAt": "2026-11-16T11:45:58.875181527Z"
+    },
+    "axfluxo-av-fade-v4-stop-1794829544373341441-restart": {
+      "Status": "exited",
+      "Running": false,
+      "Paused": false,
+      "Restarting": false,
+      "OOMKilled": false,
+      "Dead": false,
+      "Pid": 0,
+      "ExitCode": 0,
+      "Error": "",
+      "StartedAt": "2026-11-16T11:46:03.178066267Z",
+      "FinishedAt": "2026-11-16T11:46:24.146242916Z"
+    }
+  },
+  "expectedHashMatch": true,
+  "injectedPng": {
+    "validPngSignature": true,
+    "bytes": 17,
+    "sha256": "29b978c62617c817f5b0c06542f3e4dc7fcfef1aae90aa2736c674b4f5171c9b"
+  }
+}

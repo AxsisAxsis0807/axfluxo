@@ -1,0 +1,13 @@
+{
+  "scripts/resource-audit/collect-checks-v4.py": "36ef59a8a1315b9875fd67f1299b5fbe7660c394adceede5a455202157657279",
+  "scripts/resource-audit/fade-v4.py": "722d59a581bf4926203a27be903b2717d1a05884494bf908db3d61fe2dcc0e73",
+  "scripts/resource-audit/inspect-micro-v4.py": "2ab49ae13fcb7410ed51f07daf8d3acac0e2e6ab994171232e952a2de7ac1c98",
+  "scripts/resource-audit/micro-v4.mjs": "092707fb853b931baaa65ccf64745342796e97e962665ecfd201e5e8dd37adce",
+  "scripts/resource-audit/preload-v4.mjs": "80a3261b2c3c5d9b3d25cf0a0fd7e7fe3b970d69f401b614ab8c21def16bf13c",
+  "scripts/resource-audit/quality-v4.py": "44afcb2b730cb78987267692ef5ce8871a10f54520dcb60687e50d8ccf9edeff",
+  "scripts/resource-audit/stop-hook-v4.mjs": "667a0a3dc3bfdfce961e1b4270868b8f7bf3f510de7775c234140c330aa2147b",
+  "scripts/resource-audit/stop-v4.py": "31ffe1dbb09b16721b88d63d67bde7ec0e38c40afc96991b1f78a9d17cc86d54",
+  "scripts/resource-audit/summarize-fade-v4.py": "296e1d0f28cb139d66db7569b7c5475f9a89d4890d77a0486890590dc882fde6",
+  "scripts/resource-audit/verify-fade-v4.py": "4455aa8adaa1907ec016a64658ce23a39d23cd5dd492edc808007af749133276",
+  "server/tests/resource-audit-fixture.ts": "dcade209f94d6518aa217bc3166d120ab27d15bf88b00dae81ab7680b051dcee"
+}

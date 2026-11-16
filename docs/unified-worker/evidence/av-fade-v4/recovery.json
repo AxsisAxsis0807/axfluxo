@@ -1,0 +1,422 @@
+{
+  "cases": [
+    {
+      "truncatedPngInjected": true,
+      "foreignSentinelPreserved": true,
+      "point": "png-generating",
+      "container": "axfluxo-av-fade-v4-stop-1794829186967667193",
+      "restart": "axfluxo-av-fade-v4-stop-1794829186967667193-restart",
+      "observation": {
+        "point": "png-generating",
+        "event": "png-process-spawned",
+        "nodePid": 7,
+        "mediaPid": 80,
+        "pngs": []
+      },
+      "validation": {
+        "schemaVersion": 1,
+        "width": 1920,
+        "height": 1080,
+        "codec": "h264",
+        "fps": 60,
+        "frames": 300,
+        "durationUs": 5000000,
+        "audioSamples": 240640,
+        "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+        "size": 488611
+      },
+      "scope": "standalone restart, NOT checkpoint/DB recovery",
+      "expectedHashMatch": true,
+      "transitions": [
+        {
+          "action": "kill",
+          "timeNano": 1794829200685784787,
+          "containerId": "1624c2bf0e0f69134b10977d3a255e9fd4ae36b8b18235e1b7d6e96cbad1704b",
+          "name": "axfluxo-av-fade-v4-stop-1794829186967667193",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "signal": "9"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829200720547953,
+          "containerId": "1624c2bf0e0f69134b10977d3a255e9fd4ae36b8b18235e1b7d6e96cbad1704b",
+          "name": "axfluxo-av-fade-v4-stop-1794829186967667193",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "137"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829223904887777,
+          "containerId": "287e0bdbfe5defcbe5c84daf7c10b43f36e22154232a384ff612854a3feb030d",
+          "name": "axfluxo-av-fade-v4-stop-1794829186967667193-restart",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "0"
+        }
+      ],
+      "killedExit137Observed": true,
+      "restartExit0Observed": true
+    },
+    {
+      "truncatedPngInjected": false,
+      "foreignSentinelPreserved": true,
+      "point": "png-complete",
+      "container": "axfluxo-av-fade-v4-stop-1794829224406777230",
+      "restart": "axfluxo-av-fade-v4-stop-1794829224406777230-restart",
+      "observation": {
+        "point": "png-complete",
+        "event": "png-process-successfully-closed",
+        "nodePid": 7,
+        "mediaPid": null,
+        "pngs": [
+          {
+            "name": "av-static-0.png",
+            "size": 330266
+          }
+        ]
+      },
+      "validation": {
+        "schemaVersion": 1,
+        "width": 1920,
+        "height": 1080,
+        "codec": "h264",
+        "fps": 60,
+        "frames": 300,
+        "durationUs": 5000000,
+        "audioSamples": 240640,
+        "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+        "size": 488611
+      },
+      "scope": "standalone restart, NOT checkpoint/DB recovery",
+      "expectedHashMatch": true,
+      "transitions": [
+        {
+          "action": "kill",
+          "timeNano": 1794829235185885868,
+          "containerId": "5ab2b6d4f2d1f5051228a5da8d65e6add2a6185eb311276b58854310b99a6994",
+          "name": "axfluxo-av-fade-v4-stop-1794829224406777230",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "signal": "9"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829235216091772,
+          "containerId": "5ab2b6d4f2d1f5051228a5da8d65e6add2a6185eb311276b58854310b99a6994",
+          "name": "axfluxo-av-fade-v4-stop-1794829224406777230",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "137"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829257426470709,
+          "containerId": "72419635a2ce75802756ef3f3b6c05ce750f265bb41be31383ef14d75baaab5c",
+          "name": "axfluxo-av-fade-v4-stop-1794829224406777230-restart",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "0"
+        }
+      ],
+      "killedExit137Observed": true,
+      "restartExit0Observed": true
+    },
+    {
+      "truncatedPngInjected": false,
+      "foreignSentinelPreserved": true,
+      "point": "encode-start",
+      "container": "axfluxo-av-fade-v4-stop-1794829257909767860",
+      "restart": "axfluxo-av-fade-v4-stop-1794829257909767860-restart",
+      "observation": {
+        "point": "encode-start",
+        "event": "static-encode-spawned",
+        "nodePid": 7,
+        "mediaPid": 91,
+        "pngs": [
+          {
+            "name": "av-static-0.png",
+            "size": 330266
+          }
+        ]
+      },
+      "validation": {
+        "schemaVersion": 1,
+        "width": 1920,
+        "height": 1080,
+        "codec": "h264",
+        "fps": 60,
+        "frames": 300,
+        "durationUs": 5000000,
+        "audioSamples": 240640,
+        "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+        "size": 488611
+      },
+      "scope": "standalone restart, NOT checkpoint/DB recovery",
+      "expectedHashMatch": true,
+      "transitions": [
+        {
+          "action": "kill",
+          "timeNano": 1794829269404237315,
+          "containerId": "2b96607f2f9386acd366a818487c1489edf387835f8ad123636b8caa018cd215",
+          "name": "axfluxo-av-fade-v4-stop-1794829257909767860",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "signal": "9"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829269433503258,
+          "containerId": "2b96607f2f9386acd366a818487c1489edf387835f8ad123636b8caa018cd215",
+          "name": "axfluxo-av-fade-v4-stop-1794829257909767860",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "137"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829293408434089,
+          "containerId": "ba4db06c3ba87b6a1c21310e10d1c6237353f17cbb1dc69884ae1afd6e26c8d3",
+          "name": "axfluxo-av-fade-v4-stop-1794829257909767860-restart",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "0"
+        }
+      ],
+      "killedExit137Observed": true,
+      "restartExit0Observed": true
+    },
+    {
+      "truncatedPngInjected": false,
+      "foreignSentinelPreserved": true,
+      "point": "segment-complete",
+      "container": "axfluxo-av-fade-v4-stop-1794829293864366383",
+      "restart": "axfluxo-av-fade-v4-stop-1794829293864366383-restart",
+      "observation": {
+        "point": "segment-complete",
+        "event": "static-segment-successfully-closed",
+        "nodePid": 7,
+        "mediaPid": null,
+        "pngs": [
+          {
+            "name": "av-static-0.png",
+            "size": 330266
+          }
+        ]
+      },
+      "validation": {
+        "schemaVersion": 1,
+        "width": 1920,
+        "height": 1080,
+        "codec": "h264",
+        "fps": 60,
+        "frames": 300,
+        "durationUs": 5000000,
+        "audioSamples": 240640,
+        "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+        "size": 488611
+      },
+      "scope": "standalone restart, NOT checkpoint/DB recovery",
+      "expectedHashMatch": true,
+      "transitions": [
+        {
+          "action": "kill",
+          "timeNano": 1794829307233440848,
+          "containerId": "ece0f25a5d53e4a1038956d70f20670059a324d4f7078f75fa23c0e74ccebd75",
+          "name": "axfluxo-av-fade-v4-stop-1794829293864366383",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "signal": "9"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829307281977220,
+          "containerId": "ece0f25a5d53e4a1038956d70f20670059a324d4f7078f75fa23c0e74ccebd75",
+          "name": "axfluxo-av-fade-v4-stop-1794829293864366383",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "137"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829329351089846,
+          "containerId": "a78ac3adf801c4a87125d54a81c6eb7012dfbecb82ece6f6c1adca55a977261a",
+          "name": "axfluxo-av-fade-v4-stop-1794829293864366383-restart",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "0"
+        }
+      ],
+      "killedExit137Observed": true,
+      "restartExit0Observed": true
+    },
+    {
+      "truncatedPngInjected": false,
+      "foreignSentinelPreserved": true,
+      "point": "before-next-segment",
+      "container": "axfluxo-av-fade-v4-stop-1794829329842185940",
+      "restart": "axfluxo-av-fade-v4-stop-1794829329842185940-restart",
+      "observation": {
+        "point": "before-next-segment",
+        "event": "before-next-spawn",
+        "nodePid": 7,
+        "mediaPid": null,
+        "pngs": [
+          {
+            "name": "av-static-0.png",
+            "size": 330266
+          }
+        ]
+      },
+      "validation": {
+        "schemaVersion": 1,
+        "width": 1920,
+        "height": 1080,
+        "codec": "h264",
+        "fps": 60,
+        "frames": 300,
+        "durationUs": 5000000,
+        "audioSamples": 240640,
+        "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+        "size": 488611
+      },
+      "scope": "standalone restart, NOT checkpoint/DB recovery",
+      "expectedHashMatch": true,
+      "transitions": [
+        {
+          "action": "kill",
+          "timeNano": 1794829344912498880,
+          "containerId": "94a6caaabdc839c24d4f14e7bb71182d6f222480dddf05689e50b92da81e0cad",
+          "name": "axfluxo-av-fade-v4-stop-1794829329842185940",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "signal": "9"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829344953239668,
+          "containerId": "94a6caaabdc839c24d4f14e7bb71182d6f222480dddf05689e50b92da81e0cad",
+          "name": "axfluxo-av-fade-v4-stop-1794829329842185940",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "137"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829370975327336,
+          "containerId": "ad601603e46fab24f2f7b157df8159652926939c47dda853ba67ac46b7422c7a",
+          "name": "axfluxo-av-fade-v4-stop-1794829329842185940-restart",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "0"
+        }
+      ],
+      "killedExit137Observed": true,
+      "restartExit0Observed": true
+    },
+    {
+      "truncatedPngInjected": false,
+      "foreignSentinelPreserved": true,
+      "point": "fade-running",
+      "container": "axfluxo-av-fade-v4-stop-1794829371499225593",
+      "restart": "axfluxo-av-fade-v4-stop-1794829371499225593-restart",
+      "observation": {
+        "point": "fade-running",
+        "event": "fade-process-running-100ms",
+        "nodePid": 7,
+        "mediaPid": 53,
+        "pngs": []
+      },
+      "validation": {
+        "schemaVersion": 1,
+        "width": 1920,
+        "height": 1080,
+        "codec": "h264",
+        "fps": 60,
+        "frames": 300,
+        "durationUs": 5000000,
+        "audioSamples": 240640,
+        "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+        "size": 488611
+      },
+      "scope": "standalone restart, NOT checkpoint/DB recovery",
+      "expectedHashMatch": true,
+      "transitions": [
+        {
+          "action": "kill",
+          "timeNano": 1794829380117387099,
+          "containerId": "7d81031b5b935e33b857c1bf938dde39678697c42058f5ccf60c61c63b39fc44",
+          "name": "axfluxo-av-fade-v4-stop-1794829371499225593",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "signal": "9"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829380150619952,
+          "containerId": "7d81031b5b935e33b857c1bf938dde39678697c42058f5ccf60c61c63b39fc44",
+          "name": "axfluxo-av-fade-v4-stop-1794829371499225593",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "137"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829403889633179,
+          "containerId": "b885ce2f88d8b2de4944a5c04aeeefe2438b012ebb5b67007efd9a2426d6530c",
+          "name": "axfluxo-av-fade-v4-stop-1794829371499225593-restart",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "0"
+        }
+      ],
+      "killedExit137Observed": true,
+      "restartExit0Observed": true
+    },
+    {
+      "truncatedPngInjected": false,
+      "foreignSentinelPreserved": true,
+      "point": "before-mux",
+      "container": "axfluxo-av-fade-v4-stop-1794829404355344386",
+      "restart": "axfluxo-av-fade-v4-stop-1794829404355344386-restart",
+      "observation": {
+        "point": "before-mux",
+        "event": "before-concat-mux-spawn",
+        "nodePid": 7,
+        "mediaPid": null,
+        "pngs": [
+          {
+            "name": "av-static-0.png",
+            "size": 330266
+          }
+        ]
+      },
+      "validation": {
+        "schemaVersion": 1,
+        "width": 1920,
+        "height": 1080,
+        "codec": "h264",
+        "fps": 60,
+        "frames": 300,
+        "durationUs": 5000000,
+        "audioSamples": 240640,
+        "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+        "size": 488611
+      },
+      "scope": "standalone restart, NOT checkpoint/DB recovery",
+      "expectedHashMatch": true,
+      "transitions": [
+        {
+          "action": "kill",
+          "timeNano": 1794829426885695953,
+          "containerId": "6ece80d6615aadfdf9541295efe19d9e704c48079d414f712362f5e1306ebe54",
+          "name": "axfluxo-av-fade-v4-stop-1794829404355344386",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "signal": "9"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829426919066328,
+          "containerId": "6ece80d6615aadfdf9541295efe19d9e704c48079d414f712362f5e1306ebe54",
+          "name": "axfluxo-av-fade-v4-stop-1794829404355344386",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "137"
+        },
+        {
+          "action": "die",
+          "timeNano": 1794829450630697840,
+          "containerId": "7c337b298981133021ff24a068140677d3f0d09daaa9d80363fd96a7e76ef195",
+          "name": "axfluxo-av-fade-v4-stop-1794829404355344386-restart",
+          "image": "axfluxo-av-fade-v4:candidate-B",
+          "exitCode": "0"
+        }
+      ],
+      "killedExit137Observed": true,
+      "restartExit0Observed": true
+    }
+  ],
+  "scope": "actual SIGKILL then standalone regeneration; not checkpoint/DB/publication resumption"
+}

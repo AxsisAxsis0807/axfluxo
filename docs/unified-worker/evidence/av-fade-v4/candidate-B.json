@@ -1,0 +1,10 @@
+{
+  "sourceBase": "4159f194f6e9f37a9f402ed84542df18f04ba22f",
+  "scope": "A dynamic loops plus single decoded-frame loop on static-use path; generation unchanged",
+  "patchSha256": "abb470ede22324a6533e3e883d266dd40ffc26b370df4345c65a2ffecf71c320",
+  "bundleSha256": "dfe098efb1bc5e08e54fb84e073ca4d2b6cc74f97ce24e823071eabfb709766a",
+  "rendererFiles": {
+    "server/worker/templates/all-versions/render.ts": "749929399bc68af7f64e9f0161adfb72462ce39f2fbe393a8bc6c200c5a8d412",
+    "server/worker/templates/all-versions/reference-render.ts": "d962bc1513069d965637cda9e65c8b22fe4c80d0eab54db46cb6b9cb9868b17c"
+  }
+}

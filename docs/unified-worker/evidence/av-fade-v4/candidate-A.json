@@ -1,0 +1,32 @@
+{
+  "sourceBase": "4159f194f6e9f37a9f402ed84542df18f04ba22f",
+  "scope": "dynamic fades only; static paths unchanged",
+  "patchSha256": "32fe054a45bcc65b9d93c34a7a3acc556659d1ce9ddfa70352aa294cd8fa3fea",
+  "bundleSha256": "68d812326a8939793a57443e032ff4061b7058ef384c2be9614a8287692fcc7f",
+  "completedJobValidation": {
+    "A1-on": {
+      "schemaVersion": 1,
+      "width": 1920,
+      "height": 1080,
+      "codec": "h264",
+      "fps": 60,
+      "frames": 300,
+      "durationUs": 5000000,
+      "audioSamples": 240640,
+      "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "size": 488611
+    },
+    "A2-on": {
+      "schemaVersion": 1,
+      "width": 1920,
+      "height": 1080,
+      "codec": "h264",
+      "fps": 60,
+      "frames": 300,
+      "durationUs": 5000000,
+      "audioSamples": 240640,
+      "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "size": 488611
+    }
+  }
+}

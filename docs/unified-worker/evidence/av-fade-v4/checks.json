@@ -1,0 +1,154 @@
+{
+  "recoveryImage": "sha256:d34e7e4c395548530b05cc06b32fc6f8251bf63483569973345540337706f9df",
+  "checks": [
+    {
+      "label": "typecheck",
+      "exitCode": 0,
+      "log": {
+        "bytes": 118,
+        "sha256": "d29666c75918f3227da70d1b7dcc12a191e5dd228f35fc2364d2233c224df236"
+      }
+    },
+    {
+      "label": "lint",
+      "exitCode": 0,
+      "log": {
+        "bytes": 51,
+        "sha256": "ff5c53efb0e96e9e2b51cf63a81d784eb360a480d748f1d056d1be94c6d79779"
+      }
+    },
+    {
+      "label": "build-worker",
+      "exitCode": 0,
+      "log": {
+        "bytes": 228,
+        "sha256": "a394e7dd41ad9e4b3d56ccdd66499994dbff4fb9d7847984bd2a45b717c9e130"
+      }
+    },
+    {
+      "label": "build-render",
+      "exitCode": 0,
+      "log": {
+        "bytes": 227,
+        "sha256": "05fadbf680964d710c2c968180811d671cd564d9fdb36450e88d7ac5d0fe992f"
+      }
+    },
+    {
+      "label": "relation-tests",
+      "exitCode": 0,
+      "log": {
+        "bytes": 170,
+        "sha256": "0a3cc1a93085f7bf4ac2565f0171e8bf7dca8a837c57afdd87f4ca685672efd3"
+      }
+    },
+    {
+      "label": "sampler-tests",
+      "exitCode": 0,
+      "log": {
+        "bytes": 100,
+        "sha256": "b1ff0b0d827e08b681e234970ae08ef02f4db6ba8cde046077c7cf8b5cb34cb6"
+      }
+    },
+    {
+      "label": "native-baseline",
+      "exitCode": 0,
+      "log": {
+        "bytes": 2232,
+        "sha256": "dc1f7e766940fbc1ede4119ddf8c61198d2e820324bda536ade2859a468a9367"
+      }
+    },
+    {
+      "label": "native-candidate-static",
+      "exitCode": 0,
+      "log": {
+        "bytes": 30,
+        "sha256": "1c886d8aeda5c22dcf0ddb912595b9a0b2172b9f21bd5c72acf4b8472eb25dce"
+      }
+    },
+    {
+      "label": "stop-recovery",
+      "exitCode": 0,
+      "log": {
+        "bytes": 228,
+        "sha256": "38aa6df29f4411e4d8759b0773f35da175dee99da81eff782b21c321386253dd"
+      }
+    },
+    {
+      "label": "candidate-typecheck-build",
+      "exitCode": 0,
+      "log": {
+        "bytes": 573,
+        "sha256": "93329888dab8cfa90d414cab1ef42cea6cfb67774595c24bac48d1be0eb3ef9d"
+      }
+    }
+  ],
+  "native": [
+    {
+      "directory": "native-baseline",
+      "result": {
+        "container": "axfluxo-audit-db-1794829108",
+        "results": [
+          {
+            "repo": "/workspace/axfluxo",
+            "suite": "cloud-export.test.ts",
+            "exitCode": 0
+          },
+          {
+            "repo": "/workspace/axfluxo",
+            "suite": "cloud-export-render.test.ts",
+            "exitCode": 0
+          },
+          {
+            "repo": "/workspace/axfluxo",
+            "suite": "render/render.test.ts",
+            "exitCode": 0
+          }
+        ]
+      },
+      "logs": [
+        {
+          "file": "tests-0-0.log",
+          "summary": "21 passed (21)",
+          "bytes": 169,
+          "sha256": "d38cef6c4c24dd8d022dd6f6b9186898fa3e45bb7aa7ffaefd022db53ad02483"
+        },
+        {
+          "file": "tests-0-1.log",
+          "summary": "1 passed (1)",
+          "bytes": 166,
+          "sha256": "9f83fa340d5469988e6b86276d9b233fdddb694734edffbb525c68843c4bb973"
+        },
+        {
+          "file": "tests-0-2.log",
+          "summary": "25 passed (25)",
+          "bytes": 169,
+          "sha256": "1c3f3b6961782317339ab12f6faefc045b2193026d52d2e3343ddc0cb79c2104"
+        }
+      ]
+    },
+    {
+      "directory": "native-candidate-static",
+      "result": {
+        "container": "axfluxo-audit-db-1794829171",
+        "results": [
+          {
+            "repo": "/workspace/axfluxo-av-fade-v4-candidate",
+            "suite": "projects/projects.test.ts",
+            "exitCode": 0
+          }
+        ]
+      },
+      "logs": [
+        {
+          "file": "tests-0-0.log",
+          "summary": "1 passed | 13 skipped (14)",
+          "bytes": 202,
+          "sha256": "1ed0d151bcec647c20579560a1a028a8af67d580b8157c12fcc7cfb383929bc9"
+        }
+      ]
+    }
+  ],
+  "relationTests": "13 passed",
+  "samplerTests": "2 passed, values exercised as subtests",
+  "limits": "Native baseline real PostgreSQL/FFmpeg; candidate static-on real Worker/DB with FakeStorage; no real storage or constrained-memory Worker proof"
+}

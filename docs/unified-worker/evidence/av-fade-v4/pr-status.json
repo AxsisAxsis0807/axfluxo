@@ -1,0 +1,21 @@
+{
+  "observedDate": "2026-11-16",
+  "prs": [
+    {
+      "number": 34,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head": "codex/unified-worker-v1",
+      "head_sha": "81d6c739a797e95386855ad1b78313a88e9b1077"
+    },
+    {
+      "number": 35,
+      "state": "open",
+      "merged": false,
+      "draft": true,
+      "head": "codex/unified-resource-audit-v2",
+      "head_sha": "498bf9d64f1329fbec6b04b6ce7679a0cd094049"
+    }
+  ]
+}

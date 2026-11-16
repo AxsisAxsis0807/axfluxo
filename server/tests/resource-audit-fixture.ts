@@ -19,6 +19,7 @@ import {
   encodeFnfSegment,
 } from "../worker/templates/fnf-showcase/render";
 import { renderPlan } from "../worker/render/plan";
+import { versionIntervals } from "../../src/domain/video/all-versions";
 import { assemble } from "../worker/render/encode";
 import { validateVideo } from "../worker/validation/output";
 import { runWorker } from "../worker/runtime/service";
@@ -37,6 +38,7 @@ const [
   titleText = "1",
   segmentText = "60",
   layout = "provisional-v1",
+  boundaryMode = "equal",
 ] = process.argv.slice(2);
 const seconds = Number(secondsText),
   titles = Number(titleText),
@@ -47,7 +49,9 @@ if (
   ![1, 2, 3].includes(titles) ||
   ![60, 300, 1800].includes(segmentFrames) ||
   !["simple", "complex"].includes(background) ||
-  !["provisional-v1", "reference-pasa-v1"].includes(layout)
+  !["provisional-v1", "reference-pasa-v1"].includes(layout) ||
+  !["equal", "shifted"].includes(boundaryMode) ||
+  (boundaryMode === "shifted" && (seconds !== 15 || titles !== 3))
 )
   throw Error("Invalid diagnostic fixture");
 const root = process.env.VIDEO_RENDER_DISK,
@@ -127,7 +131,7 @@ const hash = await exportFileHash(source),
     path: coverPath,
     hash: await exportFileHash(coverPath),
   };
-const markersUs = Array.from({ length: titles - 1 }, (_, i) =>
+const markersUs = boundaryMode === "shifted" ? [4_250_000, 9_100_000] : Array.from({ length: titles - 1 }, (_, i) =>
   Math.round(((i + 1) * seconds * 1e6) / titles),
 );
 // StoredSpec's legacy type restricts layout to provisional-v1; this offline
@@ -205,9 +209,10 @@ const work = async () => {
     const paths = [];
     for (const segment of plan.segments) {
       const path = join(root, `segment-${segment.index}.mp4`);
-      const version = Math.min(titles - 1, Math.floor(segment.outputStartFrame / (seconds * 60 / titles)));
-      const versionStart = Math.round(version * seconds * 60 / titles);
-      const versionEnd = Math.round((version + 1) * seconds * 60 / titles);
+      const intervals = versionIntervals(project);
+      const version = intervals.findIndex(v => segment.outputStartFrame >= v.startFrame && segment.outputStartFrame < v.endFrame);
+      const versionStart = intervals[version].startFrame;
+      const versionEnd = intervals[version].endFrame;
       const eligible = segment.outputStartFrame - versionStart >= 9 &&
         segment.outputStartFrame + segment.frames <= versionEnd - 9;
       const evidence = {segment: segment.index, version, start: segment.outputStartFrame,

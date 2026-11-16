@@ -1,0 +1,50 @@
+--- a/server/worker/templates/all-versions/render.ts
++++ b/server/worker/templates/all-versions/render.ts
+@@ -137,20 +137,18 @@
+       "-xerror",
+       "-filter_complex_threads",
+       "1",
+-      "-threads", "1", "-loop",
+-      "1",
++      "-threads", "1",
+       "-framerate",
+       "60",
+       "-i",
+       graphics.bg,
+-      "-threads", "1", "-loop",
+-      "1",
++      "-threads", "1",
+       "-framerate",
+       "60",
+       "-i",
+       text,
+       "-filter_complex",
+-      `[1:v]${filters.join(",")}[text];[0:v][text]overlay=shortest=1:format=auto,format=yuv420p,setsar=1,setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709[v]`,
++      `[0:v]loop=loop=-1:size=1:start=0,setpts=N/(60*TB)[bg];[1:v]loop=loop=-1:size=1:start=0,setpts=N/(60*TB),${filters.join(",")}[text];[bg][text]overlay=shortest=1:format=auto,format=yuv420p,setsar=1,setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709[v]`,
+       "-map",
+       "[v]",
+       "-an",
+--- a/server/worker/templates/all-versions/reference-render.ts
++++ b/server/worker/templates/all-versions/reference-render.ts
+@@ -115,8 +115,8 @@
+     return;
+   }
+   const graph = [
+-    "[1:v]format=rgba,setpts=PTS+" + offset + "/TB,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*" + titleAlpha + "'[title]",
+-    "[0:v]setpts=PTS+" + offset + "/TB[bg]",
++    "[1:v]loop=loop=-1:size=1:start=0,setpts=N/(60*TB),format=rgba,setpts=PTS+" + offset + "/TB,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*" + titleAlpha + "'[title]",
++    "[0:v]loop=loop=-1:size=1:start=0,setpts=N/(60*TB),setpts=PTS+" + offset + "/TB[bg]",
+     "[bg][title]overlay=x=(W-w)/2:y=" + titleTop + ":shortest=1:format=auto",
+     "drawtext=fontfile=" + fontFile + ":text='" + clock + "':fontsize=" + timerSize +
+       ":fontcolor=white:x=(w-text_w)/2:y=" + (plan.height * REF.timerCenterY / REF.height) +
+@@ -127,8 +127,8 @@
+     "ffmpeg",
+     [
+       "-nostdin", "-xerror", "-filter_complex_threads", "1",
+-      "-threads", "1", "-loop", "1", "-framerate", "60", "-i", graphics.bg,
+-      "-threads", "1", "-loop", "1", "-framerate", "60", "-i", titleFile,
++      "-threads", "1", "-framerate", "60", "-i", graphics.bg,
++      "-threads", "1", "-framerate", "60", "-i", titleFile,
+       "-filter_complex",
+       graph[0] + ";" + graph[1] + ";" + graph.slice(2).join(","),
+       "-map", "[v]", "-an", "-frames:v", String(segment.frames),
