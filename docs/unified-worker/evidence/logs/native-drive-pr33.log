@@ -1,0 +1,27 @@
+
+ RUN  v5.0.5 /workspace/work/axfluxo-pr33
+
+ ❯ server/tests/drive-cloud.test.ts (30 tests | 1 failed) 32019ms
+   × shares the refresh lease with the retained Phase 1 diagnostic route 5112ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  server/tests/drive-cloud.test.ts > shares the refresh lease with the retained Phase 1 diagnostic route
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ server/tests/drive-cloud.test.ts:1068:1
+    1066|   expect(creates).toBe(1);
+    1067| });
+    1068| it("shares the refresh lease with the retained Phase 1 diagnostic rout…
+       | ^
+    1069|   const { driveRouter } = await import("../google-drive/router");
+    1070|   let entered!: () => void, release!: () => void;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 29 passed (30)
+   Start at  16:35:29
+   Duration  35.06s (tests 92%, transform 4%, import 3%)
+

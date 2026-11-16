@@ -1,0 +1,46 @@
+
+Running 1 test using 1 worker
+
+(node:34783) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  1 [chromium] › server/tests/browser/developer-entry.spec.ts:45:3 › local fnf-showcase accepts device files and exports without video API (28.0s)
+
+
+  1) [chromium] › server/tests/browser/developer-entry.spec.ts:45:3 › local fnf-showcase accepts device files and exports without video API 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByRole('dialog', { name: 'エクスポート管理' }).getByText('完了・保存できます')
+    Expected: 2
+    Received: 0
+    Timeout:  20000ms
+
+    Call log:
+      - Expect "toHaveCount" getByRole('dialog', { name: 'エクスポート管理' }).getByText('完了・保存できます') with timeout 20000ms
+      - waiting for getByRole('dialog', { name: 'エクスポート管理' }).getByText('完了・保存できます')
+        40 × locator resolved to 0 elements
+           - unexpected value "0"
+
+
+      222 |           .getByRole("dialog", { name: "エクスポート管理" })
+      223 |           .getByText("完了・保存できます", { exact: false }),
+    > 224 |       ).toHaveCount(mode === "fnf-showcase" ? 2 : 1, { timeout: 20000 });
+          |         ^
+      225 |       const save = page.getByRole("link", { name: /を保存/ });
+      226 |       await expect(save).toHaveCount(mode === "fnf-showcase" ? 2 : 1);
+      227 |       const downloadPromise = page.waitForEvent("download");
+        at /workspace/work/axfluxo-pr33/server/tests/browser/developer-entry.spec.ts:224:9
+
+    Error Context: ../../../tmp/axfluxo-audit-baseline-final-0-fnf/developer-entry-local-fnf--bc249-d-exports-without-video-API-chromium/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../tmp/axfluxo-audit-baseline-final-0-fnf/developer-entry-local-fnf--bc249-d-exports-without-video-API-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../tmp/axfluxo-audit-baseline-final-0-fnf/developer-entry-local-fnf--bc249-d-exports-without-video-API-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › server/tests/browser/developer-entry.spec.ts:45:3 › local fnf-showcase accepts device files and exports without video API 

@@ -50,6 +50,7 @@ export async function encodeReferenceProjectSegment(
   signal?: AbortSignal,
 ) {
   const versions = versionIntervals(project);
+  // Each PNG input uses one decoder thread; output encoding is unchanged.
   const index = versions.findIndex(
     (v) => segment.outputStartFrame >= v.startFrame && segment.outputStartFrame < v.endFrame,
   );
@@ -90,8 +91,8 @@ export async function encodeReferenceProjectSegment(
       const titleOpacity = REF.titleOpacityScale;
       await mediaProcess("ffmpeg", [
         "-nostdin", "-xerror", "-filter_complex_threads", "1",
-        "-loop", "1", "-framerate", "1", "-i", graphics.bg,
-        "-loop", "1", "-framerate", "1", "-i", titleFile,
+        "-threads", "1", "-loop", "1", "-framerate", "1", "-i", graphics.bg,
+        "-threads", "1", "-loop", "1", "-framerate", "1", "-i", titleFile,
         "-filter_complex",
         "[1:v]format=rgba,geq=r=\u0027r(X,Y)\u0027:g=\u0027g(X,Y)\u0027:b=\u0027b(X,Y)\u0027:a=\u0027alpha(X,Y)*" + titleOpacity + "\u0027[title];" +
           "[0:v][title]overlay=x=(W-w)/2:y=" + titleTop +
@@ -102,7 +103,7 @@ export async function encodeReferenceProjectSegment(
     }
     await mediaProcess("ffmpeg", [
       "-nostdin", "-xerror", "-filter_threads", "1",
-      "-loop", "1", "-framerate", "60", "-i", composite,
+      "-threads", "1", "-loop", "1", "-framerate", "60", "-i", composite,
       "-vf",
       "drawtext=fontfile=" + fontFile + ":text=\u0027" + clock + "\u0027:fontsize=" + timerSize +
         ":fontcolor=white:x=(w-text_w)/2:y=" + (plan.height * REF.timerCenterY / REF.height) +
@@ -126,8 +127,8 @@ export async function encodeReferenceProjectSegment(
     "ffmpeg",
     [
       "-nostdin", "-xerror", "-filter_complex_threads", "1",
-      "-loop", "1", "-framerate", "60", "-i", graphics.bg,
-      "-loop", "1", "-framerate", "60", "-i", titleFile,
+      "-threads", "1", "-loop", "1", "-framerate", "60", "-i", graphics.bg,
+      "-threads", "1", "-loop", "1", "-framerate", "60", "-i", titleFile,
       "-filter_complex",
       graph[0] + ";" + graph[1] + ";" + graph.slice(2).join(","),
       "-map", "[v]", "-an", "-frames:v", String(segment.frames),

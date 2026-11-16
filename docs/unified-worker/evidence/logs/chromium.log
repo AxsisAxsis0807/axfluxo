@@ -1,0 +1,68 @@
+
+Running 48 tests using 1 worker
+
+(node:26357) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium] › server/tests/browser/all-versions.spec.ts:57:1 › six-step editor keeps names, saves offline, synchronizes revisions, and uses server text PNG (8.9s)
+  ✓   2 [chromium] › server/tests/browser/cloud.spec.ts:16:1 › background pause, tab reload and explicit file reselection preserve upload safely (3.8s)
+
+  ✓   3 [chromium] › server/tests/browser/developer-entry.spec.ts:45:3 › local all-versions accepts device files and exports without video API (24.0s)
+
+  ✓   4 [chromium] › server/tests/browser/developer-entry.spec.ts:45:3 › local fnf-showcase accepts device files and exports without video API (9.1s)
+
+  ✓   5 [chromium] › server/tests/browser/developer-entry.spec.ts:45:3 › local failed-waveform accepts device files and exports without video API (7.7s)
+  ✓   6 [chromium] › server/tests/browser/drive-cloud.spec.ts:37:3 › all-versions: resumable upload, worker-ready wording, immutable submission and explicit Files confirmation (2.2s)
+  ✓   7 [chromium] › server/tests/browser/drive-cloud.spec.ts:37:3 › fnf: resumable upload, worker-ready wording, immutable submission and explicit Files confirmation (2.6s)
+  ✓   8 [chromium] › server/tests/browser/fnf-showcase.spec.ts:55:1 › FNF ranges stay transient; equal starts and names are stable; accepted batch survives tab closure without editor restoration (6.4s)
+  ✓   9 [chromium] › server/tests/browser/google-drive.spec.ts:24:1 › static diagnostic panel uploads, downloads, hashes, retries same operation and disconnects (1.8s)
+  ✓  10 [chromium] › server/tests/browser/google-drive.spec.ts:97:1 › accepts preparation nonce from fragment, removes it from history and binds connect request (1.4s)
+
+  ✓  11 [chromium] › server/tests/browser/local-encode.spec.ts:7:1 › device encoder joins trimmed audio/video or reports an unavailable encoder (3.6s)
+
+  ✓  12 [chromium] › server/tests/browser/local-waveform.spec.ts:115:3 › automatic mp3 peaks align with tone/silence without AudioDecoder (2.2s)
+  ✓  13 [chromium] › server/tests/browser/local-waveform.spec.ts:115:3 › automatic wav peaks align with tone/silence without AudioDecoder (10.3s)
+  ✓  14 [chromium] › server/tests/browser/local-waveform.spec.ts:115:3 › automatic m4a peaks align with tone/silence without AudioDecoder (2.1s)
+  ✓  15 [chromium] › server/tests/browser/local-waveform.spec.ts:115:3 › automatic mp4 peaks align with tone/silence without AudioDecoder (1.9s)
+  ✓  16 [chromium] › server/tests/browser/local-waveform.spec.ts:115:3 › automatic mov peaks align with tone/silence without AudioDecoder (2.4s)
+  ✓  17 [chromium] › server/tests/browser/local-waveform.spec.ts:151:1 › large MOV, long audio, and silent video are handled without old limits (31.1s)
+  ✓  18 [chromium] › server/tests/browser/local-waveform.spec.ts:167:1 › cancel, retry, remove/re-add, independent files, editing, zoom and interruption (4.5s)
+  ✓  19 [chromium] › server/tests/browser/local-waveform.spec.ts:228:1 › invalid audio fails without disabling timeline editing (4.4s)
+  ✓  20 [chromium] › server/tests/browser/local-waveform.spec.ts:251:1 › visible-window refinement uses real finer peaks with source origin and bounded storage (12.1s)
+  ✓  21 [chromium] › server/tests/browser/local-waveform.spec.ts:290:1 › canvas leaves exact silence fully transparent and keeps the separate playhead (4.7s)
+  ✓  22 [chromium] › server/tests/browser/media-codecs.spec.ts:3:1 › browser supports the required H.264 and AAC MP4 codecs (435ms)
+  ✓  23 [chromium] › server/tests/browser/preview.spec.ts:110:1 › media clock seek/frame stepping, non-destructive trim and signed-access recovery (3.2s)
+  ✓  24 [chromium] › server/tests/browser/preview.spec.ts:166:1 › FNF overlaps and whole-range moves remain transient (5.2s)
+  ✓  25 [chromium] › server/tests/browser/preview.spec.ts:203:1 › pinch cancels a handle draft; pointercancel, IME and landscape/background remain safe (2.6s)
+  ✓  26 [chromium] › server/tests/browser/preview.spec.ts:268:1 › joined clips keep marker/source coordinates and play across a cut (4.2s)
+  ✓  27 [chromium] › server/tests/browser/preview.spec.ts:291:1 › trim thumbs resize both edges, preview drafts, cancel touch edits and support keyboard nudging (4.6s)
+
+  ✓  28 [chromium] › server/tests/browser/recovery.spec.ts:65:1 › editor files, trim, labels and timeline restore automatically and stay separate from All Versions (49.2s)
+  ✓  29 [chromium] › server/tests/browser/recovery.spec.ts:112:1 › durable queued jobs restart once; finished videos survive reload until each save is confirmed (47.1s)
+  ✓  30 [chromium] › server/tests/browser/session.spec.ts:21:1 › token refresh failure is safely announced while local documents/auth storage remain (1.2s)
+
+  ✓  31 [chromium] › server/tests/browser/timeline-queue.spec.ts:56:3 › trim clamps seeks, scroll and playback; can re-expand (desktop) (2.7s)
+  ✓  32 [chromium] › server/tests/browser/timeline-queue.spec.ts:56:3 › trim clamps seeks, scroll and playback; can re-expand (mobile) (2.5s)
+  ✓  33 [chromium] › server/tests/browser/timeline-queue.spec.ts:176:1 › real queue keeps snapshots, auto-runs 3 jobs and survives editor/panel unmount (7.8s)
+  ✓  34 [chromium] › server/tests/browser/timeline-queue.spec.ts:242:1 › running cancellation releases media before next job, failure continues and retry is available (4.3s)
+  ✓  35 [chromium] › server/tests/browser/track-boundaries.spec.ts:108:1 › PCM analysis, candidate navigation, candidate addition, audition, deletion and recovery (24.7s)
+  ✓  36 [chromium] › server/tests/browser/track-boundaries.spec.ts:186:1 › repeated off-center pinches retain time, page scale and true endpoints (24.6s)
+  ✓  37 [chromium] › server/tests/browser/track-boundaries.spec.ts:337:1 › cancellation preserves existing markers and can restart (1.7s)
+  ✓  38 [chromium] › server/tests/browser/track-boundaries.spec.ts:357:1 › Version handles snap in CSS pixels, release, disable snap and stay between neighbours (2.5s)
+  ✓  39 [chromium] › server/tests/browser/track-boundaries.spec.ts:410:1 › three direct boundaries persist through move, nearest deletion and reload (23.3s)
+
+  ✓  40 [chromium] › server/tests/browser/trim-handles.spec.ts:99:3 › all: trim handles are visible on import and both endpoints are usable (1.8s)
+  ✓  41 [chromium] › server/tests/browser/trim-handles.spec.ts:124:3 › all: offscreen trim stays at its real time after scroll (2.0s)
+  ✓  42 [chromium] › server/tests/browser/trim-handles.spec.ts:99:3 › fnf: trim handles are visible on import and both endpoints are usable (1.8s)
+  ✓  43 [chromium] › server/tests/browser/trim-handles.spec.ts:124:3 › fnf: offscreen trim stays at its real time after scroll (3.3s)
+  ✓  44 [chromium] › server/tests/browser/trim-handles.spec.ts:228:3 › all: touch edits endpoints, snaps, preserves order and restores autosaved trim (29.5s)
+  ✓  45 [chromium] › server/tests/browser/trim-handles.spec.ts:302:3 › all: zoom and pinch retain center and real marker coordinates (3.9s)
+  ✓  46 [chromium] › server/tests/browser/trim-handles.spec.ts:228:3 › fnf: touch edits endpoints, snaps, preserves order and restores autosaved trim (29.6s)
+  ✓  47 [chromium] › server/tests/browser/trim-handles.spec.ts:302:3 › fnf: zoom and pinch retain center and real marker coordinates (2.3s)
+  ✓  48 [chromium] › server/tests/browser/trim-handles.spec.ts:376:1 › All Versions trim edges cannot cross or erase Version boundaries (2.5s)
+
+  48 passed (7.7m)
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice

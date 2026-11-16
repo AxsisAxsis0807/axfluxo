@@ -1,0 +1,21 @@
+
+> axfluxo@0.1.0 test
+> vitest run --maxWorkers=1
+
+
+ RUN  v5.0.5 /workspace/axfluxo
+
+
+ Test Files  60 passed (60)
+      Tests  511 passed (511)
+   Start at  16:32:30
+   Duration  288.20s (tests 90%, import 7%, transform 2%)
+
+    Isolate  60 workers spawned · ~246ms startup each (spawn + environment, per file)
+             at least ~14.50s faster with isolate: false — reuses workers across files instead of one per file
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice

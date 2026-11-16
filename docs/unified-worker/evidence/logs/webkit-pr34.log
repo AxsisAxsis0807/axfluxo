@@ -1,0 +1,32 @@
+
+Running 1 test using 1 worker
+
+(node:36509) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [webkit] › server/tests/browser/all-versions.spec.ts:57:1 › six-step editor keeps names, saves offline, synchronizes revisions, and uses server text PNG (0ms)
+
+
+  1) [webkit] › server/tests/browser/all-versions.spec.ts:57:1 › six-step editor keeps names, saves offline, synchronizes revisions, and uses server text PNG 
+
+    Error: browserType.launch: Executable doesn't exist at /home/agent/.cache/ms-playwright/webkit-2370/pw_run.sh
+    ╔════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright was just installed or updated.       ║
+    ║ Please run the following command to download new browsers: ║
+    ║                                                            ║
+    ║     npx playwright install                                 ║
+    ║                                                            ║
+    ║ <3 Playwright Team                                         ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Error Context: ../../../tmp/axfluxo-audit-baseline-final-1-webkit/all-versions-six-step-edit-b1f36-ns-and-uses-server-text-PNG-webkit/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../tmp/axfluxo-audit-baseline-final-1-webkit/all-versions-six-step-edit-b1f36-ns-and-uses-server-text-PNG-webkit/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../tmp/axfluxo-audit-baseline-final-1-webkit/all-versions-six-step-edit-b1f36-ns-and-uses-server-text-PNG-webkit/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit] › server/tests/browser/all-versions.spec.ts:57:1 › six-step editor keeps names, saves offline, synchronizes revisions, and uses server text PNG 

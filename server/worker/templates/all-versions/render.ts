@@ -63,6 +63,8 @@ export async function encodeProjectSegment(
   path: string,
   signal?: AbortSignal,
 ) {
+  // Input-scoped PNG decoder threads bound decoded-frame buffering. Keep the
+  // output encoder's threads/lookahead and renderer/checkpoint identity intact.
   if (project.design.layout === "reference-pasa-v1")
     return encodeReferenceProjectSegment(project, s, plan, graphics, dir, path, signal);
   const intervals = versionIntervals(project),
@@ -94,8 +96,8 @@ export async function encodeProjectSegment(
         "ffmpeg",
         [
           "-nostdin", "-xerror", "-filter_complex_threads", "1",
-          "-loop", "1", "-framerate", "1", "-i", graphics.bg,
-          "-loop", "1", "-framerate", "1", "-i", text,
+          "-threads", "1", "-loop", "1", "-framerate", "1", "-i", graphics.bg,
+          "-threads", "1", "-loop", "1", "-framerate", "1", "-i", text,
           "-filter_complex",
           "[0:v][1:v]overlay=shortest=1:format=auto,format=rgba[v]",
           "-map", "[v]", "-frames:v", "1", "-update", "1", "-y", composite,
@@ -107,7 +109,7 @@ export async function encodeProjectSegment(
     await mediaProcess(
       "ffmpeg",
       [
-        "-nostdin", "-xerror", "-loop", "1", "-framerate", "60",
+        "-nostdin", "-xerror", "-threads", "1", "-loop", "1", "-framerate", "60",
         "-i", composite,
         "-vf", "format=yuv420p,setsar=1,setparams=range=limited:color_primaries=bt709:color_trc=bt709:colorspace=bt709",
         "-an", "-frames:v", String(s.frames),
@@ -135,13 +137,13 @@ export async function encodeProjectSegment(
       "-xerror",
       "-filter_complex_threads",
       "1",
-      "-loop",
+      "-threads", "1", "-loop",
       "1",
       "-framerate",
       "60",
       "-i",
       graphics.bg,
-      "-loop",
+      "-threads", "1", "-loop",
       "1",
       "-framerate",
       "60",
