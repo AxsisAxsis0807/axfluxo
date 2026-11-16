@@ -1,0 +1,29 @@
+[
+  {
+    "truncatedPngInjected": true,
+    "foreignSentinelPreserved": true,
+    "point": "png-generating",
+    "container": "axfluxo-av-v3-stop-1794820495993429954",
+    "restart": "axfluxo-av-v3-stop-1794820495993429954-restart",
+    "observation": {
+      "point": "png-generating",
+      "event": "png-process-spawned",
+      "nodePid": 7,
+      "mediaPid": 81,
+      "pngs": []
+    },
+    "validation": {
+      "schemaVersion": 1,
+      "width": 1920,
+      "height": 1080,
+      "codec": "h264",
+      "fps": 60,
+      "frames": 300,
+      "durationUs": 5000000,
+      "audioSamples": 240640,
+      "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "size": 488611
+    },
+    "scope": "standalone restart, NOT checkpoint/DB recovery"
+  }
+]

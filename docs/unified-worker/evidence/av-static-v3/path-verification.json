@@ -1,0 +1,369 @@
+[
+  {
+    "label": "B-A-off",
+    "status": "COMPLETED",
+    "errors": [],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "completedStaticSegments": [],
+    "failedChildren": []
+  },
+  {
+    "label": "B-A-on",
+    "status": "COMPLETED",
+    "errors": [],
+    "completedStaticUses": 3,
+    "completedPngGenerations": 1,
+    "reuseCount": 2,
+    "completedDynamicSegments": [
+      0,
+      4
+    ],
+    "completedStaticSegments": [
+      1,
+      2,
+      3
+    ],
+    "failedChildren": []
+  },
+  {
+    "label": "B-B-off",
+    "status": "COMPLETED",
+    "errors": [],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "completedStaticSegments": [],
+    "failedChildren": []
+  },
+  {
+    "label": "B-B-on",
+    "status": "COMPLETED",
+    "errors": [],
+    "completedStaticUses": 9,
+    "completedPngGenerations": 3,
+    "reuseCount": 6,
+    "completedDynamicSegments": [
+      0,
+      4,
+      5,
+      9,
+      10,
+      14
+    ],
+    "completedStaticSegments": [
+      1,
+      2,
+      3,
+      6,
+      7,
+      8,
+      11,
+      12,
+      13
+    ],
+    "failedChildren": []
+  },
+  {
+    "label": "B-C-off",
+    "status": "COMPLETED",
+    "errors": [],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "completedStaticSegments": [],
+    "failedChildren": []
+  },
+  {
+    "label": "B-C-on",
+    "status": "COMPLETED",
+    "errors": [],
+    "completedStaticUses": 9,
+    "completedPngGenerations": 3,
+    "reuseCount": 6,
+    "completedDynamicSegments": [
+      0,
+      4,
+      5,
+      9,
+      10,
+      14
+    ],
+    "completedStaticSegments": [
+      1,
+      2,
+      3,
+      6,
+      7,
+      8,
+      11,
+      12,
+      13
+    ],
+    "failedChildren": []
+  },
+  {
+    "label": "C-A-off-1",
+    "status": "FAILED",
+    "errors": [],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [],
+    "completedStaticSegments": [],
+    "failedChildren": [
+      {
+        "id": 4,
+        "program": "ffmpeg",
+        "code": null,
+        "signal": "SIGKILL"
+      }
+    ]
+  },
+  {
+    "label": "C-A-off-2",
+    "status": "FAILED",
+    "errors": [],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [],
+    "completedStaticSegments": [],
+    "failedChildren": [
+      {
+        "id": 4,
+        "program": "ffmpeg",
+        "code": null,
+        "signal": "SIGKILL"
+      }
+    ]
+  },
+  {
+    "label": "C-A-on-1",
+    "status": "FAILED",
+    "errors": [
+      "INVALID_TEST_NO_COMPLETED_STATIC_PATH"
+    ],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [],
+    "completedStaticSegments": [],
+    "failedChildren": [
+      {
+        "id": 4,
+        "program": "ffmpeg",
+        "code": null,
+        "signal": "SIGKILL"
+      }
+    ]
+  },
+  {
+    "label": "C-A-on-2",
+    "status": "FAILED",
+    "errors": [
+      "INVALID_TEST_NO_COMPLETED_STATIC_PATH"
+    ],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [],
+    "completedStaticSegments": [],
+    "failedChildren": [
+      {
+        "id": 4,
+        "program": "ffmpeg",
+        "code": null,
+        "signal": "SIGKILL"
+      }
+    ]
+  },
+  {
+    "label": "D-A-off-1",
+    "status": "FAILED",
+    "errors": [],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [],
+    "completedStaticSegments": [],
+    "failedChildren": [
+      {
+        "id": 4,
+        "program": "ffmpeg",
+        "code": null,
+        "signal": "SIGKILL"
+      }
+    ]
+  },
+  {
+    "label": "D-A-off-2",
+    "status": "FAILED",
+    "errors": [],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [],
+    "completedStaticSegments": [],
+    "failedChildren": [
+      {
+        "id": 4,
+        "program": "ffmpeg",
+        "code": null,
+        "signal": "SIGKILL"
+      }
+    ]
+  },
+  {
+    "label": "D-A-on-1",
+    "status": "FAILED",
+    "errors": [
+      "INVALID_TEST_NO_COMPLETED_STATIC_PATH"
+    ],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [],
+    "completedStaticSegments": [],
+    "failedChildren": [
+      {
+        "id": 4,
+        "program": "ffmpeg",
+        "code": null,
+        "signal": "SIGKILL"
+      }
+    ]
+  },
+  {
+    "label": "D-A-on-2",
+    "status": "FAILED",
+    "errors": [
+      "INVALID_TEST_NO_COMPLETED_STATIC_PATH"
+    ],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [],
+    "completedStaticSegments": [],
+    "failedChildren": [
+      {
+        "id": 4,
+        "program": "ffmpeg",
+        "code": null,
+        "signal": "SIGKILL"
+      }
+    ]
+  },
+  {
+    "label": "E-A-off-1",
+    "status": "COMPLETED",
+    "errors": [],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "completedStaticSegments": [],
+    "failedChildren": []
+  },
+  {
+    "label": "E-A-off-2",
+    "status": "COMPLETED",
+    "errors": [],
+    "completedStaticUses": 0,
+    "completedPngGenerations": 0,
+    "reuseCount": 0,
+    "completedDynamicSegments": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "completedStaticSegments": [],
+    "failedChildren": []
+  },
+  {
+    "label": "E-A-on-1",
+    "status": "COMPLETED",
+    "errors": [],
+    "completedStaticUses": 3,
+    "completedPngGenerations": 1,
+    "reuseCount": 2,
+    "completedDynamicSegments": [
+      0,
+      4
+    ],
+    "completedStaticSegments": [
+      1,
+      2,
+      3
+    ],
+    "failedChildren": []
+  },
+  {
+    "label": "E-A-on-2",
+    "status": "COMPLETED",
+    "errors": [],
+    "completedStaticUses": 3,
+    "completedPngGenerations": 1,
+    "reuseCount": 2,
+    "completedDynamicSegments": [
+      0,
+      4
+    ],
+    "completedStaticSegments": [
+      1,
+      2,
+      3
+    ],
+    "failedChildren": []
+  }
+]

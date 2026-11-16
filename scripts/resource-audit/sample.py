@@ -49,6 +49,11 @@ def disk():
 env = {k: os.environ[k] for k in ["PATH", "LANG", "LD_LIBRARY_PATH"] if k in os.environ}
 env.update(NODE_OPTIONS="--max-old-space-size=128", VIDEO_RENDER_DISK=str(out / "media"),
            RESOURCE_AUDIT_DIR=str(out), HOME=str(out), TMPDIR=str(out), NODE_ENV="test")
+static = os.environ.get("VIDEO_RENDER_STATIC_COMPOSITE", "false")
+if static not in {"true", "false"}:
+    raise SystemExit("VIDEO_RENDER_STATIC_COMPOSITE must be true or false")
+env["VIDEO_RENDER_STATIC_COMPOSITE"] = static
+(out / "effective-env.json").write_text(json.dumps({"VIDEO_RENDER_STATIC_COMPOSITE": static, "inheritedKeys": sorted(env)}) + "\n")
 before = cgroup()
 started = time.monotonic()
 peaks = {"rss": 0, "pss": 0, "uss": 0, "disk": 0, "threads": 0}
@@ -111,7 +116,7 @@ with (out / "stdout.jsonl").open("w") as stdout, (out / "stderr.log").open("w") 
             size = disk()
             peaks["disk"] = max(peaks["disk"], size)
             samples.write(json.dumps(dict(t=time.monotonic() - started, processes=rows,
-                                          memoryCurrent=cgroup().get("memory.current"), disk=size)) + "\n")
+                                          cgroup=cgroup(), disk=size)) + "\n")
             count += 1
             time.sleep(0.025)
     code = child.wait()

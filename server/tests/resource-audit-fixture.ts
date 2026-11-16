@@ -36,16 +36,18 @@ const [
   background = "simple",
   titleText = "1",
   segmentText = "60",
+  layout = "provisional-v1",
 ] = process.argv.slice(2);
 const seconds = Number(secondsText),
   titles = Number(titleText),
   segmentFrames = Number(segmentText);
 if (
   !["legacy", "unified", "render", "fnf"].includes(mode) ||
-  ![1, 5, 30].includes(seconds) ||
+  ![1, 5, 15, 30].includes(seconds) ||
   ![1, 2, 3].includes(titles) ||
   ![60, 300, 1800].includes(segmentFrames) ||
-  !["simple", "complex"].includes(background)
+  !["simple", "complex"].includes(background) ||
+  !["provisional-v1", "reference-pasa-v1"].includes(layout)
 )
   throw Error("Invalid diagnostic fixture");
 const root = process.env.VIDEO_RENDER_DISK,
@@ -63,6 +65,9 @@ const stage = async (name: string) =>
       cpu: process.cpuUsage(),
     }) + "\n",
   );
+if (!["true", "false"].includes(process.env.VIDEO_RENDER_STATIC_COMPOSITE ?? ""))
+  throw Error("Explicit true/false required");
+await writeFile(join(audit, "effective-node.json"), JSON.stringify({staticComposite: process.env.VIDEO_RENDER_STATIC_COMPOSITE, layout}));
 await stage("startup-no-db");
 const stop = new AbortController();
 const source = join(root, "synthetic.mp4"),
@@ -125,6 +130,9 @@ const hash = await exportFileHash(source),
 const markersUs = Array.from({ length: titles - 1 }, (_, i) =>
   Math.round(((i + 1) * seconds * 1e6) / titles),
 );
+// StoredSpec's legacy type restricts layout to provisional-v1; this offline
+// fixture validates both layouts above and exercises the existing runtime
+// conversion unchanged. This assertion emits no code and does not widen the API.
 const spec = {
   schemaVersion: 1 as const,
   clips: [{ blobId: "clip", startUs: 0, endUs: seconds * 1e6, markersUs }],
@@ -136,11 +144,12 @@ const spec = {
     fadeOutFrames: 9,
     fontHash: EXPORT_FONT_HASH,
     rendererVersion: EXPORT_RENDERER,
-    layout: "provisional-v1" as const,
+    layout: layout as "provisional-v1" | "reference-pasa-v1",
   },
-};
+} as unknown as Parameters<typeof projectFor>[0];
 const jobId = "00000000-0000-4000-8000-000000000001";
 const inputs = [{ path: source, info: await probe(source) }];
+await writeFile(join(audit, "input.json"), JSON.stringify({hash, coverHash: cover.hash, spec, segmentFrames}));
 await stage("material-validation-complete");
 const work = async () => {
   if (mode === "legacy" || mode === "unified") {
@@ -196,6 +205,16 @@ const work = async () => {
     const paths = [];
     for (const segment of plan.segments) {
       const path = join(root, `segment-${segment.index}.mp4`);
+      const version = Math.min(titles - 1, Math.floor(segment.outputStartFrame / (seconds * 60 / titles)));
+      const versionStart = Math.round(version * seconds * 60 / titles);
+      const versionEnd = Math.round((version + 1) * seconds * 60 / titles);
+      const eligible = segment.outputStartFrame - versionStart >= 9 &&
+        segment.outputStartFrame + segment.frames <= versionEnd - 9;
+      const evidence = {segment: segment.index, version, start: segment.outputStartFrame,
+        frames: segment.frames, versionStart, versionEnd, fadeIn: 9, fadeOut: 9, eligible,
+        enabled: process.env.VIDEO_RENDER_STATIC_COMPOSITE, layout,
+        cacheBefore: graphics?.staticComposites.get(version) ?? null};
+      await appendFile(join(audit, "segments.jsonl"), JSON.stringify({event: "begin", ...evidence}) + "\n");
       await stage("title-and-segment-encode");
       if (overlay)
         await encodeFnfSegment(
@@ -217,6 +236,8 @@ const work = async () => {
           path,
           stop.signal,
         );
+      await appendFile(join(audit, "segments.jsonl"), JSON.stringify({event: "encoded", ...evidence,
+        cacheAfter: graphics?.staticComposites.get(version) ?? null}) + "\n");
       await stage("segment-validation");
       await validateVideo(
         path,

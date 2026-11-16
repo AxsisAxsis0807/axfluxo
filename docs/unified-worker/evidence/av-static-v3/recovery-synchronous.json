@@ -1,0 +1,147 @@
+[
+  {
+    "point": "png-generating",
+    "container": "axfluxo-av-v3-stop-1794820201465264984",
+    "restart": "axfluxo-av-v3-stop-1794820201465264984-restart",
+    "observation": {
+      "point": "png-generating",
+      "event": "png-process-spawned",
+      "nodePid": 7,
+      "mediaPid": 80,
+      "pngs": []
+    },
+    "validation": {
+      "schemaVersion": 1,
+      "width": 1920,
+      "height": 1080,
+      "codec": "h264",
+      "fps": 60,
+      "frames": 300,
+      "durationUs": 5000000,
+      "audioSamples": 240640,
+      "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "size": 488611
+    },
+    "scope": "standalone restart, NOT checkpoint/DB recovery"
+  },
+  {
+    "point": "png-complete",
+    "container": "axfluxo-av-v3-stop-1794820252619367575",
+    "restart": "axfluxo-av-v3-stop-1794820252619367575-restart",
+    "observation": {
+      "point": "png-complete",
+      "event": "png-process-successfully-closed",
+      "nodePid": 7,
+      "mediaPid": null,
+      "pngs": [
+        {
+          "name": "av-static-0.png",
+          "size": 330266
+        }
+      ]
+    },
+    "validation": {
+      "schemaVersion": 1,
+      "width": 1920,
+      "height": 1080,
+      "codec": "h264",
+      "fps": 60,
+      "frames": 300,
+      "durationUs": 5000000,
+      "audioSamples": 240640,
+      "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "size": 488611
+    },
+    "scope": "standalone restart, NOT checkpoint/DB recovery"
+  },
+  {
+    "point": "encode-start",
+    "container": "axfluxo-av-v3-stop-1794820307262810907",
+    "restart": "axfluxo-av-v3-stop-1794820307262810907-restart",
+    "observation": {
+      "point": "encode-start",
+      "event": "static-encode-spawned",
+      "nodePid": 8,
+      "mediaPid": 92,
+      "pngs": [
+        {
+          "name": "av-static-0.png",
+          "size": 330266
+        }
+      ]
+    },
+    "validation": {
+      "schemaVersion": 1,
+      "width": 1920,
+      "height": 1080,
+      "codec": "h264",
+      "fps": 60,
+      "frames": 300,
+      "durationUs": 5000000,
+      "audioSamples": 240640,
+      "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "size": 488611
+    },
+    "scope": "standalone restart, NOT checkpoint/DB recovery"
+  },
+  {
+    "point": "segment-complete",
+    "container": "axfluxo-av-v3-stop-1794820354764407009",
+    "restart": "axfluxo-av-v3-stop-1794820354764407009-restart",
+    "observation": {
+      "point": "segment-complete",
+      "event": "static-segment-successfully-closed",
+      "nodePid": 6,
+      "mediaPid": null,
+      "pngs": [
+        {
+          "name": "av-static-0.png",
+          "size": 330266
+        }
+      ]
+    },
+    "validation": {
+      "schemaVersion": 1,
+      "width": 1920,
+      "height": 1080,
+      "codec": "h264",
+      "fps": 60,
+      "frames": 300,
+      "durationUs": 5000000,
+      "audioSamples": 240640,
+      "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "size": 488611
+    },
+    "scope": "standalone restart, NOT checkpoint/DB recovery"
+  },
+  {
+    "point": "before-next-segment",
+    "container": "axfluxo-av-v3-stop-1794820407218337249",
+    "restart": "axfluxo-av-v3-stop-1794820407218337249-restart",
+    "observation": {
+      "point": "before-next-segment",
+      "event": "before-next-spawn",
+      "nodePid": 7,
+      "mediaPid": null,
+      "pngs": [
+        {
+          "name": "av-static-0.png",
+          "size": 330266
+        }
+      ]
+    },
+    "validation": {
+      "schemaVersion": 1,
+      "width": 1920,
+      "height": 1080,
+      "codec": "h264",
+      "fps": 60,
+      "frames": 300,
+      "durationUs": 5000000,
+      "audioSamples": 240640,
+      "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "size": 488611
+    },
+    "scope": "standalone restart, NOT checkpoint/DB recovery"
+  }
+]

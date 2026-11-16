@@ -5,6 +5,8 @@ Not the production image. Requires Linux x86_64, /usr/bin/python3.13, ldd,
 ffmpeg, ffprobe, node, npm dependencies and prebuilt baseline/candidate.mjs.
 No credentials, network configuration or home directories are copied.
 """
+import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -67,3 +69,8 @@ USER 1000:1000
 ENTRYPOINT ["python3", "/app/sample.py", "/work/result", "--", "node", "--import", "/app/preload.mjs"]
 ''')
 print(dest)
+
+# Reproducible binary provenance, without copying any environment/config secrets.
+manifest = {str(p.relative_to(root)): {"bytes": p.stat().st_size, "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+            for p in sorted(root.rglob("*")) if p.is_file()}
+(dest / "binary-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

@@ -1,0 +1,133 @@
+{
+  "method": "literal drawtext templates, same font/geometry/alpha, independently specified clock strings; codec error retained",
+  "fontSha256": "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f",
+  "rows": [
+    {
+      "frame": 60,
+      "expected": "00:01",
+      "bestLiteral": "00:01",
+      "meanAbsolutePixelErrors": {
+        "1": 5.835285714285714,
+        "2": 6.197571428571429,
+        "3": 6.27052380952381,
+        "4": 6.353936507936508,
+        "5": 6.2759841269841266
+      },
+      "match": true,
+      "cropSha256": "7d73e94056f83680534037383e6edc799a28df65d1ddae926805ed95e9faa5a4"
+    },
+    {
+      "frame": 65,
+      "expected": "00:01",
+      "bestLiteral": "00:01",
+      "meanAbsolutePixelErrors": {
+        "1": 5.835285714285714,
+        "2": 6.197571428571429,
+        "3": 6.27052380952381,
+        "4": 6.353936507936508,
+        "5": 6.2759841269841266
+      },
+      "match": true,
+      "cropSha256": "7d73e94056f83680534037383e6edc799a28df65d1ddae926805ed95e9faa5a4"
+    },
+    {
+      "frame": 66,
+      "expected": "00:02",
+      "bestLiteral": "00:02",
+      "meanAbsolutePixelErrors": {
+        "1": 6.195,
+        "2": 5.834238095238096,
+        "3": 6.1413174603174605,
+        "4": 6.391746031746032,
+        "5": 6.293603174603175
+      },
+      "match": true,
+      "cropSha256": "fc9e9f54e23ce8f05b35547245e454b9dd3cccffec8291af33ae9d91d0fae1bf"
+    },
+    {
+      "frame": 120,
+      "expected": "00:02",
+      "bestLiteral": "00:02",
+      "meanAbsolutePixelErrors": {
+        "1": 6.199349206349206,
+        "2": 5.841603174603175,
+        "3": 6.142619047619047,
+        "4": 6.389714285714286,
+        "5": 6.294904761904762
+      },
+      "match": true,
+      "cropSha256": "2a429b8a7029550508573e0714c73c044e4262ac23092895156b3c41cdbbc375"
+    },
+    {
+      "frame": 180,
+      "expected": "00:03",
+      "bestLiteral": "00:03",
+      "meanAbsolutePixelErrors": {
+        "1": 6.271761904761905,
+        "2": 6.14347619047619,
+        "3": 5.8455079365079365,
+        "4": 6.417174603174603,
+        "5": 6.1569682539682535
+      },
+      "match": true,
+      "cropSha256": "7d35c3f3e96aa99bd74fba8f2fc4483a3f59d38b7e7e7c66e8be6475f3f12b10"
+    },
+    {
+      "frame": 360,
+      "expected": "00:01",
+      "bestLiteral": "00:01",
+      "meanAbsolutePixelErrors": {
+        "1": 5.841777777777778,
+        "2": 6.204063492063492,
+        "3": 6.277015873015873,
+        "4": 6.360968253968254,
+        "5": 6.282539682539682
+      },
+      "match": true,
+      "cropSha256": "b0b4cf5875b4458892ef4139b5face19da55bd6874d9639c2cf133d9f1f25ad0"
+    },
+    {
+      "frame": 366,
+      "expected": "00:02",
+      "bestLiteral": "00:02",
+      "meanAbsolutePixelErrors": {
+        "1": 6.201142857142857,
+        "2": 5.840253968253968,
+        "3": 6.147396825396825,
+        "4": 6.397984126984127,
+        "5": 6.299492063492064
+      },
+      "match": true,
+      "cropSha256": "5c01848b3f3b4f39d0cb9315b4a24f39ed83f77c185112fe01b52269967eddac"
+    },
+    {
+      "frame": 660,
+      "expected": "00:01",
+      "bestLiteral": "00:01",
+      "meanAbsolutePixelErrors": {
+        "1": 5.842095238095238,
+        "2": 6.204031746031746,
+        "3": 6.276984126984127,
+        "4": 6.360015873015873,
+        "5": 6.282285714285714
+      },
+      "match": true,
+      "cropSha256": "5fa5dde74be26428c62b63ab9592faf54c49f43a053edac764ced7a52be146cb"
+    },
+    {
+      "frame": 666,
+      "expected": "00:02",
+      "bestLiteral": "00:02",
+      "meanAbsolutePixelErrors": {
+        "1": 6.20115873015873,
+        "2": 5.8402698412698415,
+        "3": 6.147412698412698,
+        "4": 6.397777777777778,
+        "5": 6.299476190476191
+      },
+      "match": true,
+      "cropSha256": "ec976c52a3848109e85b717f5e0b9eef34b898c12479a8776619b079b5d641ae"
+    }
+  ],
+  "status": "PASS"
+}

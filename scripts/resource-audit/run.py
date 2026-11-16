@@ -4,6 +4,7 @@
 python3 scripts/resource-audit/run.py OUTPUT_DIR [--quick]
 Requires the diagnostic image built by pack-runtime.py. No deployment/provider use.
 """
+import os
 import hashlib
 import json
 from pathlib import Path
@@ -11,6 +12,11 @@ import subprocess
 import shutil
 import sys
 import time
+
+# v3 is an explicit single-case runner with exact decimal/binary limits.
+# The historical v2 matrix below is retained, not used as v3 evidence.
+if len(sys.argv) > 1 and sys.argv[1] == "--static-v3":
+    os.execv(sys.executable, [sys.executable, str(Path(__file__).with_name("static-v3.py")), *sys.argv[2:]])
 
 out = Path(sys.argv[1]).resolve()
 out.mkdir(parents=True, exist_ok=False)
