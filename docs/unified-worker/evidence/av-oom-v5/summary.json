@@ -1,0 +1,25 @@
+{
+  "overall": "HOLD",
+  "verdicts": {
+    "decimal512MBSynthetic": "HOLD",
+    "512MBPractical": "HOLD",
+    "512MiBSyntheticQualification": "HOLD",
+    "oneGBSynthetic": "PASS_IMPLEMENTED_SYNTHETIC_SCOPE_ONLY",
+    "BlitzFreeOperation": "HOLD",
+    "production": "HOLD"
+  },
+  "resourceCases": 40,
+  "fullJobsCompletedIncludingBaselineAndRejectedB8": 30,
+  "componentPhasesCompleted": 6,
+  "oomFailures": 3,
+  "invalidSetup": 1,
+  "qualityComparisons": 23,
+  "exactQualityComparisons": 22,
+  "diagnosticQualityRejection": "B8-300-1GB-r1",
+  "standaloneKillRestartCases": 4,
+  "accountCreatedKnown": "2026-11-07",
+  "accountApplicability": "アカウント適用未検証",
+  "productionRendererChanged": false,
+  "sourceBase": "de971898af831156c17db09090fa5fd57e52c8f1",
+  "branch": "codex/av-oom-rootcause-audit-v5"
+}

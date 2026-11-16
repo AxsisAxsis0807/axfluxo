@@ -1,0 +1,44 @@
+{
+  "scope": "synthetic source audio inside fixed generated MP4; no user material",
+  "durationsSeconds": {
+    "5": {
+      "path": "/workspace/axfluxo/work/av-oom-v5/B1-1GB-r2/work/result/media/synthetic.mp4",
+      "mediaSha256": "94d1b4075e575ef07f7e409fb54275297679182a4f5c5a7b9e926080c585e7be",
+      "bytes": 21546387,
+      "audioAdts": {
+        "bytes": 81900,
+        "sha256": "fc24695a5dce2a7174d4503bccd0e0ab624b15bbc881f1651cf47aa8f519ea7a"
+      },
+      "audioPcm": {
+        "bytes": 962560,
+        "sha256": "57d61b87d67c426e91deb6ff5a34a945ac10d1b1a9a92a2afbe6d9b5bfd9272c"
+      }
+    },
+    "15": {
+      "path": "/workspace/axfluxo/work/av-oom-v5/B3-1GB-r1/work/result/media/synthetic.mp4",
+      "mediaSha256": "6e01fa4b6aad5321912033d4c29f0d2b9127a1b6f15cd162146081ec1a38ccb1",
+      "bytes": 64394860,
+      "audioAdts": {
+        "bytes": 245358,
+        "sha256": "bf4366691d9dd7f47c227f4314a5536f8f8fc371b3209a6275229a20ff941caa"
+      },
+      "audioPcm": {
+        "bytes": 2883584,
+        "sha256": "c8b31e2a99a55d933d74f5f89e3c9d0d9a778fd55e6a0e046218da688354bdc5"
+      }
+    },
+    "30": {
+      "path": "/workspace/axfluxo/work/av-oom-v5/B-30-1GB-r1/work/result/media/synthetic.mp4",
+      "mediaSha256": "c585f36046d9ea6760238a85fb3b1fb9cdade9a9744c91889b5e88d52ec9077e",
+      "bytes": 129040897,
+      "audioAdts": {
+        "bytes": 490269,
+        "sha256": "48416b66316ba49c626e14639e599b760115a431204fa20e5297eae7176ea7d0"
+      },
+      "audioPcm": {
+        "bytes": 5763072,
+        "sha256": "ba6fa5283f539c590fa909e7d1970eb73ca104069dbdd2335056bb3c7f41226e"
+      }
+    }
+  }
+}

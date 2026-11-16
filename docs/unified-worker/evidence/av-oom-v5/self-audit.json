@@ -1,0 +1,91 @@
+{
+  "auditor": "same implementing assistant",
+  "independentThirdParty": false,
+  "performedAfterExperiments": true,
+  "rounds": [
+    {
+      "round": 1,
+      "status": "PASS",
+      "scope": "specification/diff within offline audit",
+      "evidence": [
+        "production renderer/API/DB/infra delta zero",
+        "verification.json: original video/audio encoder settings; B8 rejected"
+      ],
+      "remaining": [
+        "arbitrary real media and production image untested"
+      ],
+      "reviewedUnix": 1794843719.32609
+    },
+    {
+      "round": 2,
+      "status": "PASS",
+      "scope": "diagnostic code/reproducibility, not production certification",
+      "evidence": [
+        "immutable local image IDs / full binary-file manifests",
+        "four bundles independently rebuilt to identical SHA",
+        "raw SHA and cgroup/codec/isolation invariants verified; loop/PTS exact comparisons",
+        "initial COPY permission/type error/EPERM retained and corrected without assertion weakening"
+      ],
+      "remaining": [
+        "no registry RepoDigest on local scratch images",
+        "host cold/warm cache uncontrolled; 25ms samples miss spikes",
+        "full repository/browser suite not rerun"
+      ],
+      "reviewedUnix": 1794843719.3266532
+    },
+    {
+      "round": 3,
+      "status": "HOLD",
+      "scope": "resources/root cause",
+      "evidence": [
+        "decimal512MB 5s only 2/3 success; 15s three-title segment10 OOM",
+        "same-PNG B4 segment5 OOM; file nearly reclaimed at B3 failure",
+        "512MiB 15s one success at cap/max+34 is not safe margin",
+        "full-job Node Anonymous and fresh FFmpeg PID/THP time series; no title-leak assertion"
+      ],
+      "remaining": [
+        "512MB safety margin and required acceptance matrix",
+        "internal allocator/queue ownership; arbitrary long/multiple-job leak behavior",
+        "host co-tenancy/cache accounting prevent universal timing claims"
+      ],
+      "reviewedUnix": 1794843719.3267074
+    },
+    {
+      "round": 4,
+      "status": "PARTIAL",
+      "scope": "quality/recovery",
+      "evidence": [
+        "22 matched synthetic job and segment comparisons exact",
+        "B8 raw900 exact but decoded840 differ; keyframes/identity change; rejected",
+        "four standalone SIGKILL/regeneration cases exact; live mux partial48 B invalid before restart",
+        "actual executeRender + PGlite/FakeStorage upload-retry/checkpoint reuse: baseline/B/C1 one selected case each",
+        "Mock barriers/cache/reference scoped tests retained"
+      ],
+      "remaining": [
+        "native PostgreSQL + real Worker process + real storage recovery",
+        "legacy remote mixed checkpoint migration",
+        "publication transaction before/after hard-kill and provider upload failures",
+        "C1 long/Reference untested and rejected for no resource improvement"
+      ],
+      "reviewedUnix": 1794843719.3274453
+    },
+    {
+      "round": 5,
+      "status": "HOLD",
+      "scope": "safety/free operation/release",
+      "evidence": [
+        "synthetic-only, credential-free workload environments, network none; only owned stopped containers removed",
+        "main/PR34/PR35 unchanged; no deploy/Blitz/billing/production data operation",
+        "German/English public rule exception checked; 2026-11-07 creation known",
+        "API Small + Worker Medium + PostgreSQL theoretical reservation512 MB, actual inventory unverified"
+      ],
+      "remaining": [
+        "exact rule introduction/current account exception/plan/reservation inventory",
+        "long jobs, multiple jobs, reserved CPU, disk and sleep recovery in actual platform",
+        "explicit user approval before production-image/real Worker/storage/Blitz experiments or settings"
+      ],
+      "reviewedUnix": 1794843719.3278816
+    }
+  ],
+  "overall": "HOLD"
+}

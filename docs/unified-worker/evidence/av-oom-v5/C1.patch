@@ -1,0 +1,13 @@
+diff --git a/server/worker/templates/all-versions/graphics.ts b/server/worker/templates/all-versions/graphics.ts
+index 8dead4a..123aebc 100644
+--- a/server/worker/templates/all-versions/graphics.ts
++++ b/server/worker/templates/all-versions/graphics.ts
+@@ -207,5 +207,7 @@ export async function backgroundImage(
+     ctx.fillStyle = "rgba(0,0,0,.48)";
+     ctx.fillRect(width * 0.05, height * 0.78, width * 0.9, height * 0.15);
+   }
+-  return canvas.encode("png");
++  const png = await canvas.encode("png");
++  canvas.width = 1; canvas.height = 1;
++  return png;
+ }

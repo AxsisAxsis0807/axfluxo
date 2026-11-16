@@ -1,0 +1,488 @@
+{
+  "scope": "matched synthetic jobs only, not real media or production",
+  "comparisons": [
+    {
+      "file": "quality-B-30-1GB-r1.json",
+      "sha256": "f50e32d2469385efecf045140127b56a47065f4cb46eb20b548c2e73ce69ada4",
+      "left": "base-30-1GB-r1",
+      "right": "B-30-1GB-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "21708b54a7b32e133e47e9eb6cda0d7cb87da4d23ddeb267993ce86ba2e56fc0",
+      "rightMp4Sha256": "21708b54a7b32e133e47e9eb6cda0d7cb87da4d23ddeb267993ce86ba2e56fc0",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B-ref-1GB-r1.json",
+      "sha256": "c80f8a529f773d7d3e53c0faacc0d127fc87cc368b19699ee5f5e219bef12f35",
+      "left": "base-ref-1GB-r1",
+      "right": "B-ref-1GB-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "9d4edba7c145da22acee4a8b7af24638967b4e20f0fc9194ec14d9c6181bd8f2",
+      "rightMp4Sha256": "9d4edba7c145da22acee4a8b7af24638967b4e20f0fc9194ec14d9c6181bd8f2",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B-shift-1GB-r1.json",
+      "sha256": "b7775651d638b6e377ba6f35df87b66c2e50925903a5a1bb2f9a8cb1539cc8c7",
+      "left": "base-shift-1GB-r1",
+      "right": "B-shift-1GB-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "d72f29a63c1ab0e97501abbad9dc02bcd909d59e998a0319ea0868d08bc81e5c",
+      "rightMp4Sha256": "d72f29a63c1ab0e97501abbad9dc02bcd909d59e998a0319ea0868d08bc81e5c",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B1-1GB-r2.json",
+      "sha256": "f49cf03bda6595e9da882860c8ec16982c756172757847078de330d64847beea",
+      "left": "base-5-1GB-r1",
+      "right": "B1-1GB-r2",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "rightMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B1-512000000-r1.json",
+      "sha256": "22f8ebdfdcab4a56ad5a4a9c069006b0b039aa1f0668dac052dbf6a9146cc9fb",
+      "left": "base-5-1GB-r1",
+      "right": "B1-512000000-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "rightMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B1-512000000-r3.json",
+      "sha256": "917720368f96a07c6eb63bac5a100107ccb7951024ac41bc90bfdabbe02d9401",
+      "left": "base-5-1GB-r1",
+      "right": "B1-512000000-r3",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "rightMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B1-536870912-r1.json",
+      "sha256": "b552d34f1bee0c349330c0126e4bca81480c8f38436140135572fad4785a9774",
+      "left": "base-5-1GB-r1",
+      "right": "B1-536870912-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "rightMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B1-536870912-r2.json",
+      "sha256": "8ea93a6590c9708c207e2bcc9f68ec26ee5c66250f01f958dc032c18255f89e9",
+      "left": "base-5-1GB-r1",
+      "right": "B1-536870912-r2",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "rightMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B1-536870912-r3.json",
+      "sha256": "0ea658b46035f36f0dcc57ed475e61c9b274f7a96d88ef262cf0aff68a8e5a63",
+      "left": "base-5-1GB-r1",
+      "right": "B1-536870912-r3",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "rightMp4Sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B2-1GB-r1.json",
+      "sha256": "7be57351e3913b0e39293e0c3627d56fedf0b87c213f5d8831cbfad70906ce62",
+      "left": "base-B2-1GB-r1",
+      "right": "B2-1GB-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "9280003c495effa8d4c2aa637a4a8cf4cc85c68bcbbcabc0329a3d71c8976e39",
+      "rightMp4Sha256": "9280003c495effa8d4c2aa637a4a8cf4cc85c68bcbbcabc0329a3d71c8976e39",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B2-512000000-r1.json",
+      "sha256": "ce4d306ce9f2b86af0d23ec8895706785f8ce8be8077c6d5f70dc401ab73de7d",
+      "left": "base-B2-1GB-r1",
+      "right": "B2-512000000-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "9280003c495effa8d4c2aa637a4a8cf4cc85c68bcbbcabc0329a3d71c8976e39",
+      "rightMp4Sha256": "9280003c495effa8d4c2aa637a4a8cf4cc85c68bcbbcabc0329a3d71c8976e39",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B3-1GB-r1.json",
+      "sha256": "a06d7744b1d208cf7fd13e2d8b96b1e482c9b18bf99c19999c583712cc0716da",
+      "left": "base-15-1GB-r1",
+      "right": "B3-1GB-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "rightMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B3-1GB-r2.json",
+      "sha256": "160a431fddc1d2527af39282ed335e3f2b7de6b00531ef552e1eccc43be161b1",
+      "left": "base-15-1GB-r1",
+      "right": "B3-1GB-r2",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "rightMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B3-1GB-r3.json",
+      "sha256": "d28b37e99b221368fa7d39c8ba32f03dd6d5131f2a71f3454dd11a5c5107099a",
+      "left": "base-15-1GB-r1",
+      "right": "B3-1GB-r3",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "rightMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B3-536870912-r1.json",
+      "sha256": "bad82bf873da0afa2f20919f6327aff3742af4511b0fcdab9b37787d008c4d6f",
+      "left": "B3-1GB-r1",
+      "right": "B3-536870912-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "rightMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B3-thp-1GB-r1.json",
+      "sha256": "97ad40f19e5b749f1b88bdb1c9ab7c9b8a417d4f7c0a1f9803a74f753a4827c7",
+      "left": "base-15-1GB-r1",
+      "right": "B3-thp-1GB-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "rightMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B4-1GB-r1.json",
+      "sha256": "614d80291967b7198ff782f6c5e39ac16cba43ffaa18bd6bcf01a2f1a08df82b",
+      "left": "base-B4-1GB-r1",
+      "right": "B4-1GB-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "5639814c968778db4e8c176f6e25acfa88b3b588e4819b17cde8785fa974f5d5",
+      "rightMp4Sha256": "5639814c968778db4e8c176f6e25acfa88b3b588e4819b17cde8785fa974f5d5",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B5-1GB-r1.json",
+      "sha256": "de07b54eecd89e4847719ff9f11f872f25f3480466bcb3c5d49b08ea525e86fc",
+      "left": "B3-1GB-r1",
+      "right": "B5-1GB-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "rightMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B6-off-1GB-r1.json",
+      "sha256": "709471715351af3a27bd53eb7aa7d5196074e49b28890222d1cf8d43fab256f8",
+      "left": "B3-1GB-r1",
+      "right": "B6-off-1GB-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "rightMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-B8-300-1GB-r1.json",
+      "sha256": "5ae8acb6fb4574962b97eb621e7bcb98b37ca90e0d8292decc5cb3a59ec41963",
+      "left": "B3-1GB-r1",
+      "right": "B8-300-1GB-r1",
+      "status": "HOLD_DIFFERENCE",
+      "checks": {
+        "mp4Sha256": false,
+        "decodedFrameHashSha256": false,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": false
+      },
+      "leftMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "rightMp4Sha256": "016ef065d4af01979d46ae56071dbd8ce76cf223db210bebf24553e1e472c73b",
+      "expectedDiagnosticDifference": true
+    },
+    {
+      "file": "quality-C1-1GB-r1.json",
+      "sha256": "a79ff674695c0255db838a292ac81e37c20652aa4905ada73f9005e0949898b5",
+      "left": "base-15-1GB-r1",
+      "right": "C1-1GB-r1",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "rightMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-C1-1GB-r2.json",
+      "sha256": "3ad8706caed940874f4f699c0526fc975df61936a5e6f7837e7679d0c12275a1",
+      "left": "base-15-1GB-r1",
+      "right": "C1-1GB-r2",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "rightMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "expectedDiagnosticDifference": false
+    },
+    {
+      "file": "quality-C1-1GB-r3.json",
+      "sha256": "0da4b5fbfe1473c2291d092304a4d9269455df0f56b5cd8cf08a261e2e803709",
+      "left": "base-15-1GB-r1",
+      "right": "C1-1GB-r3",
+      "status": "PASS_EXACT",
+      "checks": {
+        "mp4Sha256": true,
+        "decodedFrameHashSha256": true,
+        "frames": true,
+        "ptsDurationSha256": true,
+        "audioPcmSha256": true,
+        "audioSamples": true,
+        "videoMetadata": true,
+        "audioMetadata": true,
+        "input": true
+      },
+      "leftMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "rightMp4Sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "expectedDiagnosticDifference": false
+    }
+  ]
+}

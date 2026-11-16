@@ -1,0 +1,176 @@
+{
+  "scope": "host verification / embedded PGlite / FakeStorage only",
+  "records": [
+    {
+      "label": "typecheck",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "exitCode": 2,
+      "startedUnix": 1794838824.6057167,
+      "wallSeconds": 34.79574728012085,
+      "log": "work/av-oom-v5-checks/typecheck.log",
+      "sha256": "640edbd2b675d2dd15d455b3e7301b8385c4a53e1ee06c1310c8425e9b228c85",
+      "scope": "host checks outside measured container; no memory acceptance evidence"
+    },
+    {
+      "label": "lint-phase",
+      "command": [
+        "node_modules/.bin/eslint",
+        "server/tests/resource-phase-v5.ts",
+        "--max-warnings=0"
+      ],
+      "exitCode": 0,
+      "startedUnix": 1794838859.4017065,
+      "wallSeconds": 2.4773194789886475,
+      "log": "work/av-oom-v5-checks/lint-phase.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scope": "host checks outside measured container; no memory acceptance evidence"
+    },
+    {
+      "label": "typecheck-final",
+      "command": [
+        "npm",
+        "run",
+        "typecheck"
+      ],
+      "exitCode": 0,
+      "startedUnix": 1794839160.8508482,
+      "wallSeconds": 46.19373559951782,
+      "log": "work/av-oom-v5-checks/typecheck-final.log",
+      "sha256": "d29666c75918f3227da70d1b7dcc12a191e5dd228f35fc2364d2233c224df236",
+      "scope": "host verification; not resource acceptance"
+    },
+    {
+      "label": "lint-final",
+      "command": [
+        "npm",
+        "run",
+        "lint"
+      ],
+      "exitCode": 0,
+      "startedUnix": 1794839207.0463107,
+      "wallSeconds": 19.944302558898926,
+      "log": "work/av-oom-v5-checks/lint-final.log",
+      "sha256": "ff5c53efb0e96e9e2b51cf63a81d784eb360a480d748f1d056d1be94c6d79779",
+      "scope": "host verification; not resource acceptance"
+    },
+    {
+      "label": "worker-build",
+      "command": [
+        "npm",
+        "run",
+        "build:worker",
+        "--workspace",
+        "server"
+      ],
+      "exitCode": 0,
+      "startedUnix": 1794839226.9913146,
+      "wallSeconds": 0.32862138748168945,
+      "log": "work/av-oom-v5-checks/worker-build.log",
+      "sha256": "8560e1b1f8fbb889599ccce7a7c20de73a5418c43b9586f8f9d319b3e49858a1",
+      "scope": "host verification; not resource acceptance"
+    },
+    {
+      "label": "render-build",
+      "command": [
+        "npm",
+        "run",
+        "build:render",
+        "--workspace",
+        "server"
+      ],
+      "exitCode": 0,
+      "startedUnix": 1794839227.3203754,
+      "wallSeconds": 0.2395036220550537,
+      "log": "work/av-oom-v5-checks/render-build.log",
+      "sha256": "a2f78e20af2024011fc56237aec9a40ae8a4ceb7e6c81dc9bc351c5a6ab6f5d4",
+      "scope": "host verification; not resource acceptance"
+    },
+    {
+      "label": "recovery-cache-reference",
+      "command": [
+        "node_modules/.bin/vitest",
+        "run",
+        "server/tests/resource-recovery-v2.test.ts",
+        "server/tests/render/av-static-v3.test.ts",
+        "server/tests/render/all-versions-reference.test.ts",
+        "--maxWorkers=1"
+      ],
+      "exitCode": 1,
+      "startedUnix": 1794839227.5604131,
+      "wallSeconds": 4.945418119430542,
+      "log": "work/av-oom-v5-checks/recovery-cache-reference.log",
+      "sha256": "54eed272857fc7880f4ca74a2c7cf79e75a31a78a40d760c80cdf4cb88bf31b6",
+      "scope": "host verification; not resource acceptance"
+    },
+    {
+      "label": "worker-PGlite-FakeStorage-baseline",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "server/tests/projects/projects.test.ts",
+        "--maxWorkers=1",
+        "-t",
+        "v3: static ON"
+      ],
+      "exitCode": 0,
+      "startedUnix": 1794839232.5067868,
+      "wallSeconds": 14.793415307998657,
+      "log": "work/av-oom-v5-checks/worker-PGlite-FakeStorage-baseline.log",
+      "sha256": "ebcc1fd4b0c3f4f3e6302ed35c61701779b375a1983ac25f7455269779bdc5f8",
+      "scope": "Worker / embedded PGlite / FakeStorage only; no native PostgreSQL or real storage"
+    },
+    {
+      "label": "worker-PGlite-FakeStorage-B",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "server/tests/projects/projects.test.ts",
+        "--maxWorkers=1",
+        "-t",
+        "v3: static ON"
+      ],
+      "exitCode": 0,
+      "startedUnix": 1794839247.3014266,
+      "wallSeconds": 14.241204261779785,
+      "log": "work/av-oom-v5-checks/worker-PGlite-FakeStorage-B.log",
+      "sha256": "a4a5f4d2d4d158a822813afe7cb91528c71613c122bf07ac435e9495edf3f07b",
+      "scope": "Worker / embedded PGlite / FakeStorage only; no native PostgreSQL or real storage"
+    },
+    {
+      "label": "worker-PGlite-FakeStorage-C1",
+      "command": [
+        "./node_modules/.bin/vitest",
+        "run",
+        "server/tests/projects/projects.test.ts",
+        "--maxWorkers=1",
+        "-t",
+        "v3: static ON"
+      ],
+      "exitCode": 0,
+      "startedUnix": 1794839261.546019,
+      "wallSeconds": 13.572557926177979,
+      "log": "work/av-oom-v5-checks/worker-PGlite-FakeStorage-C1.log",
+      "sha256": "17a6de2c6e40430a3ae7d3e0f53754e0b93a970607cbfb6485df23c9f0669fe3",
+      "scope": "Worker / embedded PGlite / FakeStorage only; no native PostgreSQL or real storage"
+    },
+    {
+      "label": "reference-permission-retry",
+      "command": [
+        "node_modules/.bin/vitest",
+        "run",
+        "server/tests/render/all-versions-reference.test.ts",
+        "--maxWorkers=1"
+      ],
+      "exitCode": 0,
+      "startedUnix": 1794839290.5174446,
+      "wallSeconds": 11.810692548751831,
+      "log": "work/av-oom-v5-checks/reference-permission-retry.log",
+      "sha256": "47ca4a99bd5d2cff11f972c9017acb3d15af548f27b91719caedcecd511fba09",
+      "scope": "same unchanged test; sandbox ffprobe EPERM retry with additional execution permissions"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "scope": "standalone live-mux interruption, not Worker/publication recovery",
+  "marker": {
+    "point": "mux-running",
+    "event": "mux-live-partial-output",
+    "nodePid": 7,
+    "mediaPid": 195,
+    "partialMuxBytes": 48,
+    "cgroupAtFreeze": {
+      "memory.max": "999997440",
+      "memory.peak": "535994368",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+      "memory.swap.max": "0",
+      "cpu.max": "50000 100000",
+      "cpu.stat": "usage_usec 24811409\nuser_usec 20094801\nsystem_usec 4716607\nnice_usec 0\nnr_periods 496\nnr_throttled 496\nthrottled_usec 90825216\nnr_bursts 0\nburst_usec 0"
+    },
+    "pngs": [
+      {
+        "name": "av-static-0.png",
+        "size": 330266
+      }
+    ]
+  },
+  "partialArtifact": "/workspace/axfluxo/work/av-oom-v5-recovery/mux-running/killed-work/result/media/candidate.mp4",
+  "bytes": 48,
+  "sha256": "64d52708f594e8a1a3a4f76deef7275c8ad5184480c9473d8f60a0c9b6f4628b",
+  "ffprobeExitCode": 1,
+  "ffprobeStderr": "[mov,mp4,m4a,3gp,3g2,mj2 @ 0x5608888dff00] moov atom not found\nwork/av-oom-v5-recovery/mux-running/killed-work/result/media/candidate.mp4: Invalid data found when processing input\n",
+  "finalRestart": {
+    "schemaVersion": 1,
+    "width": 1920,
+    "height": 1080,
+    "codec": "h264",
+    "fps": 60,
+    "frames": 300,
+    "durationUs": 5000000,
+    "audioSamples": 240640,
+    "sha256": "df31d5e1b4be8b8832ac38b43adbe5f5f0fc158b361e0bf953590dadaf1c3d95",
+    "size": 488611
+  },
+  "restartedExact": true
+}

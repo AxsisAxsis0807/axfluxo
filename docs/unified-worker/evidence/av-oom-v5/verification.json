@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "scope": "evidence consistency only; qualification/production remain separate",
+  "caseCount": 40,
+  "errors": [],
+  "warnings": [
+    "B1-1GB-r1: INVALID for static ON qualification",
+    "B1-1GB-r1: excluded setup failure",
+    "B1-512000000-r1: memory pressure / near-cap display alert (98% heuristic, NOT a release threshold)",
+    "B1-512000000-r2: INVALID for static ON qualification",
+    "B1-512000000-r2: memory pressure / near-cap display alert (98% heuristic, NOT a release threshold)",
+    "B1-512000000-r3: memory pressure / near-cap display alert (98% heuristic, NOT a release threshold)",
+    "B1-536870912-r1: memory pressure / near-cap display alert (98% heuristic, NOT a release threshold)",
+    "B2-512000000-r1: memory pressure / near-cap display alert (98% heuristic, NOT a release threshold)",
+    "B3-512000000-r1: memory pressure / near-cap display alert (98% heuristic, NOT a release threshold)",
+    "B3-536870912-r1: memory pressure / near-cap display alert (98% heuristic, NOT a release threshold)",
+    "B4-512000000-r1: memory pressure / near-cap display alert (98% heuristic, NOT a release threshold)",
+    "B8-300-1GB-r1: INVALID for static ON qualification"
+  ]
+}

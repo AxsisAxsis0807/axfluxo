@@ -1,0 +1,37 @@
+{
+  "baseline": {
+    "server/tests/resource-audit-fixture.ts": "e57814cb441c479bbd1c87fd121b34b885caae46a748b14a4f9dd6f9a84f6b26",
+    "server/worker/templates/all-versions/render.ts": "eef4e217cc7a9eef1bdb65d1d1b450c252c9d622d11f7b0edeb3ccc8a60c5ba3",
+    "server/worker/templates/all-versions/reference-render.ts": "f32c54cac7e8e6f3d9aa248c04bc802a441b7e16be8399ba8f06beb095424241",
+    "server/worker/templates/all-versions/graphics.ts": "bbfd2a4202c16836b65e1aa49549d37be79b985ba0b4e02391eec086b105b06e",
+    "server/worker/render/encode.ts": "a276a6c8aaf4bf10e17c2011774bc04a690fbe237ae935a44d3a6f391482b8d7",
+    "server/worker/render/plan.ts": "a05cb6b4c1ab889c8ea49e0aa02a05f4110c93b40cceb17c76dba592a82e8d5b",
+    "server/worker/render/service.ts": "fb5da489b523eae4c288506d4eab93626336a1bda013ea2890cce16c5993880d"
+  },
+  "B": {
+    "server/tests/resource-audit-fixture.ts": "e57814cb441c479bbd1c87fd121b34b885caae46a748b14a4f9dd6f9a84f6b26",
+    "server/worker/templates/all-versions/render.ts": "749929399bc68af7f64e9f0161adfb72462ce39f2fbe393a8bc6c200c5a8d412",
+    "server/worker/templates/all-versions/reference-render.ts": "d962bc1513069d965637cda9e65c8b22fe4c80d0eab54db46cb6b9cb9868b17c",
+    "server/worker/templates/all-versions/graphics.ts": "bbfd2a4202c16836b65e1aa49549d37be79b985ba0b4e02391eec086b105b06e",
+    "server/worker/render/encode.ts": "a276a6c8aaf4bf10e17c2011774bc04a690fbe237ae935a44d3a6f391482b8d7",
+    "server/worker/render/plan.ts": "a05cb6b4c1ab889c8ea49e0aa02a05f4110c93b40cceb17c76dba592a82e8d5b",
+    "server/worker/render/service.ts": "fb5da489b523eae4c288506d4eab93626336a1bda013ea2890cce16c5993880d"
+  },
+  "C1": {
+    "server/tests/resource-audit-fixture.ts": "e57814cb441c479bbd1c87fd121b34b885caae46a748b14a4f9dd6f9a84f6b26",
+    "server/worker/templates/all-versions/render.ts": "749929399bc68af7f64e9f0161adfb72462ce39f2fbe393a8bc6c200c5a8d412",
+    "server/worker/templates/all-versions/reference-render.ts": "d962bc1513069d965637cda9e65c8b22fe4c80d0eab54db46cb6b9cb9868b17c",
+    "server/worker/templates/all-versions/graphics.ts": "59217b88ec04d97fc79ecef32675278f9cb4430cfda5a243b574c3ffd26def66",
+    "server/worker/render/encode.ts": "a276a6c8aaf4bf10e17c2011774bc04a690fbe237ae935a44d3a6f391482b8d7",
+    "server/worker/render/plan.ts": "a05cb6b4c1ab889c8ea49e0aa02a05f4110c93b40cceb17c76dba592a82e8d5b",
+    "server/worker/render/service.ts": "fb5da489b523eae4c288506d4eab93626336a1bda013ea2890cce16c5993880d"
+  },
+  "patches": {
+    "B": "abb470ede22324a6533e3e883d266dd40ffc26b370df4345c65a2ffecf71c320",
+    "C1": "16b432f6f324322688049217301ed4d058186eff76e5a3e44e09e8eb3fab4e11"
+  },
+  "BmatchesV4RendererFiles": {
+    "server/worker/templates/all-versions/render.ts": true,
+    "server/worker/templates/all-versions/reference-render.ts": true
+  }
+}

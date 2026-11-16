@@ -1,0 +1,37 @@
+{
+  "timestampUtc": "2026-11-16",
+  "base": "de971898af831156c17db09090fa5fd57e52c8f1",
+  "branch": "codex/av-oom-rootcause-audit-v5",
+  "knownPRs": [
+    {
+      "number": 34,
+      "head": "81d6c739a797e95386855ad1b78313a88e9b1077",
+      "state": "open",
+      "draft": true,
+      "merged": false
+    },
+    {
+      "number": 35,
+      "head": "498bf9d64f1329fbec6b04b6ce7679a0cd094049",
+      "state": "open",
+      "draft": true,
+      "merged": false
+    }
+  ],
+  "operations": {
+    "mainUpdated": false,
+    "existingPRBranchesUpdated": false,
+    "productionImageUsed": false,
+    "productionCloudModified": false,
+    "BlitzModified": false,
+    "billingModified": false,
+    "productionDataUsed": false,
+    "userMediaUsed": false,
+    "productionCredentialsUsed": false,
+    "globalTHPChanged": false
+  },
+  "hostTHP": {
+    "enabled": "always [madvise] never",
+    "defrag": "always defer defer+madvise [madvise] never"
+  }
+}

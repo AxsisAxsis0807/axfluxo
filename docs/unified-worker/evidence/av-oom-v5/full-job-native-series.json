@@ -1,0 +1,222 @@
+{
+  "scope": "same B bundle, expanded sampler only; single diagnostic run, not a leak proof or allocator trace",
+  "summary": {
+    "schema": 1,
+    "cgroupScope": "entire visible cgroup; NOT isolated unless run in a dedicated container",
+    "sampleIntervalMs": 25,
+    "samples": 1984,
+    "peaks": {
+      "rss": 671899648,
+      "pss": 666615808,
+      "uss": 663027712,
+      "disk": 73594542,
+      "threads": 31
+    },
+    "byProgram": {
+      "ffmpeg": {
+        "rss": 510070784,
+        "pss": 507431936,
+        "uss": 505638912,
+        "threads": 19
+      },
+      "ffprobe": {
+        "rss": 82927616,
+        "pss": 80283648,
+        "uss": 78483456,
+        "threads": 1
+      },
+      "node": {
+        "rss": 186097664,
+        "pss": 184797184,
+        "uss": 183504896,
+        "threads": 12
+      }
+    },
+    "wallSeconds": 139.78463787200053,
+    "cpuSeconds": 60.988763999999996,
+    "exitCode": 0,
+    "signal": null,
+    "cgroupBefore": {
+      "memory.current": "6701056",
+      "memory.peak": "6701056",
+      "memory.max": "999997440",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+      "memory.stat": "anon 5783552\nfile 4096\nkernel 360448\nkernel_stack 16384\npagetables 73728\nsec_pagetables 0\npercpu 1780\nsock 0\nvmalloc 12288\nshmem 0\nfile_mapped 0\nfile_dirty 4096\nfile_writeback 0\nswapcached 0\nanon_thp 0\nfile_thp 0\nshmem_thp 0\ninactive_anon 5705728\nactive_anon 0\ninactive_file 4096\nactive_file 0\nunevictable 0\nslab_reclaimable 77128\nslab_unreclaimable 171160\nslab 248288\nworkingset_refault_anon 0\nworkingset_refault_file 0\nworkingset_activate_anon 0\nworkingset_activate_file 0\nworkingset_restore_anon 0\nworkingset_restore_file 0\nworkingset_nodereclaim 0\npgdemote_kswapd 0\npgdemote_direct 0\npgdemote_khugepaged 0\npgdemote_proactive 0\npgscan 0\npgsteal 0\npswpin 0\npswpout 0\npgscan_kswapd 0\npgscan_direct 0\npgscan_khugepaged 0\npgscan_proactive 0\npgsteal_kswapd 0\npgsteal_direct 0\npgsteal_khugepaged 0\npgsteal_proactive 0\npgfault 3251\npgmajfault 0\npgrefill 0\npgactivate 0\npgdeactivate 0\npglazyfree 0\npglazyfreed 0\nswpin_zero 0\nswpout_zero 0\nthp_fault_alloc 0\nthp_collapse_alloc 0\nthp_swpout 0\nthp_swpout_fallback 0",
+      "memory.swap.current": "0",
+      "memory.swap.max": "0",
+      "cpu.stat": "usage_usec 76255\nuser_usec 39757\nsystem_usec 36498\nnice_usec 0\nnr_periods 1\nnr_throttled 0\nthrottled_usec 0\nnr_bursts 0\nburst_usec 0",
+      "cpu.max": "50000 100000"
+    },
+    "cgroupAfter": {
+      "memory.current": "84840448",
+      "memory.peak": "589398016",
+      "memory.max": "999997440",
+      "memory.events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0",
+      "memory.stat": "anon 7081984\nfile 74440704\nkernel 2715648\nkernel_stack 16384\npagetables 81920\nsec_pagetables 0\npercpu 1860\nsock 0\nvmalloc 12288\nshmem 0\nfile_mapped 0\nfile_dirty 17973248\nfile_writeback 0\nswapcached 0\nanon_thp 0\nfile_thp 0\nshmem_thp 0\ninactive_anon 7073792\nactive_anon 4096\ninactive_file 14249984\nactive_file 60133376\nunevictable 0\nslab_reclaimable 2382248\nslab_unreclaimable 209176\nslab 2591424\nworkingset_refault_anon 0\nworkingset_refault_file 186\nworkingset_activate_anon 0\nworkingset_activate_file 179\nworkingset_restore_anon 0\nworkingset_restore_file 0\nworkingset_nodereclaim 0\npgdemote_kswapd 0\npgdemote_direct 0\npgdemote_khugepaged 0\npgdemote_proactive 0\npgscan 0\npgsteal 0\npswpin 0\npswpout 0\npgscan_kswapd 0\npgscan_direct 0\npgscan_khugepaged 0\npgscan_proactive 0\npgsteal_kswapd 0\npgsteal_direct 0\npgsteal_khugepaged 0\npgsteal_proactive 0\npgfault 1106311\npgmajfault 5\npgrefill 0\npgactivate 14587\npgdeactivate 0\npglazyfree 0\npglazyfreed 0\nswpin_zero 0\nswpout_zero 0\nthp_fault_alloc 2493\nthp_collapse_alloc 0\nthp_swpout 0\nthp_swpout_fallback 0",
+      "memory.swap.current": "0",
+      "memory.swap.max": "0",
+      "cpu.stat": "usage_usec 69839419\nuser_usec 58064335\nsystem_usec 11775083\nnice_usec 0\nnr_periods 1399\nnr_throttled 1395\nthrottled_usec 239579682\nnr_bursts 0\nburst_usec 0",
+      "cpu.max": "50000 100000"
+    },
+    "diskFinal": 73600425,
+    "limitations": [
+      "RSS double-counts shared pages",
+      "sampled peaks miss short spikes",
+      "disk includes diagnostic logs",
+      "PSS/USS zero may mean unavailable",
+      "CPU rusage includes waited descendants; daemonized children unsupported"
+    ]
+  },
+  "segments": [
+    {
+      "segment": 0,
+      "pid": 48,
+      "nodeAnonymousMin": 47292416,
+      "nodeAnonymousMax": 65662976,
+      "nodeAnonymousFirst": 65662976,
+      "nodeAnonymousLast": 47316992,
+      "ffmpegAnonymousMax": 456978432,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 1,
+      "pid": 85,
+      "nodeAnonymousMin": 47423488,
+      "nodeAnonymousMax": 47423488,
+      "nodeAnonymousFirst": 47423488,
+      "nodeAnonymousLast": 47423488,
+      "ffmpegAnonymousMax": 415678464,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 2,
+      "pid": 111,
+      "nodeAnonymousMin": 47443968,
+      "nodeAnonymousMax": 47443968,
+      "nodeAnonymousFirst": 47443968,
+      "nodeAnonymousLast": 47443968,
+      "ffmpegAnonymousMax": 415678464,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 3,
+      "pid": 137,
+      "nodeAnonymousMin": 47468544,
+      "nodeAnonymousMax": 47468544,
+      "nodeAnonymousFirst": 47468544,
+      "nodeAnonymousLast": 47468544,
+      "ffmpegAnonymousMax": 415674368,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 4,
+      "pid": 163,
+      "nodeAnonymousMin": 47489024,
+      "nodeAnonymousMax": 47489024,
+      "nodeAnonymousFirst": 47489024,
+      "nodeAnonymousLast": 47489024,
+      "ffmpegAnonymousMax": 453869568,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 5,
+      "pid": 189,
+      "nodeAnonymousMin": 47783936,
+      "nodeAnonymousMax": 47788032,
+      "nodeAnonymousFirst": 47783936,
+      "nodeAnonymousLast": 47788032,
+      "ffmpegAnonymousMax": 456978432,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 6,
+      "pid": 226,
+      "nodeAnonymousMin": 47951872,
+      "nodeAnonymousMax": 47951872,
+      "nodeAnonymousFirst": 47951872,
+      "nodeAnonymousLast": 47951872,
+      "ffmpegAnonymousMax": 415678464,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 7,
+      "pid": 252,
+      "nodeAnonymousMin": 47996928,
+      "nodeAnonymousMax": 47996928,
+      "nodeAnonymousFirst": 47996928,
+      "nodeAnonymousLast": 47996928,
+      "ffmpegAnonymousMax": 415694848,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 8,
+      "pid": 278,
+      "nodeAnonymousMin": 47996928,
+      "nodeAnonymousMax": 48009216,
+      "nodeAnonymousFirst": 47996928,
+      "nodeAnonymousLast": 48009216,
+      "ffmpegAnonymousMax": 415678464,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 9,
+      "pid": 304,
+      "nodeAnonymousMin": 48033792,
+      "nodeAnonymousMax": 48033792,
+      "nodeAnonymousFirst": 48033792,
+      "nodeAnonymousLast": 48033792,
+      "ffmpegAnonymousMax": 456982528,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 10,
+      "pid": 330,
+      "nodeAnonymousMin": 48078848,
+      "nodeAnonymousMax": 48078848,
+      "nodeAnonymousFirst": 48078848,
+      "nodeAnonymousLast": 48078848,
+      "ffmpegAnonymousMax": 456974336,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 11,
+      "pid": 367,
+      "nodeAnonymousMin": 48082944,
+      "nodeAnonymousMax": 48082944,
+      "nodeAnonymousFirst": 48082944,
+      "nodeAnonymousLast": 48082944,
+      "ffmpegAnonymousMax": 415678464,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 12,
+      "pid": 393,
+      "nodeAnonymousMin": 48082944,
+      "nodeAnonymousMax": 48082944,
+      "nodeAnonymousFirst": 48082944,
+      "nodeAnonymousLast": 48082944,
+      "ffmpegAnonymousMax": 415678464,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 13,
+      "pid": 419,
+      "nodeAnonymousMin": 48082944,
+      "nodeAnonymousMax": 48082944,
+      "nodeAnonymousFirst": 48082944,
+      "nodeAnonymousLast": 48082944,
+      "ffmpegAnonymousMax": 415678464,
+      "ffmpegAnonHugePagesMax": 346030080
+    },
+    {
+      "segment": 14,
+      "pid": 445,
+      "nodeAnonymousMin": 48082944,
+      "nodeAnonymousMax": 48082944,
+      "nodeAnonymousFirst": 48082944,
+      "nodeAnonymousLast": 48082944,
+      "ffmpegAnonymousMax": 447639552,
+      "ffmpegAnonHugePagesMax": 346030080
+    }
+  ]
+}

@@ -1,0 +1,497 @@
+{
+  "status": "PASS",
+  "checks": {
+    "B_same_as_baseline": true,
+    "C1_same_as_baseline": true,
+    "segment_partition_changes_identity": true
+  },
+  "results": {
+    "baseline": {
+      "renderer": "axfluxo-all-versions-v5.1",
+      "worker": "axfluxo-render-v4.1",
+      "plans": [
+        {
+          "segmentFrames": 60,
+          "hash": "fbcdb2e9ed623a90bc17652e202bca39d5d582feb537ef0691c0bf0d8347d2bd",
+          "segments": [
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 0,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 0,
+              "index": 0
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 1000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 60,
+              "index": 1
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 2000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 120,
+              "index": 2
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 3000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 180,
+              "index": 3
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 4000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 240,
+              "index": 4
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 5000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 300,
+              "index": 5
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 6000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 360,
+              "index": 6
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 7000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 420,
+              "index": 7
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 8000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 480,
+              "index": 8
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 9000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 540,
+              "index": 9
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 10000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 600,
+              "index": 10
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 11000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 660,
+              "index": 11
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 12000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 720,
+              "index": 12
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 13000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 780,
+              "index": 13
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 14000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 840,
+              "index": 14
+            }
+          ]
+        },
+        {
+          "segmentFrames": 300,
+          "hash": "7ce76f9f87e22e096dcc70ade868ee800110efce751e3dc5a96e233c29bfbba6",
+          "segments": [
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 0,
+              "sourceEndUs": 15000000,
+              "frames": 300,
+              "outputStartFrame": 0,
+              "index": 0
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 5000000,
+              "sourceEndUs": 15000000,
+              "frames": 300,
+              "outputStartFrame": 300,
+              "index": 1
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 10000000,
+              "sourceEndUs": 15000000,
+              "frames": 300,
+              "outputStartFrame": 600,
+              "index": 2
+            }
+          ]
+        }
+      ]
+    },
+    "B": {
+      "renderer": "axfluxo-all-versions-v5.1",
+      "worker": "axfluxo-render-v4.1",
+      "plans": [
+        {
+          "segmentFrames": 60,
+          "hash": "fbcdb2e9ed623a90bc17652e202bca39d5d582feb537ef0691c0bf0d8347d2bd",
+          "segments": [
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 0,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 0,
+              "index": 0
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 1000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 60,
+              "index": 1
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 2000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 120,
+              "index": 2
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 3000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 180,
+              "index": 3
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 4000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 240,
+              "index": 4
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 5000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 300,
+              "index": 5
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 6000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 360,
+              "index": 6
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 7000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 420,
+              "index": 7
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 8000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 480,
+              "index": 8
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 9000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 540,
+              "index": 9
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 10000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 600,
+              "index": 10
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 11000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 660,
+              "index": 11
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 12000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 720,
+              "index": 12
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 13000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 780,
+              "index": 13
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 14000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 840,
+              "index": 14
+            }
+          ]
+        },
+        {
+          "segmentFrames": 300,
+          "hash": "7ce76f9f87e22e096dcc70ade868ee800110efce751e3dc5a96e233c29bfbba6",
+          "segments": [
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 0,
+              "sourceEndUs": 15000000,
+              "frames": 300,
+              "outputStartFrame": 0,
+              "index": 0
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 5000000,
+              "sourceEndUs": 15000000,
+              "frames": 300,
+              "outputStartFrame": 300,
+              "index": 1
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 10000000,
+              "sourceEndUs": 15000000,
+              "frames": 300,
+              "outputStartFrame": 600,
+              "index": 2
+            }
+          ]
+        }
+      ]
+    },
+    "C1": {
+      "renderer": "axfluxo-all-versions-v5.1",
+      "worker": "axfluxo-render-v4.1",
+      "plans": [
+        {
+          "segmentFrames": 60,
+          "hash": "fbcdb2e9ed623a90bc17652e202bca39d5d582feb537ef0691c0bf0d8347d2bd",
+          "segments": [
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 0,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 0,
+              "index": 0
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 1000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 60,
+              "index": 1
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 2000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 120,
+              "index": 2
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 3000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 180,
+              "index": 3
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 4000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 240,
+              "index": 4
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 5000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 300,
+              "index": 5
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 6000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 360,
+              "index": 6
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 7000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 420,
+              "index": 7
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 8000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 480,
+              "index": 8
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 9000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 540,
+              "index": 9
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 10000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 600,
+              "index": 10
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 11000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 660,
+              "index": 11
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 12000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 720,
+              "index": 12
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 13000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 780,
+              "index": 13
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 14000000,
+              "sourceEndUs": 15000000,
+              "frames": 60,
+              "outputStartFrame": 840,
+              "index": 14
+            }
+          ]
+        },
+        {
+          "segmentFrames": 300,
+          "hash": "7ce76f9f87e22e096dcc70ade868ee800110efce751e3dc5a96e233c29bfbba6",
+          "segments": [
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 0,
+              "sourceEndUs": 15000000,
+              "frames": 300,
+              "outputStartFrame": 0,
+              "index": 0
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 5000000,
+              "sourceEndUs": 15000000,
+              "frames": 300,
+              "outputStartFrame": 300,
+              "index": 1
+            },
+            {
+              "clipIndex": 0,
+              "sourceStartUs": 10000000,
+              "sourceEndUs": 15000000,
+              "frames": 300,
+              "outputStartFrame": 600,
+              "index": 2
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "scope": "actual projectPlan, same synthetic input. Worker encoder/static/namespace augmentation source-reviewed separately; NOT proof of old remote checkpoint migration."
+}

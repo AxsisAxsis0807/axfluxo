@@ -1,0 +1,78 @@
+{
+  "checkedUtc": "2026-11-16",
+  "accountCreated": "2026-11-07",
+  "accountCreatedProvenance": "User-provided known fact; not re-requested",
+  "accountApplicability": "アカウント適用未検証",
+  "currentAccountPlan": null,
+  "currentAccountReservations": null,
+  "ruleEffectiveDate": null,
+  "ruleDateCaveat": "2026-11-08 changelog describes website wording, not an unambiguous effective date. 2026-11-12 terms update is not proof of first introduction.",
+  "sources": [
+    {
+      "url": "https://blitz.cloud/terms/",
+      "updated": "2026-11-12",
+      "section": "4",
+      "findings": [
+        "Region-dependent 7-day free period; older accounts exempt when opened before applicability. Exact applicability date not specified in inspected text.",
+        "Background apps stop after 24 idle account hours for post-2026-11-05 accounts; address-bearing apps sleep after 15 minutes."
+      ]
+    },
+    {
+      "url": "https://blitz.cloud/docs/limits/",
+      "updated": "2026-11-12",
+      "poolMB": 512,
+      "Small": {
+        "reservedMB": 128,
+        "ceilingMB": 512,
+        "reservedCPU": 0.05,
+        "ceilingCPU": 0.5
+      },
+      "Medium": {
+        "reservedMB": 256,
+        "ceilingGB": 1,
+        "reservedCPU": 0.1,
+        "ceilingCPU": 1
+      },
+      "PostgreSQL": {
+        "reservedMB": 128
+      },
+      "caveats": [
+        "Reserved pool differs from per-app ceiling. Burst depends on host availability. Free automatic resizing requires pool capacity.",
+        "Current account sizes and inventory not accessible through an available authenticated Blitz read tool. No credentials or production network used."
+      ]
+    },
+    {
+      "url": "https://blitz.cloud/changelog/",
+      "updated": "2026-11-13",
+      "entry": "2026-11-08",
+      "finding": "Public website wording changed; legal effective date unresolved."
+    },
+    {
+      "url": "https://blitz.cloud/whats-live/",
+      "checked": "2026-11-16",
+      "finding": "6 November entry is a discretionary 7-day Pro-app gift, not the region-based free-period introduction date. No exact effective date resolved."
+    },
+    {
+      "url": "https://blitz.cloud/de/terms/",
+      "displayedUpdated": "2026-11-08",
+      "checked": "2026-11-16",
+      "section": "4",
+      "finding": "German prevailing version also has regional 7-day period and pre-rule account exception. Displayed update date alone does not establish exact first applicability."
+    }
+  ],
+  "reservationScenarios": [
+    {
+      "scope": "hypothetical only, not verified account inventory",
+      "apiSmallMB": 128,
+      "workerMediumMB": 256,
+      "postgresMB": 128,
+      "sumMB": 512,
+      "remainingMB": 0
+    },
+    {
+      "scope": "hypothetical extra Small frontend",
+      "sumMB": 640,
+      "exceedsFreeMB": 128
+    }
+  ]
+}

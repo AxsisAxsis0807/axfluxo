@@ -1,0 +1,14 @@
+{
+  "timestampUnix": 1794839458.9238124,
+  "scope": "shared visible parent; not a trial cgroup or acceptance peak. Missing PSI remains null.",
+  "files": {
+    "memory.current": "5333352448\n",
+    "memory.peak": "8589934592\n",
+    "memory.max": "8589934592\n",
+    "memory.events": "low 0\nhigh 0\nmax 13245\noom 0\noom_kill 0\noom_group_kill 0\n",
+    "memory.stat": "anon 202563584\nfile 4714434560\nkernel 415121408\nkernel_stack 1245184\npagetables 4558848\nsec_pagetables 0\npercpu 37420\nsock 0\nvmalloc 20480\nshmem 147513344\nfile_mapped 153186304\nfile_dirty 6422528\nfile_writeback 0\nswapcached 0\nanon_thp 4194304\nfile_thp 18874368\nshmem_thp 0\ninactive_anon 286998528\nactive_anon 62885888\ninactive_file 2178445312\nactive_file 2388504576\nunevictable 0\nslab_reclaimable 402449632\nslab_unreclaimable 6754768\nslab 409204400\nworkingset_refault_anon 0\nworkingset_refault_file 476400\nworkingset_activate_anon 0\nworkingset_activate_file 249544\nworkingset_restore_anon 0\nworkingset_restore_file 790\nworkingset_nodereclaim 0\npgdemote_kswapd 0\npgdemote_direct 0\npgdemote_khugepaged 0\npgdemote_proactive 0\npgscan 625952\npgsteal 625311\npswpin 0\npswpout 0\npgscan_kswapd 0\npgscan_direct 625952\npgscan_khugepaged 0\npgscan_proactive 0\npgsteal_kswapd 0\npgsteal_direct 625311\npgsteal_khugepaged 0\npgsteal_proactive 0\npgfault 23363732\npgmajfault 620\npgrefill 2258\npgactivate 1992011\npgdeactivate 2258\npglazyfree 4\npglazyfreed 0\nswpin_zero 0\nswpout_zero 0\nthp_fault_alloc 28168\nthp_collapse_alloc 0\nthp_swpout 0\nthp_swpout_fallback 0\n",
+    "memory.pressure": null,
+    "cpu.max": "200000 100000\n",
+    "cpu.stat": "usage_usec 1139031152\nuser_usec 887210889\nsystem_usec 251820263\nnice_usec 0\nnr_periods 17386\nnr_throttled 700\nthrottled_usec 27796310\nnr_bursts 0\nburst_usec 0\n"
+  }
+}

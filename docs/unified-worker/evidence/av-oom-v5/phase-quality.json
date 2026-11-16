@@ -1,0 +1,58 @@
+{
+  "status": "PASS_EXACT_COMPONENTS",
+  "checks": [
+    {
+      "phase": "background",
+      "actual": "work/av-oom-v5/B7-background/work/result/background.png",
+      "reference": "work/av-oom-v5/B3-1GB-r1/work/result/media/background.png",
+      "sha256": "0909dc5f2fc57335ffa53ef09423e9268de26d05934423df2ebb4cb45fd73b6a",
+      "referenceSha256": "0909dc5f2fc57335ffa53ef09423e9268de26d05934423df2ebb4cb45fd73b6a",
+      "equal": true
+    },
+    {
+      "phase": "title",
+      "actual": "work/av-oom-v5/B7-title/work/result/title.png",
+      "reference": "work/av-oom-v5/B3-1GB-r1/work/result/media/text-1.png",
+      "sha256": "0f0f2b6c175eca0b2d5066a06f23fe6b02c3504494068b5fab37efe8d4bcaefb",
+      "referenceSha256": "0f0f2b6c175eca0b2d5066a06f23fe6b02c3504494068b5fab37efe8d4bcaefb",
+      "equal": true
+    },
+    {
+      "phase": "static-generate",
+      "actual": "work/av-oom-v5/B7-static-generate/work/result/av-static-0.png",
+      "reference": "work/av-oom-v5/B1-1GB-r2/work/result/media/av-static-0.png",
+      "sha256": "149fdff43f64597acc053d7a28ede7f5224d9e599ffb1814db202043f19abb87",
+      "referenceSha256": "149fdff43f64597acc053d7a28ede7f5224d9e599ffb1814db202043f19abb87",
+      "equal": true
+    },
+    {
+      "phase": "fade-encode",
+      "actual": "work/av-oom-v5/B7-fade-encode/work/result/segment-5.mp4",
+      "reference": "work/av-oom-v5/B3-1GB-r1/work/result/media/segment-5.mp4",
+      "sha256": "4648c0c28f36868aff06023f0446aab88e34c92383c6b08f6afe1caa5b62f913",
+      "referenceSha256": "4648c0c28f36868aff06023f0446aab88e34c92383c6b08f6afe1caa5b62f913",
+      "equal": true
+    },
+    {
+      "phase": "static-encode",
+      "actual": "work/av-oom-v5/B7-static-encode/work/result/segment-6.mp4",
+      "reference": "work/av-oom-v5/B3-1GB-r1/work/result/media/segment-6.mp4",
+      "sha256": "e6c2b328e97c358e6852cffebaf43e59d66b30ebad0fdf52e6482bbc53a4d73e",
+      "referenceSha256": "e6c2b328e97c358e6852cffebaf43e59d66b30ebad0fdf52e6482bbc53a4d73e",
+      "equal": true
+    },
+    {
+      "phase": "mux",
+      "actual": "work/av-oom-v5/B7-mux/work/result/candidate.mp4",
+      "reference": "work/av-oom-v5/B3-1GB-r1/work/result/media/candidate.mp4",
+      "sha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "referenceSha256": "b083388426f46d2f78ba7d841d94c10797a8b838bc8848cf6f9895dcc14c792a",
+      "equal": true
+    }
+  ],
+  "scope": "isolated component replay only, not whole-worker recovery",
+  "staticReferenceInputEquality": {
+    "background.png": true,
+    "text-0.png": true
+  }
+}

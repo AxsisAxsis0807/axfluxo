@@ -1,0 +1,20 @@
+{
+  "scripts/resource-audit/build-v5.py": "15b0c2a593a38841a7cff20d2604c0da1c114a8a441694e03304e4bd750bc193",
+  "scripts/resource-audit/checks-v5.py": "e150f426764a3e62ad9a5dc742fe35aaf80e393fda7d38e63a6ef4e054bcf0ca",
+  "scripts/resource-audit/collect-v5.py": "b61d83e2a112967f6113f3c119162fa4f0487c3040676b23045193fb721ee17a",
+  "scripts/resource-audit/filter-compare-v5.py": "dbe77950865a152256929d074cda312fb6049c26238afc9988428c1fd31ee8b3",
+  "scripts/resource-audit/identity-v5.py": "288afa74f5d52c41b8306c9759a201032292173c9a992128b34816077f7dfd3c",
+  "scripts/resource-audit/matrix-v5.py": "7ab5ec989c10e323e0af2b146f4e5f8975024de8de42063f2ac4e8aeb0d46c74",
+  "scripts/resource-audit/oom-v5.py": "71db88629796159d994c877840b27bf71509ef71bd9bd24897130d1bf96fd900",
+  "scripts/resource-audit/phase-v5.py": "1fed397b8940a1f1a3ccedc8c290d7ba2239e3aa650c7994b6b06a80b5edaf9e",
+  "scripts/resource-audit/prepare-v5.py": "43f7992957bbe826bb1d222171d3788211a4d857d0e1a6e0968e6247a5a9c979",
+  "scripts/resource-audit/quality-v5.py": "140b3972b7a2a218946388675aca3c900184b79e799b89c951ca1c6c40485e70",
+  "scripts/resource-audit/sample-thp-v5.py": "85bbc0ce522f54f97013cd0565e180351caaed1a44443816e8684c46598d2e3f",
+  "scripts/resource-audit/sample-v5.py": "d95775c3e0249391107dbdecc78d617d294c7d354046cd3148eb70f1fd593744",
+  "scripts/resource-audit/stop-hook-v5.mjs": "d0ad66fae316dc8387a87c9f11bbc167f88a69c51a9d03fdfdcd627e463c8723",
+  "scripts/resource-audit/stop-v5.py": "8f6cdd2fe47fcda2d0cd22ca7d05714293b7ed1850c829331a38d60947a46fc1",
+  "scripts/resource-audit/summarize-oom-v5.py": "547be8ae683d1ac38a3c8600db1c8784ecd1934ea976cd72ccfd240ebeb2ae67",
+  "scripts/resource-audit/supplement-v5.py": "8ed46c0edfafe1cb89ba5c6b883cec41a31383b3b297419c55fc3621dc67f1f9",
+  "scripts/resource-audit/verify-oom-v5.py": "b9db0764ae6c5bbceab9dfdeb367fc64fc75c5955c55ef1fb61bf48ec5b57815",
+  "server/tests/resource-phase-v5.ts": "f4bce212bd58e706eb5b8161367c35ca6247ec22d269fbdd0ebb588b7062957c"
+}

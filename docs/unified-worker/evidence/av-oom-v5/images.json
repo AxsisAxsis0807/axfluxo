@@ -1,0 +1,183 @@
+{
+  "baseline": {
+    "Id": "sha256:8ad39ef7c63e5423b49c8a16c5443ba5ae8d9c87725b83d2e97f8d0a6a2716af",
+    "RepoDigests": [],
+    "Created": "2026-11-16T14:02:45.292774974Z",
+    "Architecture": "amd64",
+    "Os": "linux",
+    "RootFS": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:eef4e9145f53e4aea762c56ed6fff082efee51f56be19738515831c9be713e01",
+        "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef"
+      ]
+    },
+    "config": {
+      "User": "1000:1000",
+      "Entrypoint": [
+        "python3",
+        "/app/sample.py",
+        "/work/result",
+        "--",
+        "node",
+        "--import",
+        "/app/preload-v4.mjs"
+      ],
+      "Cmd": null,
+      "WorkingDir": "/app"
+    },
+    "registryManifestDigest": null
+  },
+  "B": {
+    "Id": "sha256:af53996383d63df33b6d3f682129e7f8f197f99f1fe781fffe4ad241fd8b4520",
+    "RepoDigests": [],
+    "Created": "2026-11-16T14:03:17.28933955Z",
+    "Architecture": "amd64",
+    "Os": "linux",
+    "RootFS": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:eef4e9145f53e4aea762c56ed6fff082efee51f56be19738515831c9be713e01",
+        "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+        "sha256:dceb9126d9121c2844c91cac51b83ed43845595fce93275236aad5496938cfc4"
+      ]
+    },
+    "config": {
+      "User": "1000:1000",
+      "Entrypoint": [
+        "python3",
+        "/app/sample.py",
+        "/work/result",
+        "--",
+        "node",
+        "--import",
+        "/app/preload-v4.mjs"
+      ],
+      "Cmd": null,
+      "WorkingDir": "/app"
+    },
+    "registryManifestDigest": null
+  },
+  "C1": {
+    "Id": "sha256:721ba55185f2c110e2b9e00eac5f7064199f6ecc24bedeb76c9cdd4d468db090",
+    "RepoDigests": [],
+    "Created": "2026-11-16T14:03:18.975346237Z",
+    "Architecture": "amd64",
+    "Os": "linux",
+    "RootFS": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:eef4e9145f53e4aea762c56ed6fff082efee51f56be19738515831c9be713e01",
+        "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+        "sha256:003977cda05ecd8f87e1a3a939415096f745cdd2e6ba709c5a7f799313f21e56"
+      ]
+    },
+    "config": {
+      "User": "1000:1000",
+      "Entrypoint": [
+        "python3",
+        "/app/sample.py",
+        "/work/result",
+        "--",
+        "node",
+        "--import",
+        "/app/preload-v4.mjs"
+      ],
+      "Cmd": null,
+      "WorkingDir": "/app"
+    },
+    "registryManifestDigest": null
+  },
+  "B-reuse": {
+    "Id": "sha256:ee3f62227b1965dd1efc4477e51ab3e3c3b2653a9210580ebd6cabbc37a048ab",
+    "RepoDigests": [],
+    "Created": "2026-11-16T14:05:49.344329254Z",
+    "Architecture": "amd64",
+    "Os": "linux",
+    "RootFS": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:eef4e9145f53e4aea762c56ed6fff082efee51f56be19738515831c9be713e01",
+        "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+        "sha256:65b862f6ab086f4028ce53083de5640986a07f0ff043ca27a0694f0e6cdd2c00"
+      ]
+    },
+    "config": {
+      "User": "1000:1000",
+      "Entrypoint": [
+        "python3",
+        "/app/sample.py",
+        "/work/result",
+        "--",
+        "node",
+        "--import",
+        "/app/preload-v4.mjs"
+      ],
+      "Cmd": null,
+      "WorkingDir": "/app"
+    },
+    "registryManifestDigest": null
+  },
+  "phase": {
+    "Id": "sha256:1cc30f1a0e85adc71fbb0a07edac1b3f16ef169a23b494fa5f1eacd78e8bd644",
+    "RepoDigests": [],
+    "Created": "2026-11-16T14:22:02.673355708Z",
+    "Architecture": "amd64",
+    "Os": "linux",
+    "RootFS": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:eef4e9145f53e4aea762c56ed6fff082efee51f56be19738515831c9be713e01",
+        "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+        "sha256:feda5476d34f0327298511e35504f2f4ab52176cd730a65078b1a9016dc261ed",
+        "sha256:0a78e3238ea34019d186fd52ddfc6b4ca8e88f5ea7ed7fb8d3298450cd7639b8"
+      ]
+    },
+    "config": {
+      "User": "1000:1000",
+      "Entrypoint": [
+        "python3",
+        "/app/sample.py",
+        "/work/result",
+        "--",
+        "node",
+        "--import",
+        "/app/preload-v4.mjs"
+      ],
+      "Cmd": null,
+      "WorkingDir": "/app"
+    },
+    "registryManifestDigest": null
+  },
+  "B-thp": {
+    "Id": "sha256:62e86c71053ae7f8cd8198abf9867fe87f5edf04b7afb6a649ff0e106bfe1779",
+    "RepoDigests": [],
+    "Created": "2026-11-16T15:11:17.865133316Z",
+    "Architecture": "amd64",
+    "Os": "linux",
+    "RootFS": {
+      "Type": "layers",
+      "Layers": [
+        "sha256:eef4e9145f53e4aea762c56ed6fff082efee51f56be19738515831c9be713e01",
+        "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+        "sha256:dceb9126d9121c2844c91cac51b83ed43845595fce93275236aad5496938cfc4",
+        "sha256:10fc7d67d80f207e747cabcc81a3989fe16bbf0c526131ec770f5b905bf3c49e"
+      ]
+    },
+    "config": {
+      "User": "1000:1000",
+      "Entrypoint": [
+        "python3",
+        "/app/sample.py",
+        "/work/result",
+        "--",
+        "node",
+        "--import",
+        "/app/preload-v4.mjs"
+      ],
+      "Cmd": null,
+      "WorkingDir": "/app"
+    },
+    "registryManifestDigest": null
+  }
+}

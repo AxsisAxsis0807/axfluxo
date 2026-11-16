@@ -1,0 +1,37 @@
+{
+  "usr/bin/node": {
+    "v4": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "v5": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "equal": true
+  },
+  "usr/bin/ffmpeg": {
+    "v4": "e8a8d46f5225f3062cec7c07fb145d58ae73c603cb740dcd5bad34bfb54e455a",
+    "v5": "e8a8d46f5225f3062cec7c07fb145d58ae73c603cb740dcd5bad34bfb54e455a",
+    "equal": true
+  },
+  "usr/bin/ffprobe": {
+    "v4": "cefc5f81c0b18429cdbf8fa5a89e1e9c759235e10f93f9b329ff1b2fdff26f46",
+    "v5": "cefc5f81c0b18429cdbf8fa5a89e1e9c759235e10f93f9b329ff1b2fdff26f46",
+    "equal": true
+  },
+  "app/baseline.mjs": {
+    "v4": "f3d031760b2b5874636d4c9f5bb31845f1144142fb26dfc129cd15796c09d2de",
+    "v5": "0ab054e3ed09d4adbce3aed7c46f5be6a40b461449ac47ca3eb0fc3fe5c89724",
+    "equal": false
+  },
+  "app/sample.py": {
+    "v4": "718cb589e69d35538ceb2d6d2358647d11cd5fdc0caada68de5920f969fde81e",
+    "v5": "d95775c3e0249391107dbdecc78d617d294c7d354046cd3148eb70f1fd593744",
+    "equal": false
+  },
+  "app/preload.mjs": {
+    "v4": "e5808423909c3ec9ce4851169d8c412cd4e37f57f5a8cc622763ef9c3d156b95",
+    "v5": "e5808423909c3ec9ce4851169d8c412cd4e37f57f5a8cc622763ef9c3d156b95",
+    "equal": true
+  },
+  "app/preload-v4.mjs": {
+    "v4": "80a3261b2c3c5d9b3d25cf0a0fd7e7fe3b970d69f401b614ab8c21def16bf13c",
+    "v5": "80a3261b2c3c5d9b3d25cf0a0fd7e7fe3b970d69f401b614ab8c21def16bf13c",
+    "equal": true
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "work/av-oom-v5-matrix.log": {
+    "bytes": 604,
+    "sha256": "a0d2de099cd49f78b3a0612501bd08bb4499393cef3b50d062cfa371f087735c",
+    "text": "B3-1GB-r1 COMPLETED\nB2-1GB-r1 COMPLETED\nB4-1GB-r1 COMPLETED\nB5-1GB-r1 COMPLETED\nB6-off-1GB-r1 COMPLETED\nB8-300-1GB-r1 COMPLETED\nC1-1GB-r1 COMPLETED\nB3-1GB-r2 COMPLETED\nC1-1GB-r2 COMPLETED\nB3-1GB-r3 COMPLETED\nC1-1GB-r3 COMPLETED\nbase-15-1GB-r1 COMPLETED\nB-30-1GB-r1 COMPLETED\nbase-30-1GB-r1 COMPLETED\nB-ref-1GB-r1 COMPLETED\nbase-ref-1GB-r1 COMPLETED\nB-shift-1GB-r1 COMPLETED\nbase-shift-1GB-r1 COMPLETED\nB1-512000000-r1 COMPLETED\nB1-512000000-r2 FAILED\nB1-512000000-r3 COMPLETED\nB3-512000000-r1 FAILED\nB1-536870912-r1 COMPLETED\nB1-536870912-r2 COMPLETED\nB1-536870912-r3 COMPLETED\nB3-536870912-r1 COMPLETED\n"
+  },
+  "work/av-oom-v5-phase.log": {
+    "bytes": 141,
+    "sha256": "e4417ed347e78686fa2dcfe5ce028d1a3f8642f47bd224deb28acda63f376d70",
+    "text": "B7-background COMPLETED\nB7-title COMPLETED\nB7-static-generate COMPLETED\nB7-fade-encode COMPLETED\nB7-static-encode COMPLETED\nB7-mux COMPLETED\n"
+  },
+  "work/av-oom-v5-supplement.log": {
+    "bytes": 123,
+    "sha256": "3af3357f9caff6fe5b7a71679438a1bf0d02bf26ccdd02d082c27baf05635568",
+    "text": "base-5-1GB-r1 COMPLETED\nbase-B2-1GB-r1 COMPLETED\nbase-B4-1GB-r1 COMPLETED\nB2-512000000-r1 COMPLETED\nB4-512000000-r1 FAILED\n"
+  },
+  "work/av-oom-v5-filter-compare.log": {
+    "bytes": 21,
+    "sha256": "0533b1400c448b1899334f4e4c8a43530164b7de5d97dbddca57fd8971a3edfb",
+    "text": "PASS_PREENCODE_EXACT\n"
+  },
+  "work/av-oom-v5-checks-run.log": {
+    "bytes": 186,
+    "sha256": "5ab34fa4236fa236c24877e5c48df0221d3f7edab034d63fb21c3e1a9bf3588d",
+    "text": "typecheck-final 0\nlint-final 0\nworker-build 0\nrender-build 0\nrecovery-cache-reference 1\nworker-PGlite-FakeStorage-baseline 0\nworker-PGlite-FakeStorage-B 0\nworker-PGlite-FakeStorage-C1 0\n"
+  },
+  "work/av-oom-v5-thp.log": {
+    "bytes": 24,
+    "sha256": "aaf9869e8a57fb986edd62b55f56c4ba0edaa37dcdc5f4821f2403160e6483ce",
+    "text": "B3-thp-1GB-r1 COMPLETED\n"
+  },
+  "work/av-oom-v5-recovery-run.log": {
+    "bytes": 123,
+    "sha256": "cbad8d33524f25d0723d2f1d888de5152bfeb53d5ea8864ddd0ae556d27ebd89",
+    "text": "png-generating RESTART_COMPLETED\nfade-running RESTART_COMPLETED\nbefore-mux RESTART_COMPLETED\nmux-running RESTART_COMPLETED\n"
+  }
+}

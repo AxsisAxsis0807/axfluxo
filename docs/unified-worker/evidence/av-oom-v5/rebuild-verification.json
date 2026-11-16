@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "bundlesEqual": {
+    "baseline": true,
+    "B": true,
+    "C1": true,
+    "B-reuse": true
+  },
+  "rebuild": {
+    "source": "de971898af831156c17db09090fa5fd57e52c8f1",
+    "bundles": {
+      "baseline": "0ab054e3ed09d4adbce3aed7c46f5be6a40b461449ac47ca3eb0fc3fe5c89724",
+      "B": "43963c1554707eb2203ff99d892771de33e0c0113e5a7e2d2b4a3951aa03128b",
+      "C1": "077cc134844ea78de800140d2e2c4783e16d289678a03c32ce098fdf1ce0074f",
+      "B-reuse": "5ccbd7d174f6d65be2d5c7ecc6fcdadba4db89b51d7b502a70bbf966f14746ee"
+    }
+  },
+  "log": "work/av-oom-v5-rebuild.log",
+  "logSha256": "50cd5599247b75ed2806b38c8727394cb71eedead3be7b76297d8f97b4dd6c2f"
+}

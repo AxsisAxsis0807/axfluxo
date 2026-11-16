@@ -1,0 +1,40 @@
+{
+  "scope": "v3 original runtime manifest; v4 records unchanged core plus preload-v4",
+  "commonFiles": 2499,
+  "differences": {
+    "app/baseline.mjs": {
+      "v3": {
+        "bytes": 834209,
+        "sha256": "f3d031760b2b5874636d4c9f5bb31845f1144142fb26dfc129cd15796c09d2de"
+      },
+      "v5": {
+        "bytes": 835563,
+        "sha256": "0ab054e3ed09d4adbce3aed7c46f5be6a40b461449ac47ca3eb0fc3fe5c89724"
+      }
+    },
+    "app/candidate.mjs": {
+      "v3": {
+        "bytes": 834209,
+        "sha256": "f3d031760b2b5874636d4c9f5bb31845f1144142fb26dfc129cd15796c09d2de"
+      },
+      "v5": {
+        "bytes": 835681,
+        "sha256": "43963c1554707eb2203ff99d892771de33e0c0113e5a7e2d2b4a3951aa03128b"
+      }
+    },
+    "app/sample.py": {
+      "v3": {
+        "bytes": 6716,
+        "sha256": "718cb589e69d35538ceb2d6d2358647d11cd5fdc0caada68de5920f969fde81e"
+      },
+      "v5": {
+        "bytes": 6867,
+        "sha256": "d95775c3e0249391107dbdecc78d617d294c7d354046cd3148eb70f1fd593744"
+      }
+    }
+  },
+  "missingInV5": [],
+  "addedInV5": [
+    "app/preload-v4.mjs"
+  ]
+}

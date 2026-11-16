@@ -1,0 +1,17 @@
+{
+  "protectedRefsBefore": {
+    "refs/heads/codex/av-fade-memory-audit-v4": "de971898af831156c17db09090fa5fd57e52c8f1",
+    "refs/heads/codex/unified-resource-audit-v2": "498bf9d64f1329fbec6b04b6ce7679a0cd094049",
+    "refs/heads/codex/unified-worker-v1": "81d6c739a797e95386855ad1b78313a88e9b1077",
+    "refs/heads/main": "1c88efb614e3d15ef9a8f371e8016076a8c7ef68"
+  },
+  "protectedRefsPrePush": {
+    "refs/heads/codex/av-fade-memory-audit-v4": "de971898af831156c17db09090fa5fd57e52c8f1",
+    "refs/heads/codex/unified-resource-audit-v2": "498bf9d64f1329fbec6b04b6ce7679a0cd094049",
+    "refs/heads/codex/unified-worker-v1": "81d6c739a797e95386855ad1b78313a88e9b1077",
+    "refs/heads/main": "1c88efb614e3d15ef9a8f371e8016076a8c7ef68"
+  },
+  "equal": true,
+  "runningOwnedDiagnosticContainers": "",
+  "scope": "read only protected refs; no main/PR34/PR35/v4 update"
+}
