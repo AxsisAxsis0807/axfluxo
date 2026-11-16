@@ -494,6 +494,15 @@ describe("cloud export worker queue", () => {
     await expect(heartbeat(workerDb, first!)).rejects.toMatchObject({
       code: "EXPORT_LEASE_LOST",
     });
+    await expect(progress(workerDb, first!, 60)).rejects.toMatchObject({
+      code: "EXPORT_LEASE_LOST",
+    });
+    await expect(publish(workerDb, first!, {
+      blobId: randomUUID(), size: 1, sha256: "a".repeat(64),
+      validation: { width: 1920, height: 1080, frames: 60, durationUs: 1000000 },
+    })).rejects.toMatchObject({ code: "EXPORT_LEASE_LOST" });
+    expect(await finishFailure(workerDb, first!, new Error("late"))).toBe(false);
+    expect((await getJob(db, owner, job.id)).state).toBe("running");
     await finishFailure(workerDb, second!, new Error("boom"));
     const failed = await getJob(db, owner, job.id);
     expect(failed.state).toBe("failed");
@@ -534,6 +543,10 @@ describe("cloud export worker queue", () => {
         const view = await getJob(db, owner, job.id);
         expect(view.state).toBe(attempt < 3 ? "queued" : "failed");
         expect(view.errorCode).toBe(attempt < 3 ? null : "EXPORT_WORKER_LOST");
+        expect((await pg.query<{ attempts: number }>(
+          "SELECT attempts FROM axfluxo_export.jobs WHERE owner_id=$1 AND id=$2",
+          [owner, job.id],
+        )).rows[0].attempts).toBe(attempt);
         expect(await readdir(work)).toEqual(["other-checkpoint"]);
         expect(await readFile(sentinel, "utf8")).toBe("keep");
       }
