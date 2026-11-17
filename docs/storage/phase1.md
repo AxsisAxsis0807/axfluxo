@@ -47,8 +47,11 @@ endpointは文字列完全一致 `https://storage.blomp.com`、region `us-east-1
 bucketはemail形式も許容するがURL・path・制御文字は拒否。秘密値なし/空白入りは停止。
 例は `server/blomp.env.example` のダミーのみ。SDK default credential chainを使わない。
 
-`blomp.ts` はAWS SDK v3 **既存3.1161.0** を利用。依存追加なし。
+`blomp.ts` はAWS SDK v3 **既存3.1161.0** を利用。
+PR #36追加監査で、既存の間接依存 `@smithy/node-http-handler@4.14.1` を直接runtime依存にも宣言した（新しいpackage実体/解決版の追加なし）。
 forcePathStyle=true、SigV4、region redirectなし、SDK retry1回、接続5秒/要求30秒。
+明示的なNodeHttpHandlerとthrowOnRequestTimeout=trueで要求deadlineを強制する。socket idleは30秒。
+応答header後のstream全体の総時間はこのdeadlineの検証範囲ではなく、idle/caller AbortSignalと区別する。
 自動checksumはWHEN_REQUIRED。Content-MD5/条件付きwriteを暗黙に送らない。
 capabilitiesは個別にunverifiedを記録し、運用可と主張しない。
 

@@ -15,6 +15,7 @@ import {
   DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { NodeHttpHandler } from "@smithy/node-http-handler";
 import type { StoredPart } from "./multipart";
 import {
   blompConfiguration,
@@ -60,11 +61,12 @@ export function blompClient(config: BlompConfig) {
     },
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
-    requestHandler: {
+    requestHandler: new NodeHttpHandler({
       connectionTimeout: 5000,
       requestTimeout: 30000,
       socketTimeout: 30000,
-    },
+      throwOnRequestTimeout: true,
+    }),
   });
 }
 export class BlompError extends Error {

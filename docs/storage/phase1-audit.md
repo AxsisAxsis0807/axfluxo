@@ -1,5 +1,7 @@
 # Phase 1 五周監査・検証記録
 
+更新: PR #36追加監査の最新結果は末尾節を参照。明示NodeHttpHandler・deadline強制・factory HTTP経路を追加検証し、既存79＋追加5＝84件が成功。前半の件数/依存/承認状態は初期監査時点の記録。
+
 基準main `1c88efb614e3d15ef9a8f371e8016076a8c7ef68`。
 実行環境: managed Linux / Node24 / 既存lockfile。実キーなし、実provider未接続。
 監査はこの差分の範囲。実サービス受入やiPhone試験の代わりにはしない。
@@ -140,3 +142,74 @@ Draft PRは所有者へ確認依頼中の既存CI実読取について、承認�
 承認待ちの間も、作業branch/commitで実装をレビューできる。テストをskipしてPRを通す変更は行わない。
 Phase 1の完了条件のうちDraft PR作成が未完了であり、現時点で完了とは宣言しない。
 Blomp/Drimeの実接続・削除試験・本番反映にはそれぞれ別承認が必要。
+
+## PR #36追加監査 — Node HTTP handler（2026-11-17）
+
+監査基準: `7d8343b83b162fb22cd1bbbc385db3dd7e84acb4`。この節より前の79件/15ファイル/依存追加なし/承認待ちは初期監査時点の記録。
+PR #36はその後、所有者の限定承認を受けDraft作成済み。今回もmain・本番・実Blomp/Drime・実データを変更しない。
+
+### 原因の切分けと実装修正
+
+導入済み版は `@aws-sdk/client-s3@3.1161.0`、`@smithy/node-http-handler@4.14.1`、`@smithy/types@4.19.0`。
+以下の**固定版の型/実装そのもの**を確認した（バージョン一般への推測ではない）。
+
+- `@aws-sdk/client-s3/dist-types/S3Client.d.ts`: requestHandlerはHttpHandlerUserInput。
+- `@smithy/types/dist-types/http/httpHandlerInitialization.d.ts`: RequestHandlerParamsはNodeHttpHandlerOptions等を許容。constructor optionsの直接指定は正式な短縮形。
+- `@aws-sdk/client-s3/dist-cjs/index.js` のNode runtimeConfig: `NodeHttpHandler.create(config?.requestHandler ?? defaultConfigProvider)`。
+- `@smithy/node-http-handler/dist-cjs/index.js` のcreate: handle実装がなければ `new NodeHttpHandler(options)`。
+
+したがって、この固定版で「プレーンオブジェクトなのでhandleが存在せず通信不能」とする原因は確認されなかった。
+未修正HEADの隔離コピーでも、新しい対象テストはfactoryのPUT/HEAD/GET・実バイトSHA・SigV4・path-styleを通過し、
+最後の `throwOnRequestTimeout: true` 検査だけがundefinedで失敗した。対象1件の比較検証であり、現行suiteの合否には加算しない。
+
+実際に見つかった問題は、requestTimeoutが `throwOnRequestTimeout: true` 未指定だと**警告のみ**になることと、
+従来テストがfactoryのnative HTTP経路を通していなかったこと。
+修正は明示的な `new NodeHttpHandler({ connectionTimeout: 5000, requestTimeout: 30000, socketTimeout: 30000, throwOnRequestTimeout: true })`。
+既存の数値・HTTPS endpoint固定・region・path-style・SigV4・checksum方針・retry1回は維持する。
+
+### 依存関係とlockfile
+
+`@smithy/node-http-handler@4.14.1` をserverの**直接runtime依存**に宣言した。
+従来からS3 SDK経由で同じ版がlock済み。間接依存の偶然のhoistに直接importを依存させないための宣言であり、
+新しいpackage実体、解決バージョン、tarball、integrity、子依存の追加/変更はない。
+package-lockの変更は `packages.server.dependencies` の1行だけ。`npm ls` と `npm ci --dry-run --offline --ignore-scripts` は成功。
+最初のoffline lock生成コマンドはregistry metadataのcache不足でENOTCACHEDとなったため、既存lock済み版を明示追記しdry-runで整合性を検証した。
+
+### factory経路の隔離テスト
+
+追加: `server/tests/blomp/http-handler.test.ts`（5件）。**S3Client/send/NodeHttpHandler.handleをモックに置換しない**。
+`blompClient()`が作った実際のNodeHttpHandlerの最下層 `node:https.request` だけをテスト内で捕捉し、
+実際のNode HTTPリクエストを127.0.0.1の一時portへ送る。元endpointはHTTPSのまま、任意endpoint許可やTLS検証無効化をproductionへ追加しない。
+宛先hostの検査を行い、実HTTPSへのfallbackは提供しない。ダミー資格情報だけで署名する。
+
+- PUT/HEAD/GET、実小容量bytes/SHA-256、host/path、署名scope us-east-1/s3、SigV4形式、factory設定を検査。
+- Smithyの公開updateHttpClientConfigでテスト中だけ50msにし、無応答serverに対するrequest deadlineとsocket idle timeoutを個別に検査。1要求のみで再試行なし。
+- 401/403のXML本文にダミーsecret/URLを入れ、実SDKで受信・解析後のadapter error/code/causeとconsoleへの非露出を確認。
+- connectionTimeout=5000は実handler設定を検査した。接続phaseを5秒待つ通信試験は行っていない。
+- deadline試験は応答header前。stream body全体の総時間上限を保証しない。bodyの中断/idle/caller AbortSignalとは区別する。
+
+この試験は**mock HTTPS transportを介したloopback HTTP**であり、TLS handshake/証明書検証・実Blomp到達・API互換・CORSの成功証明ではない。
+Supabase/本番API/実Blomp/Drimeへの試験接続なし。テストserverと接続はfinallyで閉じる。
+初回通常sandboxはlisten EPERMで失敗したため、ローカル通信可能な環境で再実行した（skipにはしていない）。
+新規testの開発中、SDKのx-id queryをpathnameと区別する検査、Errorのcauseが存在しないことの検査を修正。既存79件のテスト/期待値は変更していない。
+
+### 再監査結果と検証
+
+| 周                   | 影響・再確認                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 1 仕様/範囲          | handlerの明示化とdeadline強制のみ。保存先/既存受付/export/認証/削除との接続変更なし                               |
+| 2 security           | fixed HTTPS/region・path/署名・secret非露出・ダミーのみ・実サービスfallbackなしを84件で再確認                     |
+| 3 storage/大容量     | factory-native経路の小バイト送受信を検証。30s deadlineの強制を確認。実サービス/大容量/CORS/無料枠は引き続き未検証 |
+| 4 障害/回帰          | **既存79＋追加5＝84件/6 suites PASS**。request/socket timeout・401/403・既存契約を再実行                          |
+| 5 本番/依存/rollback | CI/workflow/既存テスト/main/実データ不変。直接依存1宣言、追加package実体0。今回のcommitをrevertすれば旧実装に戻る |
+
+- `npm run typecheck`: PASS。
+- `npm run lint`: PASS（警告なし）。
+- `npm run build`: PASS（静的export/postbuild）。
+- server `build` / `build:worker`: PASS。
+- 検証CLIのNode24向けesbuild bundle: PASS。
+- lockfileのoffline ci dry-run: PASS。
+- 初期HEADのGitHub push CI/PR CI/Pages buildも後にsuccessを確認した。ただし今回修正後SHAのCI成功として扱わない。
+
+残課題: 実Blomp側のS3機能・署名受理・CORS・quota/無料枠、1/2/5GB実転送、実機Safari、TLS実接続、公開認可APIの実行環境。
+追加の運用接続/削除/課金/デプロイは行わない。接続試験は引き続き別承認。
