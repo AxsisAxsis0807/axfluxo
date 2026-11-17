@@ -335,3 +335,19 @@ it("rejects trailing-newline bucket and key despite JavaScript dollar-anchor sem
   );
   expect(send).not.toHaveBeenCalled();
 });
+it("validates direct SDK factory callers as well as environment-driven adapter callers", () => {
+  expect(() =>
+    blompClient({ ...config, endpoint: "http://storage.blomp.com" }),
+  ).toThrow("Invalid Blomp configuration");
+  expect(() => blompStorage({ ...config, secretAccessKey: "" })).toThrow(
+    "Invalid Blomp configuration",
+  );
+});
+it("rejects test filename wildcard substitution", async () => {
+  const { storage, send } = fixture();
+  const ref = storage.newTestReference();
+  await expect(
+    storage.head({ ...ref, key: ref.key.replace("probe.bin", "probeXbin") }),
+  ).rejects.toThrow("BLOMP_INVALID_REFERENCE");
+  expect(send).not.toHaveBeenCalled();
+});

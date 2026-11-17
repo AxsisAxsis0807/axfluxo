@@ -8,7 +8,7 @@ const owner = "11111111-1111-4111-8111-111111111111",
 const ref: BlompRef = {
   provider: "blomp",
   location: "test",
-  key: "server-owned-key",
+  key: `axfluxo/originals/${owner}/${other}`,
 };
 async function fixture() {
   const keys = await generateKeyPair("ES256");
@@ -168,4 +168,33 @@ it("discards a freshly generated URL if JWT validation expires before response",
     "AUTH_EXPIRED",
   );
   expect(sign).toHaveBeenCalledOnce();
+});
+it("rejects a catalog row whose owner matches but whose object belongs to another owner", async () => {
+  const { signer, catalog, sign, token } = await fixture();
+  catalog.mockResolvedValueOnce({
+    owner,
+    ref: { ...ref, key: `axfluxo/originals/${other}/${owner}` },
+    size: 1,
+    verified: true,
+    readable: true,
+  });
+  await expect(signer(await token(), { fileId: other })).rejects.toThrow(
+    "FILE_ACCESS_DENIED",
+  );
+  expect(sign).not.toHaveBeenCalled();
+});
+it("detects catalog reference mutation during signing even when catalog reuses one object", async () => {
+  const { signer, catalog, sign, token } = await fixture();
+  const mutable = await catalog();
+  catalog.mockResolvedValue(mutable);
+  sign.mockImplementationOnce(async () => {
+    mutable.ref = { ...ref, key: `axfluxo/outputs/${owner}/${other}` };
+    return {
+      url: "https://dummy.invalid/signed",
+      expiresAt: Date.now() + 60000,
+    };
+  });
+  await expect(signer(await token(), { fileId: other })).rejects.toThrow(
+    "FILE_ACCESS_DENIED",
+  );
 });

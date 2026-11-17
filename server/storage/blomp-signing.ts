@@ -41,6 +41,9 @@ export function blompReadSigner(config: {
       if (
         !file ||
         file.owner !== ownerId ||
+        !["originals", "outputs"].some((role) =>
+          file.ref.key.startsWith(`axfluxo/${role}/${ownerId}/`),
+        ) ||
         !file.verified ||
         !file.readable ||
         !Number.isSafeInteger(file.size) ||
@@ -50,12 +53,13 @@ export function blompReadSigner(config: {
       return file;
     };
     const file = await check();
+    const identity = JSON.stringify(file);
     const signed = await config.storage.sign(file.ref, "GET");
     const latestIdentity = await config.verify(authorization);
     if (latestIdentity.ownerId !== ownerId)
       throw new ApiError(403, "FILE_ACCESS_DENIED");
     const latest = await check();
-    if (!config.enabled() || JSON.stringify(latest) !== JSON.stringify(file))
+    if (!config.enabled() || JSON.stringify(latest) !== identity)
       throw new ApiError(403, "FILE_ACCESS_DENIED");
     return signed; // Caller must use no-store and must never log/persist this bearer capability.
   };

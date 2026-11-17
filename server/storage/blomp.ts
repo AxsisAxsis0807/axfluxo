@@ -35,9 +35,20 @@ export const blompCapabilities = Object.freeze({
 const uuid =
   "[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}";
 const keyPattern = new RegExp(
-  `^axfluxo/(?:originals|outputs)/${uuid}/${uuid}$|^axfluxo/connection-tests/${uuid}/probe.bin$`,
+  `^axfluxo/(?:originals|outputs)/${uuid}/${uuid}$|^axfluxo/connection-tests/${uuid}/probe\\.bin$`,
 );
+function validatedConfig(config: BlompConfig): BlompConfig {
+  return blompConfiguration({
+    BLOMP_ENABLED: "true",
+    BLOMP_ENDPOINT: config.endpoint,
+    BLOMP_REGION: config.region,
+    BLOMP_BUCKET: config.bucket,
+    BLOMP_ACCESS_KEY_ID: config.accessKeyId,
+    BLOMP_SECRET_ACCESS_KEY: config.secretAccessKey,
+  })!;
+}
 export function blompClient(config: BlompConfig) {
+  config = validatedConfig(config);
   return new S3Client({
     ...config,
     forcePathStyle: true,
@@ -85,14 +96,7 @@ function safeError(error: unknown): BlompError {
 /** Trusted server code only; prefix checks are not authorization or physical isolation. */
 export function blompStorage(config: BlompConfig, injected?: S3Client) {
   // Validate even direct callers; no accidental SDK default credential chain.
-  blompConfiguration({
-    BLOMP_ENABLED: "true",
-    BLOMP_ENDPOINT: config.endpoint,
-    BLOMP_REGION: config.region,
-    BLOMP_BUCKET: config.bucket,
-    BLOMP_ACCESS_KEY_ID: config.accessKeyId,
-    BLOMP_SECRET_ACCESS_KEY: config.secretAccessKey,
-  });
+  config = validatedConfig(config);
   const client = injected ?? blompClient(config);
   const location = blompLocation(config);
   const tests = new Set<string>();
