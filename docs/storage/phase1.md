@@ -71,7 +71,7 @@ random keyの同一実行再試行だけを想定し、運用の上書き保証�
 
 `blomp-signing.ts` はlocalで実行可能な**読取専用policy prototype**。
 既存jwtVerifierを再利用し、fileIdだけを受け、server catalogのowner/readable/verifiedを照合。
-任意URL/bucket/key/owner/operationはstrict schemaで拒否。署名前後にJWT・権限・refを再確認。
+任意URL/bucket/key/owner/operationはstrict schemaで拒否。署名前後にJWT・権限・refを再確認。catalogのownerとkey内ownerも照合し、署名前のsnapshotと比較する。
 1owner毎60秒10件、Map最大1000ownerのlocal制限。並列instance用の共有制限ではない。
 署名URLは60秒のbearer capabilityで、その間の再利用は可能。発行後の即時失効/一回限りURLとは主張しない。
 読み取り重複は無副作用、再発行も毎回再認可する。URLをlog/DB/IDB/SWに保存しない。
@@ -121,6 +121,7 @@ GitHub Actions用Secretsの登録だけではこのNode processへ自動注入�
 Blomp CORS設定可否・公式サポートに問い合わせる。アプリoriginを正確に限定し、OPTIONS、GET/PUT/HEAD、
 Content-Type/Range/必要な署名header、Expose-Headers ETag/Content-Length/Content-Rangeを確認。
 credentialsなしの直接転送を優先。CLIの成功はCORSの成功ではない。
+Content-Lengthはbrowser JavaScriptから任意設定できないため、Blob/partの実sizeによる自動付与と署名の一致を実機で確認する。
 実Safariで小容量→Range206→multipart各part ETag→中断/list/resume→期限切れ403→再認可/再発行→完了SHAを検証。
 no-corsやブラウザ保護の無効化を使わない。非対応なら受付OFFを維持し、所有者に代替を相談。
 代替はCORS対応済み既存R2の継続、端末保存、別サービスの承認後採用。中継案には転送料/帯域/実行時間/無料枠の再評価が必要。
@@ -140,6 +141,13 @@ iPhone一時disk/最終結合/タブ破棄を実測する。チェックポイ�
 
 運用削除/GC/移行はなし。将来は完成物検証、owner/job/version/ref照合、参照pin/復旧保持、
 冪等ticket/容量一度だけ減算、失敗再試行、provider権限分離が揃うまで全件保持。
+
+## Draft PRと実接続承認
+
+既存Pages workflowはpull_requestのbuildでもSupabase `/auth/v1/settings` を公開キーで実読取する。
+データ変更/メール送信はしないが、所有者指定の実接続承認条件に従い、この読取の承認後にDraft PRを作成する。
+そのためにCI/testをskipしたりworkflowを緩和したりしない。Blomp/Drimeの実接続承認とは分ける。
+実装/検証は作業branchでレビュー可能。本番deploy jobはmain限定のまま。
 
 ## rollback
 
