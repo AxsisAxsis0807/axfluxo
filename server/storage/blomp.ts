@@ -62,6 +62,8 @@ export function blompClient(config: BlompConfig) {
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
     requestHandler: new NodeHttpHandler({
+      // Smithy creates its own HTTPS agent, so Node's global proxy setting is insufficient.
+      httpsAgent: { proxyEnv: process.env },
       connectionTimeout: 5000,
       requestTimeout: 30000,
       socketTimeout: 30000,
