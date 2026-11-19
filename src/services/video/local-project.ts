@@ -94,6 +94,84 @@ function line(
   ctx.strokeText(text, ctx.canvas.width / 2, y, max);
   ctx.fillText(text, ctx.canvas.width / 2, y, max);
 }
+
+/** Pre-render immutable text at its original canvas scale and integer baseline.
+ * Small strips avoid allocating a full 1080x1920 overlay for each FNF range. */
+function staticText(text: string, max: number, size: number) {
+  try {
+    const layer = document.createElement("canvas");
+    layer.width = 1080;
+    layer.height = size * 2 + 16;
+    const context = layer.getContext("2d");
+    if (!context) return null;
+    line(context, text, layer.height / 2, max, size);
+    return layer;
+  } catch {
+    // A constrained device can still use the original per-frame text path.
+    return null;
+  }
+}
+
+function drawStaticText(
+  context: CanvasRenderingContext2D,
+  layer: HTMLCanvasElement | null,
+  text: string,
+  y: number,
+  max: number,
+  size: number,
+) {
+  if (layer) context.drawImage(layer, 0, y - layer.height / 2);
+  else line(context, text, y, max, size);
+}
+
+/** The picture comes from the user's selected cover, never a replacement asset. */
+function drawAllVersionsBackground(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+) {
+  context.fillStyle = "black";
+  context.fillRect(0, 0, 1920, 1080);
+  context.save();
+  context.globalAlpha = 0.65;
+  context.filter = "blur(24px)";
+  const scale = Math.max(2080 / image.width, 1200 / image.height);
+  context.drawImage(
+    image,
+    (1920 - image.width * scale) / 2,
+    (1080 - image.height * scale) / 2,
+    image.width * scale,
+    image.height * scale,
+  );
+  context.restore();
+  const crop = Math.min(image.width, image.height);
+  context.drawImage(
+    image,
+    (image.width - crop) / 2,
+    (image.height - crop) / 2,
+    crop,
+    crop,
+    660,
+    130,
+    600,
+    600,
+  );
+}
+
+function preRenderAllVersionsBackground(image: HTMLImageElement) {
+  try {
+    const layer = document.createElement("canvas");
+    layer.width = 1920;
+    layer.height = 1080;
+    const context = layer.getContext("2d");
+    if (!context) return null;
+    drawAllVersionsBackground(context, image);
+    return layer;
+  } catch {
+    // Preserve the legacy renderer if creating an extra canvas fails.
+    return null;
+  }
+}
+
 async function createLocalJobs(
   project: LocalProjectData,
 ): Promise<LocalEncodeJob[]> {
@@ -139,6 +217,11 @@ async function createLocalJobs(
         Math.min(2, Math.max(0.1, scaleFactor)),
       w = source.width * scale,
       h = cropped * scale;
+    // Lazily build only the overlays of a job actually being rendered.
+    // Recovery reconstructs every queued range; eager bitmaps waste memory.
+    let headingLayer: HTMLCanvasElement | null | undefined;
+    let usernameLayer: HTMLCanvasElement | null | undefined;
+    const titleLayers: (HTMLCanvasElement | null | undefined)[] = [];
     return ordered.map((range, i) => ({
       filename: filenames[i],
       width: 1080,
@@ -165,9 +248,15 @@ async function createLocalJobs(
           w,
           h,
         );
-        line(ctx, FNF_HEADING, 130, 1000, 46);
-        line(ctx, range.name, 240, 1000, 44);
-        line(ctx, username, 1770, 1000, 64);
+        if (headingLayer === undefined)
+          headingLayer = staticText(FNF_HEADING, 1000, 46);
+        if (usernameLayer === undefined)
+          usernameLayer = staticText(username, 1000, 64);
+        if (titleLayers[i] === undefined)
+          titleLayers[i] = staticText(range.name, 1000, 44);
+        drawStaticText(ctx, headingLayer, FNF_HEADING, 130, 1000, 46);
+        drawStaticText(ctx, titleLayers[i] ?? null, range.name, 240, 1000, 44);
+        drawStaticText(ctx, usernameLayer, username, 1770, 1000, 64);
       },
     }));
   }
@@ -178,7 +267,10 @@ async function createLocalJobs(
       `名前をversion数（${intervals.length}）と同じ行数で入力してください。複数のVersion名にはVersion境界の設定が必要です。`,
     );
   if (!cover) throw Error("カバー画像を選択してください。");
-  const image = await imageForEncode(cover);
+  // Delay the full-size cache until first draw. A queued or restored job
+  // should not consume an extra 1920x1080 surface before it starts.
+  let fallbackImage: HTMLImageElement | null = await imageForEncode(cover);
+  let staticBackground: HTMLCanvasElement | null | undefined;
   return [
     {
       filename: "All Versions.mp4",
@@ -191,32 +283,12 @@ async function createLocalJobs(
         end: s.end,
       })),
       draw: (ctx, _media, seconds) => {
-        ctx.fillStyle = "black";
-        ctx.fillRect(0, 0, 1920, 1080);
-        ctx.save();
-        ctx.globalAlpha = 0.65;
-        ctx.filter = "blur(24px)";
-        const scale = Math.max(2080 / image.width, 1200 / image.height);
-        ctx.drawImage(
-          image,
-          (1920 - image.width * scale) / 2,
-          (1080 - image.height * scale) / 2,
-          image.width * scale,
-          image.height * scale,
-        );
-        ctx.restore();
-        const crop = Math.min(image.width, image.height);
-        ctx.drawImage(
-          image,
-          (image.width - crop) / 2,
-          (image.height - crop) / 2,
-          crop,
-          crop,
-          660,
-          130,
-          600,
-          600,
-        );
+        if (staticBackground === undefined) {
+          staticBackground = preRenderAllVersionsBackground(fallbackImage!);
+          if (staticBackground) fallbackImage = null;
+        }
+        if (staticBackground) ctx.drawImage(staticBackground, 0, 0);
+        else drawAllVersionsBackground(ctx, fallbackImage!);
         const i = intervals.findIndex(
           (v) => seconds >= v.start && seconds < v.end,
         );
