@@ -13,6 +13,7 @@ import {
   retryJob,
 } from "./jobs";
 export interface ApiConfig {
+  blomp?: ApiConfig["outputs"];
   outputs?: (
     request: Request,
     owner: string,
@@ -39,7 +40,7 @@ export interface ApiConfig {
     owner: string,
   ) => Promise<{ status: number; body: unknown }>;
 }
-export async function jsonBody(request: Request) {
+export async function jsonBody(request: Request, limit = 1024 * 1024) {
   if (
     request.headers.get("content-type")?.split(";")[0].trim() !==
     "application/json"
@@ -50,7 +51,6 @@ export async function jsonBody(request: Request) {
     request.headers.get("content-encoding") !== "identity"
   )
     throw new ApiError(415, "JSON_REQUIRED");
-  const limit = 1024 * 1024;
   const reader = request.body?.getReader();
   if (!reader) throw new ApiError(400, "VALIDATION_FAILED");
   const chunks: Uint8Array[] = [];
@@ -154,6 +154,10 @@ export function createVideoApi(
         request.headers.get("authorization"),
       );
       const path = new URL(request.url).pathname;
+      if (config.blomp && path.startsWith("/storage/blomp/")) {
+        const result = await config.blomp(request, identity.ownerId);
+        return respond(result.status, result.body);
+      }
       if (
         config.outputs &&
         (path === "/outputs" ||

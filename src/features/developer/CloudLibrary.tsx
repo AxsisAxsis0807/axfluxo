@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import BlompLibrary from "./BlompLibrary";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createVideoApiClient,
@@ -477,6 +478,7 @@ export default function CloudLibrary({
         <Link href="/developer/video/">動画ジョブへ</Link> ·{" "}
         <Link href="/">制作画面へ戻る</Link>
       </p>
+      {!onSelect && <BlompLibrary />}
     </main>
   );
 }

@@ -1,5 +1,7 @@
 "use client";
+import { blompApiOrigin } from "../../services/blomp/client";
 import { useEffect, useRef, useState } from "react";
+import BlompLibrary from "./BlompLibrary";
 import { isInteriorBoundary } from "../../services/video/timeline-math";
 import LocalCompositionPreview from "./LocalCompositionPreview";
 import LocalTimeline from "./LocalTimeline";
@@ -362,7 +364,7 @@ export default function LocalVideoTool({
     >
       <h1>{fnf ? "FNF Showcase Maker" : "All Versions Video Maker"}</h1>
       <p>
-        端末の素材を選択して制作します。素材・動画のアップロードは行いません。端末内機能はログイン・動画APIなしで利用できます。
+        端末の素材を選択して制作します。クラウド転送は明示操作で開始します。端末内機能はログイン・動画APIなしで利用できます。
       </p>
       <p
         role="status"
@@ -386,6 +388,12 @@ export default function LocalVideoTool({
           onChange={(e) => void select(Array.from(e.target.files ?? []))}
         />
       </label>
+      {blompApiOrigin() && !loading && (
+        <BlompLibrary
+          sourceKind={fnf ? "video" : "media"}
+          onUseSource={(source) => select([source])}
+        />
+      )}
       {loading && <p role="status">素材を読み込んでいます…</p>}
       {error && <p role="alert">{error}</p>}
       {sources.map((s, i) => (

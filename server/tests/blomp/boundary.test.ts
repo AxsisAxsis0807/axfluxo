@@ -6,6 +6,7 @@ it("keeps Blomp server credentials and adapter out of client export/auth/workflo
     entryPoints: [
       "src/services/video/local-export-runtime.ts",
       "src/services/auth.ts",
+      "src/services/blomp/client.ts",
       "src/services/workflow/runner.ts",
     ],
     outdir: "unused-client-boundary",
@@ -17,8 +18,9 @@ it("keeps Blomp server credentials and adapter out of client export/auth/workflo
     define: { "process.env.NODE_ENV": '"test"' },
   });
   expect(
-    Object.keys(result.metafile!.inputs).some((path) =>
-      path.startsWith("server/"),
+    Object.keys(result.metafile!.inputs).some(
+      (path) =>
+        path.startsWith("server/") && path !== "server/contracts/video.ts",
     ),
   ).toBe(false);
   for (const file of result.outputFiles) {

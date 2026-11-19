@@ -4,6 +4,9 @@ import { isEntrypoint, runService } from "../runtime/lifecycle";
 import { postgresDatabase } from "../db/postgres";
 import { createVideoApi } from "./app";
 import { supabaseVerifier } from "./auth";
+import { blompRouter } from "./blomp/router";
+import { blompStorage } from "../storage/blomp";
+import { blompConfiguration } from "../storage/blomp-config";
 import { cloudRouter } from "./assets/router";
 import { cloudConfiguration } from "../storage/config";
 import { fnfRouter } from "./preferences/router";
@@ -16,6 +19,9 @@ export async function startApi(env = process.env) {
   const config = serverConfig(env);
   const cloud = cloudConfiguration(env);
   const verify = supabaseVerifier(config.issuer, config.audience);
+  const blompConfig = blompConfiguration(env);
+  const blomp =
+    blompConfig && !config.production ? blompStorage(blompConfig) : null;
   const db = postgresDatabase({
     connectionString: config.databaseUrl,
     max: config.poolMax,
@@ -37,6 +43,16 @@ export async function startApi(env = process.env) {
               vapidPublicKey: env.VIDEO_VAPID_PUBLIC_KEY,
             })
           : undefined,
+      blomp: blompRouter({
+        db,
+        storage: blomp,
+        verify,
+        writes: () =>
+          !config.production &&
+          env.BLOMP_MULTIPART_ENABLED === "true" &&
+          env.BLOMP_BROWSER_TRANSFER_ENABLED === "true" &&
+          env.BLOMP_FREE_LIMITS_CONFIRMED === "true",
+      }),
       cloud: cloudRouter({ db, ...cloud }),
       fnf: fnfRouter({
         db,
@@ -58,7 +74,12 @@ export async function startApi(env = process.env) {
       }),
       verify,
     });
-    const bridge = createHttpServer(handler, httpConfiguration(env));
+    const http = httpConfiguration(env);
+    const bridge = createHttpServer(handler, http, (request) =>
+      request.url?.startsWith("/storage/blomp/")
+        ? { ...http.control, bodyBytes: 4096 }
+        : http.control,
+    );
     await new Promise<void>((resolve, reject) => {
       bridge.server.once("error", reject);
       bridge.server.listen(config.port, config.host, () => {
@@ -70,6 +91,7 @@ export async function startApi(env = process.env) {
       server: bridge.server,
       async close() {
         bridge.abort();
+        blomp?.close();
         await Promise.all([
           new Promise<void>((resolve) => bridge.server.close(() => resolve())),
           db.close(),
@@ -77,6 +99,7 @@ export async function startApi(env = process.env) {
       },
     };
   } catch {
+    blomp?.close();
     await db.close();
     throw Error("API startup configuration failed");
   }

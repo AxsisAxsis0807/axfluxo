@@ -12,7 +12,14 @@ const env = {
 const args = ["--approved-connect", "--approved-delete-test"];
 afterEach(() => vi.unstubAllGlobals());
 function fixture(
-  mode?: "hash" | "lost-put" | "cleanup" | "signed-expired" | "signed-hash",
+  mode?:
+    | "hash"
+    | "lost-put"
+    | "cleanup"
+    | "signed-expired"
+    | "signed-hash"
+    | "dual-failure"
+    | "still-present",
 ) {
   const storage = blompStorage(blompConfiguration(env)!);
   let bytes: Uint8Array<ArrayBufferLike> = new Uint8Array(),
@@ -21,7 +28,8 @@ function fixture(
     .spyOn(storage, "putTest")
     .mockImplementation(async (_ref, input) => {
       bytes = input;
-      if (mode === "lost-put") throw Error("secret lost response");
+      if (mode === "lost-put" || mode === "dual-failure")
+        throw Error("secret lost response");
     });
   vi.spyOn(storage, "head").mockImplementation(async () =>
     deleted ? null : { size: bytes.length, etag: undefined },
@@ -36,8 +44,9 @@ function fixture(
   const remove = vi
     .spyOn(storage, "deleteTest")
     .mockImplementation(async () => {
-      if (mode === "cleanup") throw Error("secret cleanup error");
-      deleted = true;
+      if (mode === "cleanup" || mode === "dual-failure")
+        throw Error("secret cleanup error");
+      deleted = mode !== "still-present";
     });
   const close = vi.spyOn(storage, "close");
   const fetcher = vi.fn(async () =>
@@ -61,9 +70,33 @@ it("complete explicit verifier, exact 1024-byte hash and same generated key clea
   expect(f.remove).toHaveBeenCalledWith(f.put.mock.calls[0][0]);
   expect(f.close).toHaveBeenCalledOnce();
   expect(f.report).toHaveBeenCalledWith("download SHA-256: PASS");
+  expect(f.report).toHaveBeenCalledWith("post-deletion HEAD absence: PASS");
   expect(JSON.stringify(f.report.mock.calls)).not.toContain(
     "private-signed-url",
   );
+});
+it("reports probe and cleanup failure separately without retry or raw errors", async () => {
+  const f = fixture("dual-failure");
+  await expect(verifyBlomp(env, args, f.report, f.factory)).rejects.toThrow(
+    "BLOMP_CLEANUP_FAILED",
+  );
+  expect(f.report).toHaveBeenCalledWith(
+    "probe failed: BLOMP_VERIFICATION_FAILED",
+  );
+  expect(f.report).toHaveBeenCalledWith(
+    "test cleanup: FAILED; owner must inspect connection-tests area",
+  );
+  expect(f.remove).toHaveBeenCalledOnce();
+  expect(JSON.stringify(f.report.mock.calls)).not.toContain("secret");
+});
+it("fails verification when the object remains visible after DELETE", async () => {
+  const f = fixture("still-present");
+  await expect(verifyBlomp(env, args, f.report, f.factory)).rejects.toThrow(
+    "BLOMP_CLEANUP_FAILED",
+  );
+  expect(f.remove).toHaveBeenCalledOnce();
+  expect(f.report).toHaveBeenCalledWith("test object deletion: PASS");
+  expect(f.report).not.toHaveBeenCalledWith("post-deletion HEAD absence: PASS");
 });
 it.each(["hash", "lost-put", "signed-expired", "signed-hash"] as const)(
   "cleans only invocation object after %s failure",

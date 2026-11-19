@@ -29,10 +29,8 @@ async function probe(storage: BlompStorage, report: (step: string) => void) {
   const ref = storage.newTestReference();
   const bytes = randomBytes(1024);
   const hash = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
-  let attempted = false;
   try {
     // No bucket enumeration and no reads/writes to existing objects.
-    attempted = true;
     await storage.putTest(ref, bytes);
     report("authenticated upload 1024 bytes: PASS");
     if ((await storage.head(ref))?.size !== bytes.length)
@@ -78,20 +76,24 @@ async function probe(storage: BlompStorage, report: (step: string) => void) {
     if (received !== bytes.length || signedHash.digest("hex") !== hash(bytes))
       throw new BlompError("BLOMP_HASH_MISMATCH");
     report("signed GET SHA-256 (server, not browser CORS): PASS");
+  } catch (error) {
+    report(
+      "probe failed: " +
+        (error instanceof BlompError
+          ? error.code
+          : "BLOMP_VERIFICATION_FAILED"),
+    );
+    throw error;
   } finally {
     // Also try cleanup after an ambiguous PUT response. Same invocation's random key only.
-    if (attempted) {
-      try {
-        await storage.deleteTest(ref);
-        if (await storage.head(ref))
-          throw new BlompError("BLOMP_CLEANUP_FAILED");
-        report("test object deletion: PASS");
-      } catch {
-        report(
-          "test cleanup: FAILED; owner must inspect connection-tests area",
-        );
-        throw new BlompError("BLOMP_CLEANUP_FAILED");
-      }
+    try {
+      await storage.deleteTest(ref);
+      report("test object deletion: PASS");
+      if (await storage.head(ref)) throw new BlompError("BLOMP_CLEANUP_FAILED");
+      report("post-deletion HEAD absence: PASS");
+    } catch {
+      report("test cleanup: FAILED; owner must inspect connection-tests area");
+      throw new BlompError("BLOMP_CLEANUP_FAILED");
     }
   }
 }

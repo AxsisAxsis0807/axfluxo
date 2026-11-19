@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
 import {
   S3Client,
+  type S3ClientConfig,
   PutObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -48,7 +49,20 @@ function validatedConfig(config: BlompConfig): BlompConfig {
     BLOMP_SECRET_ACCESS_KEY: config.secretAccessKey,
   })!;
 }
-export function blompClient(config: BlompConfig) {
+export function blompHttpHandler() {
+  return new NodeHttpHandler({
+    // Smithy creates its own HTTPS agent, so Node's global proxy setting is insufficient.
+    httpsAgent: { proxyEnv: process.env },
+    connectionTimeout: 5000,
+    requestTimeout: 30000,
+    socketTimeout: 30000,
+    throwOnRequestTimeout: true,
+  });
+}
+export function blompClient(
+  config: BlompConfig,
+  requestHandler?: S3ClientConfig["requestHandler"],
+) {
   config = validatedConfig(config);
   return new S3Client({
     ...config,
@@ -61,14 +75,7 @@ export function blompClient(config: BlompConfig) {
     },
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
-    requestHandler: new NodeHttpHandler({
-      // Smithy creates its own HTTPS agent, so Node's global proxy setting is insufficient.
-      httpsAgent: { proxyEnv: process.env },
-      connectionTimeout: 5000,
-      requestTimeout: 30000,
-      socketTimeout: 30000,
-      throwOnRequestTimeout: true,
-    }),
+    requestHandler: requestHandler ?? blompHttpHandler(),
   });
 }
 export class BlompError extends Error {
@@ -92,7 +99,9 @@ function safeError(error: unknown): BlompError {
           ? "BLOMP_RATE_LIMITED"
           : status === 507
             ? "BLOMP_CAPACITY_HELD"
-            : e?.name === "TimeoutError"
+            : e?.name === "TimeoutError" ||
+                e?.name === "AbortError" ||
+                (error instanceof BlompError && error.code === "BLOMP_TIMEOUT")
               ? "BLOMP_TIMEOUT"
               : "BLOMP_UNAVAILABLE",
   );
@@ -173,10 +182,12 @@ export function blompStorage(config: BlompConfig, injected?: S3Client) {
       await run(() => client.send(new DeleteObjectCommand(input)));
       tests.delete(ref.key);
     },
-    async head(ref: BlompRef) {
+    async head(ref: BlompRef, signal?: AbortSignal) {
       const input = base(ref);
       try {
-        const r = await run(() => client.send(new HeadObjectCommand(input)));
+        const r = await run(() =>
+          client.send(new HeadObjectCommand(input), { abortSignal: signal }),
+        );
         if (!Number.isSafeInteger(r.ContentLength) || r.ContentLength! < 0)
           throw new BlompError("BLOMP_INVALID_RESPONSE");
         return { size: r.ContentLength!, etag: r.ETag };
@@ -228,16 +239,20 @@ export function blompStorage(config: BlompConfig, injected?: S3Client) {
       }
       const body = r.Body;
       return (async function* () {
+        const abort = () => body.destroy(new BlompError("BLOMP_TIMEOUT"));
         try {
+          signal?.throwIfAborted();
+          signal?.addEventListener("abort", abort, { once: true });
           for await (const chunk of body) yield chunk;
         } catch (error) {
           throw safeError(error);
         } finally {
+          signal?.removeEventListener("abort", abort);
           body.destroy();
         }
       })();
     },
-    async create(ref: BlompRef) {
+    async create(ref: BlompRef, signal?: AbortSignal) {
       const input = base(ref);
       const r = await run(() =>
         client.send(
@@ -245,12 +260,13 @@ export function blompStorage(config: BlompConfig, injected?: S3Client) {
             ...input,
             ContentType: "application/octet-stream",
           }),
+          { abortSignal: signal },
         ),
       );
       if (!r.UploadId) throw new BlompError("BLOMP_INVALID_RESPONSE");
       return r.UploadId;
     },
-    async findUploads(ref: BlompRef) {
+    async findUploads(ref: BlompRef, signal?: AbortSignal) {
       const input = base(ref),
         result: string[] = [];
       let KeyMarker: string | undefined, UploadIdMarker: string | undefined;
@@ -263,6 +279,7 @@ export function blompStorage(config: BlompConfig, injected?: S3Client) {
               KeyMarker,
               UploadIdMarker,
             }),
+            { abortSignal: signal },
           ),
         );
         for (const u of r.Uploads ?? [])
@@ -279,13 +296,19 @@ export function blompStorage(config: BlompConfig, injected?: S3Client) {
       }
       throw new BlompError("BLOMP_INVALID_RESPONSE");
     },
-    async parts(ref: BlompRef, id: string): Promise<StoredPart[]> {
+    async parts(
+      ref: BlompRef,
+      id: string,
+      signal?: AbortSignal,
+    ): Promise<StoredPart[]> {
       const input = { ...base(ref), UploadId: upload(id) },
         result: StoredPart[] = [];
       let PartNumberMarker: string | undefined;
       for (let page = 0; page < 100; page++) {
         const r = await run(() =>
-          client.send(new ListPartsCommand({ ...input, PartNumberMarker })),
+          client.send(new ListPartsCommand({ ...input, PartNumberMarker }), {
+            abortSignal: signal,
+          }),
         );
         for (const p of r.Parts ?? []) {
           if (!p.PartNumber || !p.ETag || p.Size === undefined)
@@ -302,7 +325,12 @@ export function blompStorage(config: BlompConfig, injected?: S3Client) {
       }
       throw new BlompError("BLOMP_INVALID_RESPONSE");
     },
-    async complete(ref: BlompRef, id: string, parts: StoredPart[]) {
+    async complete(
+      ref: BlompRef,
+      id: string,
+      parts: StoredPart[],
+      signal?: AbortSignal,
+    ) {
       const input = { ...base(ref), UploadId: upload(id) };
       if (
         !parts.length ||
@@ -326,12 +354,17 @@ export function blompStorage(config: BlompConfig, injected?: S3Client) {
               Parts: parts.map((p) => ({ PartNumber: p.number, ETag: p.etag })),
             },
           }),
+          { abortSignal: signal },
         ),
       );
     },
-    async abort(ref: BlompRef, id: string) {
+    async abort(ref: BlompRef, id: string, signal?: AbortSignal) {
       const input = { ...base(ref), UploadId: upload(id) };
-      await run(() => client.send(new AbortMultipartUploadCommand(input)));
+      await run(() =>
+        client.send(new AbortMultipartUploadCommand(input), {
+          abortSignal: signal,
+        }),
+      );
     },
     async sign(
       ref: BlompRef,
