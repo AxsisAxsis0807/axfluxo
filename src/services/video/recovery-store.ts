@@ -223,7 +223,8 @@ async function readAsset(
     manifest.count !== Math.ceil(manifest.size / CHUNK_BYTES)
   )
     throw Error("保存素材の情報が不正です。データは保持しました。");
-  let blob = new Blob([], { type: manifest.type });
+  // Assemble once after verifying every chunk, avoiding nested Blob chains.
+  const parts: BlobPart[] = [];
   for (let index = 0; index < manifest.count; index++) {
     const part = (await request(
       db.transaction("assets").objectStore("assets").get(chunkKey(key, index)),
@@ -237,9 +238,13 @@ async function readAsset(
       throw Error(
         "保存素材の一部が欠けるか破損しています。データは保持しました。",
       );
-    blob = new Blob([blob, part.bytes], { type: manifest.type });
+    parts.push(part.bytes);
   }
-  return { blob, name: manifest.name, lastModified: manifest.lastModified };
+  return {
+    blob: new Blob(parts, { type: manifest.type }),
+    name: manifest.name,
+    lastModified: manifest.lastModified,
+  };
 }
 /** Advisory only: actual transaction failures remain authoritative on Safari. */
 async function checkCapacity(assets: readonly (readonly [string, Blob])[]) {
