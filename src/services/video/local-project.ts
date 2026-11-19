@@ -217,9 +217,11 @@ async function createLocalJobs(
         Math.min(2, Math.max(0.1, scaleFactor)),
       w = source.width * scale,
       h = cropped * scale;
-    const headingLayer = staticText(FNF_HEADING, 1000, 46);
-    const usernameLayer = staticText(username, 1000, 64);
-    const titleLayers = ordered.map((range) => staticText(range.name, 1000, 44));
+    // Lazily build only the overlays of a job actually being rendered.
+    // Recovery reconstructs every queued range; eager bitmaps waste memory.
+    let headingLayer: HTMLCanvasElement | null | undefined;
+    let usernameLayer: HTMLCanvasElement | null | undefined;
+    const titleLayers: (HTMLCanvasElement | null | undefined)[] = [];
     return ordered.map((range, i) => ({
       filename: filenames[i],
       width: 1080,
@@ -246,8 +248,14 @@ async function createLocalJobs(
           w,
           h,
         );
+        if (headingLayer === undefined)
+          headingLayer = staticText(FNF_HEADING, 1000, 46);
+        if (usernameLayer === undefined)
+          usernameLayer = staticText(username, 1000, 64);
+        if (titleLayers[i] === undefined)
+          titleLayers[i] = staticText(range.name, 1000, 44);
         drawStaticText(ctx, headingLayer, FNF_HEADING, 130, 1000, 46);
-        drawStaticText(ctx, titleLayers[i], range.name, 240, 1000, 44);
+        drawStaticText(ctx, titleLayers[i] ?? null, range.name, 240, 1000, 44);
         drawStaticText(ctx, usernameLayer, username, 1770, 1000, 64);
       },
     }));
@@ -259,9 +267,10 @@ async function createLocalJobs(
       `名前をversion数（${intervals.length}）と同じ行数で入力してください。複数のVersion名にはVersion境界の設定が必要です。`,
     );
   if (!cover) throw Error("カバー画像を選択してください。");
-  const image = await imageForEncode(cover);
-  const staticBackground = preRenderAllVersionsBackground(image);
-  const fallbackImage = staticBackground ? null : image;
+  // Delay the full-size cache until first draw. A queued or restored job
+  // should not consume an extra 1920x1080 surface before it starts.
+  let fallbackImage: HTMLImageElement | null = await imageForEncode(cover);
+  let staticBackground: HTMLCanvasElement | null | undefined;
   return [
     {
       filename: "All Versions.mp4",
@@ -274,6 +283,10 @@ async function createLocalJobs(
         end: s.end,
       })),
       draw: (ctx, _media, seconds) => {
+        if (staticBackground === undefined) {
+          staticBackground = preRenderAllVersionsBackground(fallbackImage!);
+          if (staticBackground) fallbackImage = null;
+        }
         if (staticBackground) ctx.drawImage(staticBackground, 0, 0);
         else drawAllVersionsBackground(ctx, fallbackImage!);
         const i = intervals.findIndex(
