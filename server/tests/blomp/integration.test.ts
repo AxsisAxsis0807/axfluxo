@@ -1,3 +1,5 @@
+import type { StorageRole } from "../../../src/domain/storage/destinations";
+import { blompPolicy } from "../../storage/blomp-policy";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
@@ -7,7 +9,7 @@ import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
 import { jwtVerifier } from "../../api/auth";
 import { UploadError } from "../../../src/services/cloud-library/upload";
 import { ApiError } from "../../api/errors";
-import type { BlompStorage } from "../../storage/blomp";
+import { BlompError, type BlompStorage } from "../../storage/blomp";
 import { testEngine } from "../engine";
 import { blompPartSize } from "../../../src/domain/blomp/storage";
 import { createVideoApiClient } from "../../../src/services/video/api-client";
@@ -35,6 +37,7 @@ const metadata = {
 } as const;
 const quota = "axfluxo_video.blomp_capacity";
 let writes = true;
+let fileLimit: number | null = 5368709120;
 let target = location;
 let uploads: Map<string, Uint8Array>;
 let objects: Map<string, Uint8Array>;
@@ -52,7 +55,7 @@ const storage = {
   get location() {
     return target;
   },
-  newReference: (role: "originals" | "outputs", id: string): Ref => ({
+  newReference: (role: StorageRole, id: string): Ref => ({
     provider: "blomp",
     location: target,
     key: `axfluxo/${role}/${id}/${randomUUID()}`,
@@ -113,6 +116,17 @@ const app = createVideoApi({
   blomp: blompRouter({
     db: engine.asRole("axfluxo_video_api"),
     storage,
+    policy: {
+      ...blompPolicy({
+        BLOMP_MAX_FILE_BYTES: "5368709120",
+        BLOMP_MULTIPART_ENABLED: "true",
+        BLOMP_BROWSER_TRANSFER_ENABLED: "true",
+        BLOMP_FREE_LIMITS_CONFIRMED: "true",
+      }),
+      get maxFileBytes() {
+        return fileLimit;
+      },
+    },
     writes: () => writes,
     verify,
   }),
@@ -163,6 +177,7 @@ beforeAll(async () => {
     "004_video_render",
     "005_all_versions_projects",
     "008_blomp_storage",
+    "009_blomp_file_roles",
   ])
     await engine.exec(
       await readFile(
@@ -180,6 +195,7 @@ beforeEach(async () => {
   vi.clearAllMocks();
   writes = true;
   target = location;
+  fileLimit = 5368709120;
   createLost = completeLost = failAbort = revoke = false;
   uploads = new Map();
   objects = new Map();
@@ -483,4 +499,89 @@ it("imports a bounded verified original and rejects an altered or oversized down
       async () => new Response(new Uint8Array(1024)),
     ),
   ).rejects.toThrow("UPLOAD_FILE_MISMATCH");
+});
+
+it("holds unknown provider limits and stops new uploads when the limit is lowered", async () => {
+  fileLimit = null;
+  const overview = await (await call("/overview")).json();
+  expect(overview.state).toBe("held");
+  expect(overview.capabilities).toEqual({
+    multipartWrites: false,
+    maxFileBytes: null,
+  });
+  expect((await call("/files", metadata)).status).toBe(503);
+  fileLimit = 512;
+  const blocked = await call("/files", metadata);
+  expect(blocked.status).toBe(413);
+  expect(await counts()).toEqual([0, 0]);
+  fileLimit = 1024;
+  await start();
+});
+
+it("does not sign more parts after a lowered limit or reinterpret an old account reference", async () => {
+  const id = await start();
+  await resume(id);
+  fileLimit = 512;
+  expect((await call(`/files/${id}/part`, { number: 1 })).status).toBe(413);
+  expect((await call(`/files/${id}/resume`, {})).status).toBe(413);
+  expect((await call(`/files/${id}/complete`, {})).status).toBe(413);
+  expect(storage.sign).not.toHaveBeenCalled();
+  expect(storage.complete).not.toHaveBeenCalled();
+  expect(await counts()).toEqual([1024, 0]);
+  target = "other-location";
+  expect((await call(`/files/${id}`)).status).toBe(404);
+  target = location;
+  expect((await call(`/files/${id}`)).status).toBe(200);
+});
+
+it("returns distinct safe provider failures without issuing access or releasing a reservation", async () => {
+  const id = await start();
+  await resume(id);
+  for (const code of [
+    "BLOMP_AUTH_EXPIRED",
+    "BLOMP_AUTH_FAILED",
+    "BLOMP_ACCOUNT_UNAVAILABLE",
+    "BLOMP_CAPACITY_HELD",
+    "BLOMP_RATE_LIMITED",
+  ]) {
+    storage.sign.mockRejectedValueOnce(new BlompError(code));
+    const response = await call(`/files/${id}/part`, { number: 1 });
+    expect(response.status).toBe(code === "BLOMP_RATE_LIMITED" ? 429 : 503);
+    expect(await response.json()).toEqual({ error: { code } });
+  }
+  expect(await counts()).toEqual([1024, 0]);
+});
+
+it.each(["inputs", "intermediates", "checkpoints"] as const)(
+  "stores and retrieves a %s file with its original provider",
+  async (role) => {
+    const data = {
+      ...metadata,
+      role,
+      mime: role === "checkpoints" ? "application/json" : metadata.mime,
+    } as const;
+    const id = await start(data);
+    const key = await resume(id);
+    expect(key).toContain(`axfluxo/${role}/`);
+    uploads.set(key, bytes);
+    const completed = await call(`/files/${id}/complete`, {});
+    expect(await completed.json()).toMatchObject({
+      id,
+      role,
+      provider: "blomp",
+      status: "ready",
+    });
+    const listing = await (await call("/files")).json();
+    expect(listing.files).toEqual([
+      expect.objectContaining({ id, role, provider: "blomp", status: "ready" }),
+    ]);
+    expect((await call(`/files/${id}/download`, {})).status).toBe(200);
+  },
+);
+it("rejects an opaque checkpoint MIME outside the checkpoint category", async () => {
+  expect(
+    (await call("/files", { ...metadata, mime: "application/octet-stream" }))
+      .status,
+  ).toBe(400);
+  expect(await counts()).toEqual([0, 0]);
 });

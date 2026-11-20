@@ -1,3 +1,4 @@
+import { isSourceRole } from "../../domain/storage/destinations";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { z } from "zod";
@@ -242,7 +243,7 @@ export async function importBlompSource(
   limit: number,
   transport = fetch,
 ) {
-  if (file.role !== "originals" || file.status !== "ready" || file.size > limit)
+  if (!isSourceRole(file.role) || file.status !== "ready" || file.size > limit)
     throw new UploadError("INVALID_RESPONSE");
   const access = value(await api.download(file.id));
   const response = await transport(checkedBlompUrl(access.url), {

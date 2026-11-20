@@ -170,6 +170,7 @@ test("interrupted direct transfer survives reload and verifies reselected bytes"
   try {
     const bundle = await fixtureBundle(storage.origin);
     let signed = 0;
+    let maxFileBytes: number | null = null;
     let starts = 0;
     let completes = 0;
     const resumed: string[] = [];
@@ -215,6 +216,7 @@ test("interrupted direct transfer survives reload and verifies reselected bytes"
           json: {
             state: "available",
             capacity: 1000,
+            capabilities: { multipartWrites: true, maxFileBytes },
             measuredUsed: 0,
             estimatedUsed: 0,
             available: 1000,
@@ -277,6 +279,30 @@ test("interrupted direct transfer survives reload and verifies reselected bytes"
       mimeType: "video/mp4",
       buffer: original,
     });
+    await page
+      .getByRole("button", { name: "Blompに保存", exact: true })
+      .click();
+    await expect(
+      page.getByText(
+        "Blompの公式ファイル上限が未確認です。確認できるまでクラウド保存を保留します。",
+      ),
+    ).toBeVisible();
+    expect(starts).toBe(0);
+    expect(signed).toBe(0);
+    expect(storage.writes).toBe(0);
+    maxFileBytes = original.length - 1;
+    await page
+      .getByRole("button", { name: "Blompに保存", exact: true })
+      .click();
+    await expect(
+      page.getByText(
+        "保存先のファイル上限を超えています。端末に保存するか、小さいファイルを選んでください。",
+      ),
+    ).toBeVisible();
+    expect(starts).toBe(0);
+    expect(signed).toBe(0);
+    expect(storage.writes).toBe(0);
+    maxFileBytes = original.length;
     await page
       .getByRole("button", { name: "Blompに保存", exact: true })
       .click();

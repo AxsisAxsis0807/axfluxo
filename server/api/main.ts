@@ -5,6 +5,7 @@ import { postgresDatabase } from "../db/postgres";
 import { createVideoApi } from "./app";
 import { supabaseVerifier } from "./auth";
 import { blompRouter } from "./blomp/router";
+import { blompPolicy } from "../storage/blomp-policy";
 import { blompStorage } from "../storage/blomp";
 import { blompConfiguration } from "../storage/blomp-config";
 import { cloudRouter } from "./assets/router";
@@ -19,9 +20,15 @@ export async function startApi(env = process.env) {
   const config = serverConfig(env);
   const cloud = cloudConfiguration(env);
   const verify = supabaseVerifier(config.issuer, config.audience);
-  const blompConfig = blompConfiguration(env);
-  const blomp =
-    blompConfig && !config.production ? blompStorage(blompConfig) : null;
+  let blomp: ReturnType<typeof blompStorage> | null = null;
+  if (!config.production) {
+    try {
+      const storage = blompConfiguration(env);
+      if (storage) blomp = blompStorage(storage);
+    } catch {
+      process.stderr.write("BLOMP_CONFIGURATION_UNAVAILABLE\n");
+    }
+  }
   const db = postgresDatabase({
     connectionString: config.databaseUrl,
     max: config.poolMax,
@@ -47,11 +54,8 @@ export async function startApi(env = process.env) {
         db,
         storage: blomp,
         verify,
-        writes: () =>
-          !config.production &&
-          env.BLOMP_MULTIPART_ENABLED === "true" &&
-          env.BLOMP_BROWSER_TRANSFER_ENABLED === "true" &&
-          env.BLOMP_FREE_LIMITS_CONFIRMED === "true",
+        policy: blompPolicy(env),
+        writes: () => !config.production,
       }),
       cloud: cloudRouter({ db, ...cloud }),
       fnf: fnfRouter({

@@ -28,6 +28,27 @@ describe("configuration boundaries", () => {
     expect(cloudConfiguration(env).storage).toBeNull();
     expect(cloudConfiguration(env).uploadsEnabled()).toBe(false);
   });
+  it("pins reassigned account namespaces without changing legacy or rotated references", () => {
+    const legacy = blompConfiguration(env)!;
+    const binding = "22222222-2222-4222-8222-222222222222";
+    const bound = blompConfiguration({
+      ...env,
+      BLOMP_ACCOUNT_BINDING_ID: binding,
+    })!;
+    expect(blompLocation(bound)).not.toBe(blompLocation(legacy));
+    expect(blompLocation({ ...bound, accessKeyId: "rotated" })).toBe(
+      blompLocation(bound),
+    );
+    const adapter = blompStorage(bound);
+    try {
+      expect(adapter.location).toBe(blompLocation(bound));
+    } finally {
+      adapter.close();
+    }
+    expect(() =>
+      blompConfiguration({ ...env, BLOMP_ACCOUNT_BINDING_ID: "invalid" }),
+    ).toThrow();
+  });
   it.each(["BLOMP_BUCKET", "BLOMP_ACCESS_KEY_ID", "BLOMP_SECRET_ACCESS_KEY"])(
     "requires %s",
     (key) => {
@@ -212,6 +233,26 @@ describe("isolated contract (no provider connection)", () => {
       expect(JSON.stringify(e)).not.toMatch(/dummy-secret|signed-url/);
     }
   });
+  it.each([
+    ["ExpiredToken", "BLOMP_AUTH_EXPIRED"],
+    ["InvalidToken", "BLOMP_AUTH_FAILED"],
+    ["AllAccessDisabled", "BLOMP_ACCOUNT_UNAVAILABLE"],
+    ["QuotaExceeded", "BLOMP_CAPACITY_HELD"],
+  ])(
+    "normalizes provider failure %s without exposing its message",
+    async (name, code) => {
+      const { storage, send, ref } = fixture();
+      send.mockRejectedValue({
+        name,
+        message: "private response",
+        $metadata: { httpStatusCode: 403 },
+      });
+      await expect(storage.head(ref)).rejects.toMatchObject({
+        code,
+        message: code,
+      });
+    },
+  );
   it("404 is missing, transport timeout and disconnect fail closed", async () => {
     const { storage, send, ref } = fixture();
     send.mockRejectedValueOnce({ $metadata: { httpStatusCode: 404 } });

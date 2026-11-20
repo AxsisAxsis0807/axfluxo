@@ -1,3 +1,7 @@
+import {
+  storageRoles,
+  type StorageRole,
+} from "../../src/domain/storage/destinations";
 // Server-only experimental adapter. Deliberately NOT wired to cloudConfiguration/workers.
 import { Readable } from "node:stream";
 import { randomUUID } from "node:crypto";
@@ -17,6 +21,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
+import type { StorageReference } from "./provider";
 import type { StoredPart } from "./multipart";
 import {
   blompConfiguration,
@@ -24,7 +29,7 @@ import {
   type BlompConfig,
 } from "./blomp-config";
 
-export type BlompRef = { provider: "blomp"; location: string; key: string };
+export type BlompRef = StorageReference<"blomp">;
 export const blompCapabilities = Object.freeze({
   conditionalWrites: "unverified",
   contentMD5: "unverified",
@@ -37,7 +42,7 @@ export const blompCapabilities = Object.freeze({
 const uuid =
   "[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}";
 const keyPattern = new RegExp(
-  `^axfluxo/(?:originals|outputs)/${uuid}/${uuid}$|^axfluxo/connection-tests/${uuid}/probe\\.bin$`,
+  `^axfluxo/(?:${storageRoles.join("|")})/${uuid}/${uuid}$|^axfluxo/connection-tests/${uuid}/probe\\.bin$`,
 );
 function validatedConfig(config: BlompConfig): BlompConfig {
   return blompConfiguration({
@@ -45,6 +50,7 @@ function validatedConfig(config: BlompConfig): BlompConfig {
     BLOMP_ENDPOINT: config.endpoint,
     BLOMP_REGION: config.region,
     BLOMP_BUCKET: config.bucket,
+    BLOMP_ACCOUNT_BINDING_ID: config.accountBindingId,
     BLOMP_ACCESS_KEY_ID: config.accessKeyId,
     BLOMP_SECRET_ACCESS_KEY: config.secretAccessKey,
   })!;
@@ -90,21 +96,36 @@ function safeError(error: unknown): BlompError {
     $metadata?: { httpStatusCode?: number };
   } | null;
   const status = e?.$metadata?.httpStatusCode;
-  return new BlompError(
-    status === 401 || status === 403
-      ? "BLOMP_AUTH_FAILED"
-      : status === 404
-        ? "BLOMP_NOT_FOUND"
-        : status === 429
-          ? "BLOMP_RATE_LIMITED"
-          : status === 507
-            ? "BLOMP_CAPACITY_HELD"
-            : e?.name === "TimeoutError" ||
-                e?.name === "AbortError" ||
-                (error instanceof BlompError && error.code === "BLOMP_TIMEOUT")
-              ? "BLOMP_TIMEOUT"
-              : "BLOMP_UNAVAILABLE",
-  );
+  switch (e?.name) {
+    case "ExpiredToken":
+      return new BlompError("BLOMP_AUTH_EXPIRED");
+    case "InvalidToken":
+      return new BlompError("BLOMP_AUTH_FAILED");
+    case "AccountProblem":
+    case "AllAccessDisabled":
+      return new BlompError("BLOMP_ACCOUNT_UNAVAILABLE");
+    case "QuotaExceeded":
+    case "StorageQuotaExceeded":
+      return new BlompError("BLOMP_CAPACITY_HELD");
+    case "TimeoutError":
+    case "AbortError":
+      return new BlompError("BLOMP_TIMEOUT");
+  }
+  if (error instanceof BlompError && error.code === "BLOMP_TIMEOUT")
+    return error;
+  switch (status) {
+    case 401:
+    case 403:
+      return new BlompError("BLOMP_AUTH_FAILED");
+    case 404:
+      return new BlompError("BLOMP_NOT_FOUND");
+    case 429:
+      return new BlompError("BLOMP_RATE_LIMITED");
+    case 507:
+      return new BlompError("BLOMP_CAPACITY_HELD");
+    default:
+      return new BlompError("BLOMP_UNAVAILABLE");
+  }
 }
 /** Trusted server code only; prefix checks are not authorization or physical isolation. */
 export function blompStorage(config: BlompConfig, injected?: S3Client) {
@@ -143,7 +164,7 @@ export function blompStorage(config: BlompConfig, injected?: S3Client) {
   return {
     location,
     close: () => client.destroy(),
-    newReference(role: "originals" | "outputs", owner: string): BlompRef {
+    newReference(role: StorageRole, owner: string): BlompRef {
       const ref: BlompRef = {
         provider: "blomp",
         location,

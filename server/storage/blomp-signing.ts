@@ -1,3 +1,4 @@
+import { storageRoles } from "../../src/domain/storage/destinations";
 import { z } from "zod";
 import type { VerifyToken } from "../api/auth";
 import { ApiError } from "../api/errors";
@@ -41,7 +42,7 @@ export function blompReadSigner(config: {
       if (
         !file ||
         file.owner !== ownerId ||
-        !["originals", "outputs"].some((role) =>
+        !storageRoles.some((role) =>
           file.ref.key.startsWith(`axfluxo/${role}/${ownerId}/`),
         ) ||
         !file.verified ||

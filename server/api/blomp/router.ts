@@ -1,3 +1,7 @@
+import {
+  defaultStorageProvider,
+  type StorageRole,
+} from "../../../src/domain/storage/destinations";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -6,32 +10,38 @@ import {
   partLength,
 } from "../../../src/domain/blomp/storage";
 import type { Database, Sql } from "../../db/database";
-import type { BlompStorage } from "../../storage/blomp";
+import { BlompError } from "../../storage/blomp";
+import type {
+  MultipartStorageProvider,
+  StoragePolicy,
+} from "../../storage/provider";
 import { jsonBody } from "../app";
 import type { VerifyToken } from "../auth";
 import { ApiError } from "../errors";
 import { requireMembership } from "../jobs";
 
-type Storage = Pick<
-  BlompStorage,
-  | "location"
-  | "newReference"
-  | "create"
-  | "findUploads"
-  | "parts"
-  | "sign"
-  | "complete"
-  | "abort"
-  | "head"
-  | "stream"
->;
+function providerFailure(error: unknown) {
+  if (error instanceof ApiError) return error;
+  if (error instanceof BlompError) {
+    switch (error.code) {
+      case "BLOMP_AUTH_EXPIRED":
+      case "BLOMP_AUTH_FAILED":
+      case "BLOMP_ACCOUNT_UNAVAILABLE":
+      case "BLOMP_CAPACITY_HELD":
+        return new ApiError(503, error.code);
+      case "BLOMP_RATE_LIMITED":
+        return new ApiError(429, error.code);
+    }
+  }
+  return new ApiError(503, "BLOMP_OPERATION_UNCONFIRMED");
+}
 type FileRow = {
   id: string;
   owner_id: string;
   provider: "blomp";
   location: string;
   object_key: string;
-  role: "originals" | "outputs";
+  role: StorageRole;
   name: string;
   mime: string;
   sha256: string;
@@ -61,7 +71,6 @@ type Capacity = {
 };
 const files = "axfluxo_video.blomp_files";
 const capacity = "axfluxo_video.blomp_capacity";
-const maxSnapshotAge = 15 * 60 * 1000;
 const empty = z.strictObject({});
 const view = (file: FileRow) =>
   blompFile.parse({
@@ -81,7 +90,7 @@ const view = (file: FileRow) =>
     expiresAt: file.expires_at.toISOString(),
   });
 
-function remaining(row: Capacity | undefined) {
+function availableBytes(row: Capacity | undefined, maxSnapshotAge: number) {
   if (
     !row ||
     +row.observed_at > Date.now() ||
@@ -100,14 +109,22 @@ function remaining(row: Capacity | undefined) {
 export function blompRouter({
   db,
   storage,
+  policy,
   writes,
   verify,
 }: {
   db: Database;
-  storage: Storage | null;
+  storage: MultipartStorageProvider<"blomp"> | null;
+  policy: StoragePolicy;
   writes: () => boolean;
   verify: VerifyToken;
 }) {
+  const remaining = (row: Capacity | undefined) =>
+    availableBytes(row, policy.capacityMaxAgeMs);
+  const canWrite = () =>
+    writes() && policy.multipartWrites && policy.maxFileBytes !== null;
+  const fileAllowed = (size: number) =>
+    policy.maxFileBytes !== null && size <= policy.maxFileBytes;
   return async (request: Request, owner: string) => {
     const scoped = <T>(work: (sql: Sql) => Promise<T>) =>
       db.transaction(async (sql) => {
@@ -133,6 +150,7 @@ export function blompRouter({
         available: null,
         reserved: 0,
         verifiedAt: null,
+        capabilities: { multipartWrites: false, maxFileBytes: null },
       });
     }
     await scoped(async (sql) => {
@@ -160,7 +178,7 @@ export function blompRouter({
       const available = remaining(row);
       return reply({
         state:
-          writes() &&
+          canWrite() &&
           available !== null &&
           available > 0 &&
           Number(row?.verification_remaining ?? 0) > 0 &&
@@ -175,6 +193,10 @@ export function blompRouter({
         available: available === null ? null : Math.max(0, available),
         reserved: Number(row?.reserved ?? 0),
         verifiedAt: row?.observed_at.toISOString() ?? null,
+        capabilities: {
+          multipartWrites: canWrite(),
+          maxFileBytes: policy.maxFileBytes,
+        },
       });
     }
     const rowAt = async (sql: Sql, id: string, lock = false) => {
@@ -210,8 +232,9 @@ export function blompRouter({
       });
     }
     if (path === "/storage/blomp/files" && post) {
-      if (!writes()) throw held();
+      if (!canWrite()) throw held();
       const input = blompStart.parse(await jsonBody(request, 4096));
+      if (defaultStorageProvider[input.role] !== "blomp") throw held();
       const key = z.uuid().parse(request.headers.get("idempotency-key"));
       return scoped(async (sql) => {
         const quota = await loadCapacity(sql, true);
@@ -249,6 +272,8 @@ export function blompRouter({
           ],
         );
         if (duplicate.rows[0]) return reply(view(duplicate.rows[0]));
+        if (!fileAllowed(input.size))
+          throw new ApiError(413, "BLOMP_FILE_LIMIT");
         if (
           (remaining(quota) ?? -1) < input.size ||
           Number(quota?.verification_remaining ?? 0) < input.size ||
@@ -324,12 +349,14 @@ export function blompRouter({
         throw new ApiError(403, "FILE_ACCESS_DENIED");
     };
     if (action === "download" || action === "part") {
-      if (action === "part" && !writes()) throw held();
+      if (action === "part" && !canWrite()) throw held();
       const initial = await scoped(async (sql) => {
         const file = await rowAt(sql, id, true);
         if (action === "download") {
           if (file.status !== "ready") throw unauthorized();
         } else {
+          if (!fileAllowed(Number(file.size)))
+            throw new ApiError(413, "BLOMP_FILE_LIMIT");
           if ((remaining(await loadCapacity(sql, false)) ?? -1) < 0)
             throw held();
           if (
@@ -345,14 +372,17 @@ export function blompRouter({
       const size = partLength(Number(initial.size), number);
       if (action === "part" && !size)
         throw new ApiError(400, "VALIDATION_FAILED");
-      const signed =
+      const signed = await (
         action === "download"
-          ? await storage.sign(ref(initial), "GET")
-          : await storage.sign(ref(initial), "PART", {
+          ? storage.sign(ref(initial), "GET")
+          : storage.sign(ref(initial), "PART", {
               id: initial.upload_id!,
               number,
               size,
-            });
+            })
+      ).catch((error) => {
+        throw providerFailure(error);
+      });
       await freshIdentity();
       await scoped(async (sql) => {
         const latest = await rowAt(sql, id, true);
@@ -361,7 +391,8 @@ export function blompRouter({
           latest.upload_id !== initial.upload_id ||
           latest.lease !== initial.lease ||
           (action === "part" &&
-            (!writes() ||
+            (!canWrite() ||
+              !fileAllowed(Number(latest.size)) ||
               +latest.expires_at <= Date.now() ||
               (remaining(await loadCapacity(sql, false)) ?? -1) < 0))
         )
@@ -386,7 +417,7 @@ export function blompRouter({
       });
       return reply(signed);
     }
-    if (!writes() && action !== "cancel") throw held();
+    if (!canWrite() && action !== "cancel") throw held();
     if (action === "pause") {
       return scoped(async (sql) => {
         const file = await rowAt(sql, id, true);
@@ -426,6 +457,12 @@ export function blompRouter({
             ? ["uploading", "completing", "verifying"]
             : ["queued", "creating", "uploading", "interrupted", "aborting"];
       if (!allowed.includes(file.status)) throw unauthorized();
+      if (
+        (action === "resume" ||
+          (action === "complete" && file.status === "uploading")) &&
+        !fileAllowed(Number(file.size))
+      )
+        throw new ApiError(413, "BLOMP_FILE_LIMIT");
       if (
         action === "resume" &&
         (+file.expires_at <= Date.now() ||
@@ -551,6 +588,7 @@ export function blompRouter({
           await finish("uploading");
           throw unauthorized();
         }
+        if (!fileAllowed(size)) throw new ApiError(413, "BLOMP_FILE_LIMIT");
         await storage.complete(object, initial.upload_id, parts, deadline);
         head = await storage.head(object, deadline);
         if (!head) throw unauthorized();
@@ -599,8 +637,7 @@ export function blompRouter({
           [id, token],
         ),
       );
-      if (error instanceof ApiError) throw error;
-      throw new ApiError(503, "BLOMP_OPERATION_UNCONFIRMED");
+      throw providerFailure(error);
     }
   };
 }
