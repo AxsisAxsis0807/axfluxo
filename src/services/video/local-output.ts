@@ -20,14 +20,14 @@ export async function validateLocalOutput(blob: Blob, signal: AbortSignal) {
       );
     const video = await input.getPrimaryVideoTrack();
     const audio = await input.getPrimaryAudioTrack();
-    if (
-      !video ||
-      !audio ||
-      !(await new EncodedPacketSink(video).getFirstPacket()) ||
-      !(await new EncodedPacketSink(audio).getFirstPacket())
-    )
+    const missing: string[] = [];
+    if (!video || !(await new EncodedPacketSink(video).getFirstPacket()))
+      missing.push("映像");
+    if (!audio || !(await new EncodedPacketSink(audio).getFirstPacket()))
+      missing.push("音声");
+    if (missing.length)
       throw Error(
-        "完成動画の映像または音声を生成できませんでした。端末を前面に保ち、負荷を減らして再試行してください。",
+        `完成動画の映像または音声を生成できませんでした（未検出: ${missing.join("・")}）。端末を前面に保ち、負荷を減らして再試行してください。`,
       );
     signal.throwIfAborted();
   } finally {

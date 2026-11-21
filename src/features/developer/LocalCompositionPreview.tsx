@@ -7,16 +7,27 @@ export default function LocalCompositionPreview({
   job: LocalEncodeJob;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null),
-    video = useRef<HTMLVideoElement>(null);
+    video = useRef<HTMLMediaElement | null>(null),
+    continuing = useRef(false);
   const [index, setIndex] = useState(0),
-    [url, setUrl] = useState(""),
+    [source, setSource] = useState<{
+      job: LocalEncodeJob;
+      index: number;
+      url: string;
+    }>(),
     [message, setMessage] = useState("");
   const selectedIndex = Math.min(index, job.pieces.length - 1);
+  const piece = job.pieces[selectedIndex];
+  const url =
+    source?.job === job && source.index === selectedIndex
+      ? source.url
+      : undefined;
+  const sequential = job.pieces.some(({ kind }) => kind === "audio");
   useEffect(() => {
     let live = true;
     void job.pieces[selectedIndex].url().then(
       (value) => {
-        if (live) setUrl(value);
+        if (live) setSource({ job, index: selectedIndex, url: value });
       },
       () => {
         if (live) setMessage("素材を開けません。");
@@ -36,21 +47,29 @@ export default function LocalCompositionPreview({
           offset = job.pieces
             .slice(0, selectedIndex)
             .reduce((sum, p) => sum + p.end - p.start, 0);
-        job.draw(
-          ctx,
-          media,
-          offset + Math.max(0, media.currentTime - piece.start),
-        );
-        if (media.currentTime >= piece.end && !media.paused) {
+        const seconds = offset + Math.max(0, media.currentTime - piece.start);
+        if (media instanceof HTMLVideoElement) job.draw(ctx, media, seconds);
+        else job.drawAudio?.(ctx, seconds);
+        if (media.currentTime >= piece.end && (!media.paused || media.ended)) {
           media.pause();
-          setMessage("区間の再生が完了しました。次の素材を選択できます。");
+          if (
+            sequential &&
+            selectedIndex + 1 < job.pieces.length &&
+            !continuing.current
+          ) {
+            continuing.current = true;
+            setIndex(selectedIndex + 1);
+          } else {
+            setMessage("区間の再生が完了しました。次の素材を選択できます。");
+          }
         }
       }
       frame = requestAnimationFrame(draw);
     };
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);
-  }, [job, selectedIndex]);
+  }, [job, selectedIndex, sequential]);
+  const Media = piece.kind === "audio" ? "audio" : "video";
   return (
     <section aria-label="合成プレビュー">
       <h2>合成プレビュー</h2>
@@ -65,14 +84,31 @@ export default function LocalCompositionPreview({
           background: "black",
         }}
       />
-      <video
+      <Media
         key={`${url}:${job.pieces[selectedIndex].start}:${job.pieces[selectedIndex].end}`}
-        ref={video}
+        ref={(media) => {
+          video.current = media;
+        }}
         src={url}
         controls
-        playsInline
+        playsInline={piece.kind !== "audio"}
+        onPlay={({ currentTarget: media }) => {
+          if (media.currentTime < piece.start || media.currentTime >= piece.end)
+            media.currentTime = piece.start;
+        }}
         onLoadedMetadata={(e) => {
-          e.currentTarget.currentTime = job.pieces[selectedIndex].start;
+          const media = e.currentTarget;
+          media.currentTime = piece.start;
+          if (continuing.current) {
+            continuing.current = false;
+            void media
+              .play()
+              .catch(() =>
+                setMessage(
+                  "次のバージョンを再生するには再生ボタンを押してください。",
+                ),
+              );
+          }
         }}
         onError={() =>
           setMessage("プレビューを再生できません。素材形式を確認してください。")
@@ -86,11 +122,14 @@ export default function LocalCompositionPreview({
         プレビューする素材
         <select
           value={selectedIndex}
-          onChange={(e) => setIndex(Number(e.target.value))}
+          onChange={(e) => {
+            continuing.current = false;
+            setIndex(Number(e.target.value));
+          }}
         >
-          {job.pieces.map((_, i) => (
+          {job.pieces.map((item, i) => (
             <option key={i} value={i}>
-              素材 {i + 1}
+              {item.name ?? `素材 ${i + 1}`}
             </option>
           ))}
         </select>

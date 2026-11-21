@@ -273,7 +273,7 @@ async function checkCapacity(assets: readonly (readonly [string, Blob])[]) {
 function projectAssets(project: LocalProjectData): [string, Blob][] {
   return [
     ...project.sources.map(
-      (s) => [assetKey(project, s.id), s.file] as [string, Blob],
+      (s) => [assetKey(project, s.assetId ?? s.id), s.file] as [string, Blob],
     ),
     ...(project.coverFile
       ? [
@@ -344,7 +344,9 @@ export async function hydrate(data: StoredProject): Promise<LocalProjectData> {
       "保存データのバージョンに対応していません。データは保持しました。",
     );
   const keys = [
-    ...data.sources.map((source) => assetKey(data, source.id)),
+    ...data.sources.map((source) =>
+      assetKey(data, source.assetId ?? source.id),
+    ),
     ...(data.coverId ? [assetKey(data, data.coverId)] : []),
   ];
   const restored: File[] = [];
@@ -397,7 +399,9 @@ async function collectAssets(tx: IDBTransaction) {
     ...projects,
     ...rows.flatMap((r) => (r.recipe ? [r.recipe.project] : [])),
   ]) {
-    project.sources.forEach((s) => referenced.add(assetKey(project, s.id)));
+    project.sources.forEach((s) =>
+      referenced.add(assetKey(project, s.assetId ?? s.id)),
+    );
     if (project.coverId) referenced.add(assetKey(project, project.coverId));
   }
   rows.filter((r) => r.result).forEach((r) => referenced.add(`output:${r.id}`));

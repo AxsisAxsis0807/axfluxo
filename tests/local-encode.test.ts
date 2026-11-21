@@ -110,7 +110,7 @@ for (const cancelDuringRest of [false, true])
     expect(status).toHaveBeenLastCalledWith(
       "4分休憩中（処理と録画を停止しています）",
     );
-    expect(states.at(-1)).toBe("pause");
+    expect(states).toEqual(["start", "pause"]);
     const pausedAt = (media as unknown as HTMLVideoElement).currentTime;
     if (cancelDuringRest) {
       const rejected = expect(result).rejects.toThrow("cancelled during rest");
@@ -128,7 +128,7 @@ for (const cancelDuringRest of [false, true])
     expect((await result).filename).toBe("test.mp4");
     expect(tracks[0].requestFrame).toHaveBeenCalled();
     expect(validateLocalOutput).toHaveBeenCalled();
-    expect(states.at(-1)).toBe("stop");
+    expect(states).toEqual(["start", "pause", "resume", "stop"]);
     expect(
       (media as unknown as HTMLVideoElement).currentTime,
     ).toBeGreaterThanOrEqual(600.98);

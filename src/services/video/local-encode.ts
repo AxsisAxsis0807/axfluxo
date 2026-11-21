@@ -6,6 +6,8 @@ export type LocalEncodeJob = {
   width: number;
   height: number;
   pieces: {
+    kind?: "audio" | "video";
+    name?: string;
     file?: File;
     url: () => Promise<string>;
     start: number;
@@ -16,6 +18,7 @@ export type LocalEncodeJob = {
     media: HTMLVideoElement,
     seconds: number,
   ) => void;
+  drawAudio?: (ctx: CanvasRenderingContext2D, seconds: number) => void;
 };
 export function imageForEncode(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -66,7 +69,7 @@ function wait(ms: number, signal: AbortSignal) {
   });
 }
 function mediaReady(
-  media: HTMLVideoElement,
+  media: HTMLMediaElement,
   event: "loadeddata" | "seeked",
   signal: AbortSignal,
 ) {
@@ -113,7 +116,7 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 async function playForEncode(
-  media: HTMLVideoElement,
+  media: HTMLMediaElement,
   signal: AbortSignal,
   status: (message: string) => void,
 ) {
@@ -178,44 +181,65 @@ export async function encodeLocal(
   const ctx = canvas.getContext("2d");
   if (!ctx || !canvas.captureStream)
     throw Error("端末内エンコードに対応していません。");
-  const media = document.createElement("video");
-  media.crossOrigin = "anonymous";
-  media.playsInline = true;
-  // The element feeds only the recording destination, not the speakers.
-  // Muting it would also mute MediaElementAudioSourceNode and produce silence.
-  media.muted = false;
-  media.preload = "auto";
-  media.style.cssText =
-    "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";
-  document.body.append(media);
-  const { source, stream, recorder } = (() => {
-    let source: MediaElementAudioSourceNode | undefined;
+  const mediaByKind = new Map<"audio" | "video", HTMLMediaElement>();
+  const sources: MediaElementAudioSourceNode[] = [];
+  const { stream, recorder } = (() => {
     let destination: MediaStreamAudioDestinationNode | undefined;
     let stream: MediaStream | undefined;
     try {
       destination = audio.createMediaStreamDestination();
-      source = audio.createMediaElementSource(media);
-      source.connect(destination);
-      stream = canvas.captureStream(60);
-      destination.stream.getAudioTracks().forEach((t) => stream!.addTrack(t));
+      for (const kind of new Set(
+        job.pieces.map((piece) => piece.kind ?? "video"),
+      )) {
+        const media = document.createElement(kind);
+        mediaByKind.set(kind, media);
+        media.crossOrigin = "anonymous";
+        if (kind === "video") (media as HTMLVideoElement).playsInline = true;
+        // Muting would also silence the recording destination.
+        media.muted = false;
+        media.preload = "auto";
+        media.style.cssText =
+          "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";
+        document.body.append(media);
+        const source = audio.createMediaElementSource(media);
+        sources.push(source);
+        source.connect(destination);
+      }
+      // Drive capture from composition updates where supported. Running the
+      // capture timer alongside explicit requests can capture two frames at
+      // the same recording timestamp around a pause/resume boundary.
+      stream = canvas.captureStream(0);
+      const videoTrack = stream.getVideoTracks()[0] as
+        | CanvasCaptureMediaStreamTrack
+        | undefined;
+      if (typeof videoTrack?.requestFrame !== "function") {
+        stream.getTracks().forEach((track) => track.stop());
+        stream = canvas.captureStream(60);
+      }
+      destination.stream
+        .getAudioTracks()
+        .forEach((track) => stream!.addTrack(track));
       const recorder = new MediaRecorder(stream, {
         mimeType,
         videoBitsPerSecond: 8_000_000,
         audioBitsPerSecond: 320_000,
       });
-      return { source, stream, recorder };
+      return { stream, recorder };
     } catch (error) {
-      source?.disconnect();
-      stream?.getTracks().forEach((t) => t.stop());
-      destination?.stream.getTracks().forEach((t) => t.stop());
-      media.remove();
+      sources.forEach((source) => source.disconnect());
+      mediaByKind.forEach((media) => media.remove());
+      stream?.getTracks().forEach((track) => track.stop());
+      destination?.stream.getTracks().forEach((track) => track.stop());
       throw error;
     }
   })();
-  const drawFrame = (seconds: number) => {
-    job.draw(ctx, media, seconds);
-    // Some engines drop the pre-start frame while the recorder is paused.
-    // Explicitly request a fresh frame after resume, including static artwork.
+  const drawFrame = (
+    kind: "audio" | "video",
+    media: HTMLMediaElement,
+    seconds: number,
+  ) => {
+    if (kind === "audio") job.drawAudio?.(ctx, seconds);
+    else job.draw(ctx, media as HTMLVideoElement, seconds);
     const track = stream.getVideoTracks()[0] as
       CanvasCaptureMediaStreamTrack | undefined;
     track?.requestFrame?.();
@@ -246,7 +270,9 @@ export async function encodeLocal(
     } else collect?.call(recorder, event);
   };
   try {
-    for (const piece of job.pieces) {
+    for (const [index, piece] of job.pieces.entries()) {
+      const kind = piece.kind ?? "video";
+      const media = mediaByKind.get(kind)!;
       signal.throwIfAborted();
       const url = await piece.url();
       signal.throwIfAborted();
@@ -259,15 +285,12 @@ export async function encodeLocal(
         media.currentTime = piece.start;
         await seek;
       }
-      drawFrame(elapsed);
-      if (recorder.state === "inactive") {
+      await playForEncode(media, signal, status);
+      if (!recordingStarted) {
         recorder.start(1000);
         recordingStarted = true;
-        recorder.pause();
-      }
-      await playForEncode(media, signal, status);
-      recorder.resume();
-      drawFrame(elapsed);
+      } else recorder.resume();
+      drawFrame(kind, media, elapsed);
       let last = media.currentTime,
         stalled = performance.now();
       while (media.currentTime < piece.end - 1 / 120) {
@@ -284,7 +307,8 @@ export async function encodeLocal(
         if (delta > 0) stalled = performance.now();
         if (performance.now() - stalled > 30_000)
           throw Error("再生が停止しました。接続を確認して再試行してください。");
-        drawFrame(elapsed + current - piece.start);
+        if (delta > 0)
+          drawFrame(kind, media, elapsed + current - piece.start);
         last = current;
         if (rest && budget.processing >= 600) {
           media.pause();
@@ -303,7 +327,8 @@ export async function encodeLocal(
         await wait(16, signal);
       }
       media.pause();
-      recorder.pause();
+      if (index + 1 < job.pieces.length && recorder.state === "recording")
+        recorder.pause();
       elapsed += piece.end - piece.start;
     }
     signal.throwIfAborted();
@@ -321,12 +346,14 @@ export async function encodeLocal(
     };
   } finally {
     if (recorder.state !== "inactive") recorder.stop();
-    media.pause();
+    mediaByKind.forEach((media) => media.pause());
     if (recordingStarted) await stopped;
-    media.removeAttribute("src");
-    media.load();
-    media.remove();
-    source.disconnect();
-    stream.getTracks().forEach((t) => t.stop());
+    mediaByKind.forEach((media) => {
+      media.removeAttribute("src");
+      media.load();
+      media.remove();
+    });
+    sources.forEach((source) => source.disconnect());
+    stream.getTracks().forEach((track) => track.stop());
   }
 }

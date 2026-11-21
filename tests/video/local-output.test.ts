@@ -8,7 +8,8 @@ it("accepts real video/audio packets and rejects a nonempty audio-only MP4 befor
   const dir = await mkdtemp(join(tmpdir(), "validate-local-"));
   try {
     const good = join(dir, "good.mp4"),
-      bad = join(dir, "audio.m4a");
+      bad = join(dir, "audio.m4a"),
+      silent = join(dir, "silent.mp4");
     execFileSync("ffmpeg", [
       "-v",
       "error",
@@ -40,13 +41,19 @@ it("accepts real video/audio packets and rejects a nonempty audio-only MP4 befor
       "-y",
       bad,
     ]);
+    execFileSync("ffmpeg", [
+      "-v", "error", "-i", good, "-an", "-c:v", "copy", "-y", silent,
+    ]);
     const signal = new AbortController().signal;
     await expect(
       validateLocalOutput(new Blob([await readFile(good)]), signal),
     ).resolves.toBeUndefined();
     await expect(
       validateLocalOutput(new Blob([await readFile(bad)]), signal),
-    ).rejects.toThrow("映像または音声");
+    ).rejects.toThrow("未検出: 映像");
+    await expect(
+      validateLocalOutput(new Blob([await readFile(silent)]), signal),
+    ).rejects.toThrow("未検出: 音声");
     await expect(
       validateLocalOutput(
         new Blob([await readFile(good)], { type: "video/webm" }),

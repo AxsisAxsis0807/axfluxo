@@ -16,6 +16,13 @@ export type Source = {
   timeline?: TimelineState;
   id: string;
   file: File;
+  assetId?: string;
+  audio?: {
+    name: string;
+    status: "ready";
+    sampleRate: number | null;
+    channels: number | null;
+  };
   url: string;
   duration: number;
   width: number;
@@ -61,6 +68,30 @@ export function localIntervals(
     return result;
   });
 }
+export const versionNameSuggestions = [
+  "Original",
+  "Slowed",
+  "Super Slowed",
+  "Sped Up",
+] as const;
+function versionLabels(sources: Source[], names: string) {
+  const count = localIntervals(
+    sources.filter((source) => !source.audio),
+  ).length;
+  const legacy = count ? names.replace(/\r\n?/g, "\n").split("\n") : [];
+  if (legacy.length !== count || legacy.some((label) => !label.trim()))
+    throw Error(
+      `Version名は${count}行必要です。1つの素材に複数の名前を付ける場合は、Version境界を設定してください。`,
+    );
+  let offset = 0;
+  return sources.flatMap((source) => {
+    if (source.audio) return [source.audio.name];
+    const start = offset;
+    offset += localIntervals([source]).length;
+    return legacy.slice(start, offset);
+  });
+}
+
 export type LocalProjectData = {
   rest?: boolean;
   id: string;
@@ -116,7 +147,7 @@ async function createLocalJobs(
       throw Error("@から始まるユーザー名を入力してください。");
     if (
       ![cropTop, cropBottom].every((v) => Number.isInteger(v) && v >= 0) ||
-      cropTop + cropBottom >= source.height
+      (!source.audio && cropTop + cropBottom >= source.height)
     )
       throw Error("crop後に映像が残る値を指定してください。");
     if (
@@ -134,106 +165,114 @@ async function createLocalJobs(
     const ordered = [...ranges].sort((a, b) => a.start - b.start),
       filenames = fnfFilenames(ordered.map((r) => r.name));
     const cropped = source.height - cropTop - cropBottom,
-      scale =
-        Math.min(1080 / source.width, 1400 / cropped) *
-        Math.min(2, Math.max(0.1, scaleFactor)),
+      scale = source.audio
+        ? 0
+        : Math.min(1080 / source.width, 1400 / cropped) *
+          Math.min(2, Math.max(0.1, scaleFactor)),
       w = source.width * scale,
       h = cropped * scale;
-    return ordered.map((range, i) => ({
-      filename: filenames[i],
-      width: 1080,
-      height: 1920,
-      pieces: [
-        {
-          file: source.file,
-          url: async () => source.url,
-          start: range.start,
-          end: range.end,
-        },
-      ],
-      draw: (ctx, media) => {
+    return ordered.map((range, i) => {
+      function draw(ctx: CanvasRenderingContext2D, media?: HTMLVideoElement) {
         ctx.fillStyle = "black";
         ctx.fillRect(0, 0, 1080, 1920);
-        ctx.drawImage(
-          media,
-          0,
-          cropTop,
-          source.width,
-          cropped,
-          (1080 - w) / 2,
-          (1920 - h) / 2,
-          w,
-          h,
-        );
+        if (media)
+          ctx.drawImage(
+            media,
+            0,
+            cropTop,
+            source.width,
+            cropped,
+            (1080 - w) / 2,
+            (1920 - h) / 2,
+            w,
+            h,
+          );
         line(ctx, FNF_HEADING, 130, 1000, 46);
         line(ctx, range.name, 240, 1000, 44);
         line(ctx, username, 1770, 1000, 64);
-      },
-    }));
+      }
+      return {
+        filename: filenames[i],
+        width: 1080,
+        height: 1920,
+        pieces: [
+          {
+            kind: source.audio ? "audio" : "video",
+            name: range.name,
+            file: source.file,
+            url: async () => source.url,
+            start: range.start,
+            end: range.end,
+          },
+        ],
+        draw,
+        drawAudio: (ctx) => draw(ctx),
+      };
+    });
   }
   const intervals = localIntervals(sources),
-    labels = names.replace(/\r\n?/g, "\n").split("\n");
-  if (labels.length !== intervals.length || labels.some((v) => !v.trim()))
-    throw Error(
-      `名前をversion数（${intervals.length}）と同じ行数で入力してください。複数のVersion名にはVersion境界の設定が必要です。`,
-    );
+    labels = versionLabels(sources, names);
+  if (labels.some((label) => !label.trim()))
+    throw Error("各バージョン名を入力してください。");
   if (!cover) throw Error("カバー画像を選択してください。");
   const image = await imageForEncode(cover);
+  function drawComposition(ctx: CanvasRenderingContext2D, seconds: number) {
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, 1920, 1080);
+    ctx.save();
+    ctx.globalAlpha = 0.65;
+    ctx.filter = "blur(24px)";
+    const scale = Math.max(2080 / image.width, 1200 / image.height);
+    ctx.drawImage(
+      image,
+      (1920 - image.width * scale) / 2,
+      (1080 - image.height * scale) / 2,
+      image.width * scale,
+      image.height * scale,
+    );
+    ctx.restore();
+    const crop = Math.min(image.width, image.height);
+    ctx.drawImage(
+      image,
+      (image.width - crop) / 2,
+      (image.height - crop) / 2,
+      crop,
+      crop,
+      660,
+      130,
+      600,
+      600,
+    );
+    const i = intervals.findIndex((v) => seconds >= v.start && seconds < v.end);
+    if (i >= 0) {
+      ctx.save();
+      ctx.globalAlpha = Math.max(
+        0,
+        Math.min(
+          1,
+          (seconds - intervals[i].start) / 0.15,
+          (intervals[i].end - seconds) / 0.15,
+        ),
+      );
+      line(ctx, labels[i], 920, 1728, 80);
+      ctx.restore();
+    }
+  }
   return [
     {
       filename: "All Versions.mp4",
       width: 1920,
       height: 1080,
       pieces: sources.map((s) => ({
+        kind: s.audio ? "audio" : "video",
+        name: s.audio?.name,
         file: s.file,
         url: async () => s.url,
         start: s.start,
         end: s.end,
       })),
-      draw: (ctx, _media, seconds) => {
-        ctx.fillStyle = "black";
-        ctx.fillRect(0, 0, 1920, 1080);
-        ctx.save();
-        ctx.globalAlpha = 0.65;
-        ctx.filter = "blur(24px)";
-        const scale = Math.max(2080 / image.width, 1200 / image.height);
-        ctx.drawImage(
-          image,
-          (1920 - image.width * scale) / 2,
-          (1080 - image.height * scale) / 2,
-          image.width * scale,
-          image.height * scale,
-        );
-        ctx.restore();
-        const crop = Math.min(image.width, image.height);
-        ctx.drawImage(
-          image,
-          (image.width - crop) / 2,
-          (image.height - crop) / 2,
-          crop,
-          crop,
-          660,
-          130,
-          600,
-          600,
-        );
-        const i = intervals.findIndex(
-          (v) => seconds >= v.start && seconds < v.end,
-        );
-        if (i >= 0) {
-          ctx.save();
-          ctx.globalAlpha = Math.max(
-            0,
-            Math.min(
-              1,
-              (seconds - intervals[i].start) / 0.15,
-              (intervals[i].end - seconds) / 0.15,
-            ),
-          );
-          line(ctx, labels[i], 920, 1728, 80);
-          ctx.restore();
-        }
-      },
+      draw: (ctx, _media, seconds) => drawComposition(ctx, seconds),
+      drawAudio: drawComposition,
     },
   ];
 }
@@ -257,10 +296,13 @@ export function localProjectIssue(project: LocalProjectData): string {
   try {
     if (!project.sources.length) return "素材を選択してください。";
     if (project.mode === "all-versions") {
-      const count = localIntervals(project.sources).length;
-      const labels = project.names.replace(/\r\n?/g, "\n").split("\n");
-      if (labels.length !== count || labels.some((label) => !label.trim()))
-        return `Version名は${count}行必要です。1つの素材に複数の名前を付ける場合は、Version境界を設定してください。`;
+      localIntervals(project.sources);
+      if (
+        versionLabels(project.sources, project.names).some(
+          (label) => !label.trim(),
+        )
+      )
+        return "各バージョン名を入力してください。";
       if (!project.cover) return "カバー画像を選択してください。";
     } else {
       const source = project.sources[0];
@@ -276,7 +318,7 @@ export function localProjectIssue(project: LocalProjectData): string {
         ![project.cropTop, project.cropBottom].every(
           (v) => Number.isInteger(v) && v >= 0,
         ) ||
-        project.cropTop + project.cropBottom >= source.height
+        (!source.audio && project.cropTop + project.cropBottom >= source.height)
       )
         return "crop後に映像が残る値を指定してください。";
       if (
