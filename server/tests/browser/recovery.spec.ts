@@ -200,16 +200,48 @@ test("durable queued jobs restart once; finished videos survive reload until eac
   const probe = JSON.parse(
     execFileSync(
       "ffprobe",
-      ["-v", "error", "-show_streams", "-of", "json", path],
+      [
+        "-v",
+        "error",
+        "-show_entries",
+        "stream=index,codec_type:packet=stream_index,pts_time,duration_time",
+        "-of",
+        "json",
+        path,
+      ],
       { encoding: "utf8" },
     ),
   );
-  expect(
-    probe.streams.some((s: { codec_type: string }) => s.codec_type === "video"),
-  ).toBe(true);
-  expect(
-    probe.streams.some((s: { codec_type: string }) => s.codec_type === "audio"),
-  ).toBe(true);
+  const tracks: {
+    index: number;
+    codec_type: string;
+  }[] = probe.streams;
+  const packets: {
+    stream_index: number;
+    pts_time?: string;
+    duration_time?: string;
+  }[] = probe.packets;
+  const duration = (kind: string) => {
+    const track = tracks.find((entry) => entry.codec_type === kind);
+    const timestamps = packets
+      .filter((packet) => packet.stream_index === track?.index)
+      .flatMap((packet) => {
+        const start = Number(packet.pts_time);
+        const length = Number(packet.duration_time ?? 0);
+        return Number.isFinite(start) && Number.isFinite(length)
+          ? [{ start, end: start + length }]
+          : [];
+      });
+    expect(timestamps.length).toBeGreaterThan(1);
+    return (
+      Math.max(...timestamps.map(({ end }) => end)) -
+      Math.min(...timestamps.map(({ start }) => start))
+    );
+  };
+  expect(duration("video")).toBeGreaterThanOrEqual(0.85);
+  expect(Math.abs(duration("video") - duration("audio"))).toBeLessThanOrEqual(
+    0.4,
+  );
   await durable(page);
   await page.reload();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({

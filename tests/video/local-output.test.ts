@@ -42,12 +42,26 @@ it("accepts real video/audio packets and rejects a nonempty audio-only MP4 befor
       bad,
     ]);
     execFileSync("ffmpeg", [
-      "-v", "error", "-i", good, "-an", "-c:v", "copy", "-y", silent,
+      "-v",
+      "error",
+      "-i",
+      good,
+      "-an",
+      "-c:v",
+      "copy",
+      "-y",
+      silent,
     ]);
     const signal = new AbortController().signal;
     await expect(
-      validateLocalOutput(new Blob([await readFile(good)]), signal),
+      validateLocalOutput(new Blob([], { type: "video/mp4" }), signal, 0.7),
+    ).rejects.toMatchObject({ name: "LocalVideoOutputError" });
+    await expect(
+      validateLocalOutput(new Blob([await readFile(good)]), signal, 1),
     ).resolves.toBeUndefined();
+    await expect(
+      validateLocalOutput(new Blob([await readFile(good)]), signal, 2),
+    ).rejects.toMatchObject({ name: "LocalVideoOutputError" });
     await expect(
       validateLocalOutput(new Blob([await readFile(bad)]), signal),
     ).rejects.toThrow("未検出: 映像");

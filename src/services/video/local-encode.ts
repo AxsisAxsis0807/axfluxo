@@ -175,12 +175,64 @@ export async function encodeLocal(
     throw Error(
       "このSafariは端末内エンコードに対応していません。対応ブラウザーを使用してください。",
     );
+  const duration = job.pieces.reduce(
+    (sum, piece) => sum + piece.end - piece.start,
+    0,
+  );
+  const shortJob = duration > 0 && duration <= 10;
+  const attempt = (format: string) =>
+    encodeLocalAttempt(
+      job,
+      audio,
+      signal,
+      rest,
+      budget,
+      status,
+      progress,
+      format,
+      shortJob ? duration : undefined,
+    );
+  try {
+    return await attempt(mimeType);
+  } catch (error) {
+    if (
+      !job.recovery ||
+      !shortJob ||
+      !(error instanceof Error) ||
+      error.name !== "LocalVideoOutputError"
+    )
+      throw error;
+    signal.throwIfAborted();
+    const fallback = "video/webm;codecs=vp8,opus";
+    status("映像を取り込めなかったため、端末内で一度だけ再試行します。");
+    progress(0);
+    return await attempt(
+      MediaRecorder.isTypeSupported(fallback) ? fallback : mimeType,
+    );
+  }
+}
+
+async function encodeLocalAttempt(
+  job: LocalEncodeJob,
+  audio: AudioContext,
+  signal: AbortSignal,
+  rest: boolean,
+  budget: { processing: number },
+  status: (s: string) => void,
+  progress: (fraction: number) => void,
+  mimeType: string,
+  expectedDuration: number | undefined,
+) {
   const canvas = document.createElement("canvas");
   canvas.width = job.width;
   canvas.height = job.height;
   const ctx = canvas.getContext("2d");
   if (!ctx || !canvas.captureStream)
     throw Error("端末内エンコードに対応していません。");
+  // Initialize the bitmap before opening the video track. A restored job
+  // has not drawn a composition frame at this point.
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   const mediaByKind = new Map<"audio" | "video", HTMLMediaElement>();
   const sources: MediaElementAudioSourceNode[] = [];
   const { stream, recorder } = (() => {
@@ -205,17 +257,9 @@ export async function encodeLocal(
         sources.push(source);
         source.connect(destination);
       }
-      // Drive capture from composition updates where supported. Running the
-      // capture timer alongside explicit requests can capture two frames at
-      // the same recording timestamp around a pause/resume boundary.
-      stream = canvas.captureStream(0);
-      const videoTrack = stream.getVideoTracks()[0] as
-        | CanvasCaptureMediaStreamTrack
-        | undefined;
-      if (typeof videoTrack?.requestFrame !== "function") {
-        stream.getTracks().forEach((track) => track.stop());
-        stream = canvas.captureStream(60);
-      }
+      // Use a single native capture cadence. Explicit requestFrame calls
+      // combined with a capture timer can duplicate timestamps at cuts.
+      stream = canvas.captureStream(60);
       destination.stream
         .getAudioTracks()
         .forEach((track) => stream!.addTrack(track));
@@ -240,9 +284,6 @@ export async function encodeLocal(
   ) => {
     if (kind === "audio") job.drawAudio?.(ctx, seconds);
     else job.draw(ctx, media as HTMLVideoElement, seconds);
-    const track = stream.getVideoTracks()[0] as
-      CanvasCaptureMediaStreamTrack | undefined;
-    track?.requestFrame?.();
   };
   const chunks: BlobPart[] = [];
   recorder.ondataavailable = (e) => {
@@ -307,8 +348,7 @@ export async function encodeLocal(
         if (delta > 0) stalled = performance.now();
         if (performance.now() - stalled > 30_000)
           throw Error("再生が停止しました。接続を確認して再試行してください。");
-        if (delta > 0)
-          drawFrame(kind, media, elapsed + current - piece.start);
+        if (delta > 0) drawFrame(kind, media, elapsed + current - piece.start);
         last = current;
         if (rest && budget.processing >= 600) {
           media.pause();
@@ -337,7 +377,7 @@ export async function encodeLocal(
     signal.throwIfAborted();
     if (recordError) throw recordError;
     const blob = new Blob(chunks, { type: mimeType });
-    await validateLocalOutput(blob, signal);
+    await validateLocalOutput(blob, signal, expectedDuration);
     return {
       blob,
       filename:

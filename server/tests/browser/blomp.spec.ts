@@ -3,6 +3,11 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { build } from "esbuild";
+import { newBlompFileKey } from "../../storage/blomp-keys";
+import {
+  TrialDBudget,
+  trialDMaxFileBytes,
+} from "../../storage/blomp-trial-d-budget";
 import type { BlompFile } from "../../../src/domain/blomp/storage";
 
 const owner = "11111111-1111-4111-8111-111111111111";
@@ -30,6 +35,109 @@ const original = Buffer.from("mock-media");
 const digest = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
 const payloadHash = digest(original);
+
+test("Trial D gates real browser preflights and payloads on loopback", async ({
+  page,
+}) => {
+  const files = ["av.mp4", "fnf.mp4"].map((name) => ({
+    key: newBlompFileKey("outputs", owner, null, name),
+    size: trialDMaxFileBytes,
+  }));
+  const budget = new TrialDBudget(owner, files);
+  const frontend = createServer((_request, response) =>
+    response
+      .writeHead(200, { "content-type": "text/html" })
+      .end("<!doctype html>Trial D"),
+  );
+  const frontOrigin = await listen(frontend);
+  const bytes = Buffer.alloc(trialDMaxFileBytes, 42);
+  const gateway = createServer(async (request, response) => {
+    try {
+      const file = /^\/(0|1)$/.exec(request.url ?? "");
+      if (request.headers.origin !== frontOrigin || !file)
+        throw Error("FIXTURE_SCOPE");
+      const { key } = files[Number(file[1])];
+      response.setHeader("access-control-allow-origin", frontOrigin);
+      response.setHeader("access-control-allow-methods", "PUT, GET, OPTIONS");
+      if (request.method === "OPTIONS") {
+        const intended = request.headers["access-control-request-method"];
+        if (intended !== "PUT" && intended !== "GET")
+          throw Error("FIXTURE_METHOD");
+        response.setHeader(
+          "access-control-allow-headers",
+          intended === "PUT" ? "x-trial-d" : "x-trial-d-read",
+        );
+        budget.reserve(key, "options");
+        response.writeHead(204).end();
+      } else if (request.method === "PUT") {
+        const payload = await budget.reserve(key, "part").readPayload(request);
+        if (digest(payload) !== digest(bytes)) throw Error("FIXTURE_DIGEST");
+        response.writeHead(204).end();
+      } else if (request.method === "GET") {
+        const payload = await budget
+          .reserve(key, "download")
+          .readPayload([bytes]);
+        response.writeHead(200).end(payload);
+      } else throw Error("FIXTURE_METHOD");
+    } catch {
+      budget.stop();
+      response.writeHead(403).end();
+    }
+  });
+  try {
+    const origin = await listen(gateway);
+    await page.goto(frontOrigin);
+    for (const [index, { key }] of files.entries()) {
+      budget.reserve(key, "create");
+      budget.reserve(key, "listBefore");
+      const url = `${origin}/${index}`;
+      expect(
+        await page.evaluate(
+          async ({ url, size }) => {
+            const response = await fetch(url, {
+              method: "PUT",
+              body: new Uint8Array(size).fill(42),
+              headers: { "x-trial-d": "1" },
+            });
+            return response.status;
+          },
+          { url, size: bytes.length },
+        ),
+      ).toBe(204);
+      for (const operation of [
+        "headBefore",
+        "listAfter",
+        "complete",
+        "headAfter",
+      ] as const)
+        budget.reserve(key, operation);
+      await budget.reserve(key, "verify").readPayload([bytes]);
+      const result = await page.evaluate(async (url) => {
+        const response = await fetch(url, {
+          headers: { "x-trial-d-read": "1" },
+        });
+        return Array.from(
+          new Uint8Array(
+            await crypto.subtle.digest("SHA-256", await response.arrayBuffer()),
+          ),
+        );
+      }, url);
+      expect(Buffer.from(result).toString("hex")).toBe(digest(bytes));
+    }
+    expect(budget.counters).toEqual({
+      requests: 22,
+      reservedPayloadBytes: 3 * 1024 * 1024,
+      stopped: false,
+    });
+    const replay = await fetch(`${origin}/0`, {
+      headers: { origin: frontOrigin },
+    });
+    expect(replay.status).toBe(403);
+    expect(budget.counters.requests).toBe(22);
+  } finally {
+    await Promise.all([close(frontend), close(gateway)]);
+  }
+});
 
 async function receiver(frontend: string, firstHtml = false) {
   const attempts: { size: number; sha256: string; status: number }[] = [];

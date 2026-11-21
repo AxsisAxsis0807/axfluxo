@@ -57,6 +57,23 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out
+      - name: Build isolated device-only Trial D artifact
+        if: github.event_name == 'pull_request' && github.event.repository.private == false && github.event.pull_request.number == 36 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/blomp-storage-phase1'
+        run: node scripts/build-trial-d.mjs
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request' && github.event.repository.private == false && github.event.pull_request.number == 36 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/blomp-storage-phase1'
+        with:
+          name: trial-d-device-only-static
+          path: out/
+          if-no-files-found: error
+          retention-days: 3
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request' && github.event.repository.private == false && github.event.pull_request.number == 36 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feat/blomp-storage-phase1'
+        with:
+          name: trial-d-iphone-materials
+          path: tests/fixtures/trial-d/iphone-test-d.zip
+          if-no-files-found: error
+          retention-days: 7
   deploy:
     needs: build
     if: github.ref == 'refs/heads/main'

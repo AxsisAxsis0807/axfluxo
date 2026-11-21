@@ -12,7 +12,7 @@ for (const cancelDuringRest of [false, true])
   it(`pauses recording and playback during rest (cancel=${cancelDuringRest})`, async () => {
     vi.useFakeTimers();
     const states: string[] = [],
-      tracks = [{ stop: vi.fn(), requestFrame: vi.fn() }];
+      tracks = [{ stop: vi.fn() }];
     let position = 0,
       started = 0,
       playing = false;
@@ -37,7 +37,7 @@ for (const cancelDuringRest of [false, true])
     Object.defineProperty(media, "currentTime", {
       get: () => position + (playing ? (Date.now() - started) / 1000 : 0),
     });
-    const ctx = {};
+    const ctx = { fillRect: vi.fn() };
     const stream = {
       addTrack: vi.fn(),
       getTracks: () => tracks,
@@ -47,7 +47,11 @@ for (const cancelDuringRest of [false, true])
       width: 0,
       height: 0,
       getContext: () => ctx,
-      captureStream: () => stream,
+      captureStream: (frameRate: number) => {
+        expect(ctx.fillRect).toHaveBeenCalledWith(0, 0, 320, 180);
+        expect(frameRate).toBe(60);
+        return stream;
+      },
     };
     vi.stubGlobal("document", {
       createElement: (tag: string) => (tag === "canvas" ? canvas : media),
@@ -126,7 +130,6 @@ for (const cancelDuringRest of [false, true])
     expect(states.at(-1)).toBe("pause");
     await vi.advanceTimersByTimeAsync(2_000);
     expect((await result).filename).toBe("test.mp4");
-    expect(tracks[0].requestFrame).toHaveBeenCalled();
     expect(validateLocalOutput).toHaveBeenCalled();
     expect(states).toEqual(["start", "pause", "resume", "stop"]);
     expect(
