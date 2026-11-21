@@ -185,7 +185,9 @@ for (const firstHtml of [false, true]) {
       }
       response
         .writeHead(200, { "content-type": "text/html" })
-        .end('<!doctype html><div id="root"></div>');
+        .end(
+          '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div>',
+        );
     });
     const frontend = await listen(editor);
     const storage = await receiver(frontend, firstHtml).catch(async (error) => {
@@ -335,7 +337,7 @@ for (const firstHtml of [false, true]) {
         await page
           .locator('aside[aria-label="エクスポートミニバー"]')
           .getByRole("button")
-          .click();
+          .press("Enter");
         await expect(
           dock.getByRole("link", { name: "test.mp4を保存" }),
         ).toBeVisible();

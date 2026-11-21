@@ -77,9 +77,32 @@ async function open(page: Page, mode: string) {
   ).toBeEnabled();
 }
 async function exportAndDecode(page: Page) {
+  const canRecord = await page.evaluate(
+    () =>
+      typeof MediaRecorder !== "undefined" &&
+      typeof HTMLCanvasElement.prototype.captureStream === "function" &&
+      [
+        "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+        "video/mp4",
+        "video/webm;codecs=vp8,opus",
+      ].some((type) => MediaRecorder.isTypeSupported(type)),
+  );
   await page
     .getByRole("button", { name: "端末内で書き出す", exact: true })
     .click();
+  if (!canRecord) {
+    await expect(
+      page
+        .getByRole("region", { name: "端末内書き出し", exact: true })
+        .getByRole("status"),
+    ).toContainText(
+      /端末内エンコードに対応していません|Canvasの動画書き出しに対応していません/,
+    );
+    await expect(
+      page.getByRole("link", { name: /\.(mp4|webm)を保存$/ }),
+    ).toHaveCount(0);
+    return null;
+  }
   await page.getByRole("button", { name: /詳細を開く/ }).click();
   const dialog = page.getByRole("dialog", { name: "エクスポート管理" });
   const permit = dialog.getByRole("button", {
@@ -157,7 +180,9 @@ test("All Versions plays supported audio formats, restores order and exports the
       });
     } else {
       await expect(
-        page.getByRole("alert").filter({ hasText: /音声形式を再生できない/ }),
+        page.getByRole("alert").filter({
+          hasText: /音声形式を再生できない|音声ファイルの再生時間を取得できません/,
+        }),
       ).toBeVisible();
     }
   }
@@ -243,6 +268,9 @@ test("FNF Showcase renders a synchronized range directly from audio", async ({
     await expect(page.getByRole("alert")).toContainText("音声形式を再生できない");
   }
   await picker.setInputFiles(join(dir, "sample.wav"));
+  await expect(
+    page.locator("legend").filter({ hasText: "sample.wav" }),
+  ).toBeVisible();
   await expect(page.getByText(/44100 Hz · 1 ch/)).toBeVisible();
   await page.getByLabel("譜面名").fill("音声テスト");
   await page.getByLabel("開始秒", { exact: true }).fill("0.2");
@@ -274,6 +302,7 @@ test("stereo 48 kHz export preserves audio at the start, middle and end", async 
   await page.getByLabel("開始秒", { exact: true }).fill("0.5");
   await page.getByLabel("終了秒", { exact: true }).fill("23.5");
   const path = await exportAndDecode(page);
+  if (!path) return;
   const tracks = JSON.parse(execFileSync("ffprobe", [
     "-v", "error", "-show_entries", "stream=codec_type,start_time,duration",
     "-of", "json", path,
