@@ -217,7 +217,7 @@ for (const firstHtml of [false, true]) {
         },
         { owner },
       );
-      await page.route("**/*", async (route) => {
+      await page.route(/^https?:\/\//, async (route) => {
         const request = route.request(),
           url = new URL(request.url());
         if (url.href === frontend + "/") return route.continue();
@@ -333,7 +333,7 @@ for (const firstHtml of [false, true]) {
       const uploadPanel = firstHtml ? dock : page;
       if (firstHtml) {
         await page
-          .getByLabel("エクスポートミニバー")
+          .locator('aside[aria-label="エクスポートミニバー"]')
           .getByRole("button")
           .click();
         await expect(

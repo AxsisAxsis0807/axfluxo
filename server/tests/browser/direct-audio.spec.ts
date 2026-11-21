@@ -60,8 +60,11 @@ test.beforeAll(async () => {
 });
 
 async function open(page: Page, mode: string) {
-  await page.route("**/*", (route) => {
-    if (new URL(route.request().url()).origin !== "https://direct-audio.test")
+  await page.route(/^https?:\/\//, (route) => {
+    if (
+      route.request().url() !== `https://direct-audio.test/${mode}` ||
+      !route.request().isNavigationRequest()
+    )
       return route.abort();
     return route.fulfill({
       contentType: "text/html",
