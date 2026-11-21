@@ -9,16 +9,17 @@ export function isDirectAudioFile(file: File) {
   );
 }
 
-/** Native decode is the playback gate. Container inspection only reads bounded Blob ranges. */
+/** Admit playable-duration metadata without waiting for decoded media data on mobile Safari.
+ * Actual playback and exported packets are checked by the preview/encoder. */
 export async function localAudioDetails(file: File, url: string) {
   if (file.size === 0) throw Error("音声ファイルが空です。別のファイルを選択してください。");
   const duration = await new Promise<number>((resolve, reject) => {
     const media = new Audio();
-    media.preload = "auto";
+    media.preload = "metadata";
     const finish = (error?: Error) => {
       const duration = media.duration;
       clearTimeout(timer);
-      media.onloadeddata = media.onerror = null;
+      media.onloadedmetadata = media.ondurationchange = media.onerror = null;
       media.removeAttribute("src");
       media.load();
       if (error) reject(error);
@@ -26,11 +27,17 @@ export async function localAudioDetails(file: File, url: string) {
         reject(Error("音声ファイルの再生時間を取得できません。"));
       else resolve(duration);
     };
+    // Safari may expose a valid duration without ever firing loadeddata.
+    // Some containers initially report Infinity, then update the duration later.
+    const metadataReady = () => {
+      if (Number.isFinite(media.duration) && media.duration > 0) finish();
+    };
     const timer = setTimeout(
       () => finish(Error("音声の読み込みがタイムアウトしました。")),
       30_000,
     );
-    media.onloadeddata = () => finish();
+    media.onloadedmetadata = metadataReady;
+    media.ondurationchange = metadataReady;
     media.onerror = () =>
       finish(
         Error(

@@ -462,10 +462,14 @@ export default function LocalVideoTool({
           aria-label="端末の素材"
           aria-describedby="local-video-source-help"
           type="file"
-          accept={fnf ? "video/*" : "audio/*,video/*"}
+          accept="video/*"
           multiple={!fnf}
           disabled={loading}
-          onChange={(e) => void select(Array.from(e.target.files ?? []), "video")}
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            void select(files, "video");
+          }}
         />
       </label>
       <label>
