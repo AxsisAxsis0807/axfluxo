@@ -1,3 +1,4 @@
+import { newBlompTestKey } from "./blomp-keys";
 import { randomUUID, createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import {
@@ -157,7 +158,7 @@ export async function verifyBlompCompatibility({
   const config = checkCompatibilityGate(env, args, evidence);
   const id = randomUUID();
   const targets: Target[] = ["single", "multipart", "cancel"].map((name) => ({
-    key: `axfluxo/connection-tests/${id}/${name}.bin`,
+    key: newBlompTestKey(`${name}.bin`, id),
   }));
   const [single, multipart, cancel] = targets;
   const transport = new CompatibilityTransport(
@@ -215,7 +216,12 @@ export async function verifyBlompCompatibility({
     return transport.run(responseLimit, cleanup, run);
   };
   function pathFor(target: Target) {
-    return "/" + encodeURIComponent(config.bucket) + "/" + target.key;
+    return (
+      "/" +
+      encodeURIComponent(config.bucket) +
+      "/" +
+      target.key.split("/").map(encodeURIComponent).join("/")
+    );
   }
   async function sign(
     target: Target,

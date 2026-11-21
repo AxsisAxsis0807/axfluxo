@@ -1,3 +1,4 @@
+import { blompRoleFolders, newBlompFileKey } from "../../storage/blomp-keys";
 import type { StorageRole } from "../../../src/domain/storage/destinations";
 import { blompPolicy } from "../../storage/blomp-policy";
 import { createHash, randomUUID } from "node:crypto";
@@ -55,10 +56,15 @@ const storage = {
   get location() {
     return target;
   },
-  newReference: (role: StorageRole, id: string): Ref => ({
+  newReference: (
+    role: StorageRole,
+    id: string,
+    projectId: string | null,
+    filename: string,
+  ): Ref => ({
     provider: "blomp",
     location: target,
-    key: `axfluxo/${role}/${id}/${randomUUID()}`,
+    key: newBlompFileKey(role, id, projectId, filename),
   }),
   create: vi.fn(async (ref: Ref) => {
     uploads.set(ref.key, new Uint8Array());
@@ -86,7 +92,7 @@ const storage = {
         [owner],
       );
     return {
-      url: `https://storage.blomp.com/fake/${ref.key}?operation=${operation}`,
+      url: `https://storage.blomp.com/fake/${ref.key.split("/").map(encodeURIComponent).join("/")}?operation=${operation}`,
       expiresAt: Date.now() + 60000,
     };
   }),
@@ -177,7 +183,6 @@ beforeAll(async () => {
     "004_video_render",
     "005_all_versions_projects",
     "008_blomp_storage",
-    "009_blomp_file_roles",
   ])
     await engine.exec(
       await readFile(
@@ -185,6 +190,46 @@ beforeAll(async () => {
         "utf8",
       ),
     );
+  const legacyId = randomUUID();
+  const legacyKey = `axfluxo/originals/${owner}/${randomUUID()}`;
+  await engine.query(
+    `INSERT INTO ${quota}(location,capacity,measured_used,margin,verification_remaining,observed_at) VALUES($1,1024,0,0,1024,now())`,
+    [location],
+  );
+  await engine.query(
+    `INSERT INTO axfluxo_video.blomp_files(id,owner_id,location,object_key,role,name,mime,size,sha256,request_key)
+     VALUES($1,$2,$3,$4,'originals',$5,$6,$7,$8,$9)`,
+    [
+      legacyId,
+      owner,
+      location,
+      legacyKey,
+      metadata.name,
+      metadata.mime,
+      metadata.size,
+      metadata.sha256,
+      randomUUID(),
+    ],
+  );
+  for (const migration of ["009_blomp_file_roles", "010_blomp_project_name"])
+    await engine.exec(
+      await readFile(
+        new URL(`../../db/migrations/${migration}.sql`, import.meta.url),
+        "utf8",
+      ),
+    );
+  const legacy = await engine.query(
+    "SELECT object_key, role, name, project_name FROM axfluxo_video.blomp_files WHERE id=$1",
+    [legacyId],
+  );
+  expect(legacy.rows).toEqual([
+    {
+      object_key: legacyKey,
+      role: "originals",
+      name: metadata.name,
+      project_name: null,
+    },
+  ]);
   for (const id of [owner, other])
     await engine.query(
       "INSERT INTO axfluxo_video.developer_memberships(owner_id,active) VALUES($1,true)",
@@ -346,7 +391,9 @@ it("transfers multiple slices, reselects by SHA and produces a verified output",
   const sizes: number[] = [],
     progress: number[] = [];
   const transfer = async (url: string, part: Blob) => {
-    const key = new URL(url).pathname.slice("/fake/".length);
+    const key = decodeURIComponent(new URL(url).pathname).slice(
+      "/fake/".length,
+    );
     const existing = uploads.get(key)!;
     const joined = new Uint8Array(existing.length + part.size);
     joined.set(existing);
@@ -501,6 +548,69 @@ it("imports a bounded verified original and rejects an altered or oversized down
   ).rejects.toThrow("UPLOAD_FILE_MISMATCH");
 });
 
+it("round trips one 1 MB object within dedicated transfer budgets", async () => {
+  const limit = 1_000_000;
+  fileLimit = limit;
+  await engine.query(
+    `UPDATE ${quota} SET upload_remaining=$2, download_remaining=$2,
+     verification_remaining=$2 WHERE location=$1`,
+    [location, limit],
+  );
+  const session = {
+    getSession: async () => ({
+      data: {
+        session: { access_token: owner, expires_at: Date.now() / 1000 + 3600 },
+      },
+      error: null,
+    }),
+    refreshSession: async () => ({ data: { session: null }, error: null }),
+  };
+  const api = blompClient(
+    createVideoApiClient({
+      baseUrl: "https://editor-api.test",
+      session,
+      fetch: (url, init) => app(new Request(url, init)),
+    }),
+  );
+  const fixture = new Uint8Array(limit).fill(37);
+  expect((await call("/files", { ...metadata, size: limit + 1 })).ok).toBe(
+    false,
+  );
+  expect(storage.create).not.toHaveBeenCalled();
+  const transfer = vi.fn(async (url: string, part: Blob) => {
+    expect(part.size).toBe(limit);
+    uploads.set(
+      decodeURIComponent(new URL(url).pathname).slice("/fake/".length),
+      new Uint8Array(await part.arrayBuffer()),
+    );
+  });
+  const ready = await uploadBlomp({
+    api,
+    blob: new Blob([fixture], { type: metadata.mime }),
+    input: metadata,
+    signal: new AbortController().signal,
+    progress: () => {},
+    transfer,
+  });
+  expect(ready.status).toBe("ready");
+  expect(transfer).toHaveBeenCalledTimes(1);
+  expect(objects.size).toBe(1);
+  const downloaded = await importBlompSource(api, ready, limit, async (url) => {
+    const key = decodeURIComponent(
+      new URL(new Request(url).url).pathname,
+    ).slice("/fake/".length);
+    return new Response(objects.get(key)?.slice());
+  });
+  expect(hash(new Uint8Array(await downloaded.arrayBuffer()))).toBe(
+    hash(fixture),
+  );
+  const { rows } = await engine.query(
+    `SELECT upload_remaining, download_remaining, verification_remaining FROM ${quota} WHERE location=$1`,
+    [location],
+  );
+  expect(Object.values(rows[0]).map(Number)).toEqual([0, 0, 0]);
+});
+
 it("holds unknown provider limits and stops new uploads when the limit is lowered", async () => {
   fileLimit = null;
   const overview = await (await call("/overview")).json();
@@ -562,7 +672,7 @@ it.each(["inputs", "intermediates", "checkpoints"] as const)(
     } as const;
     const id = await start(data);
     const key = await resume(id);
-    expect(key).toContain(`axfluxo/${role}/`);
+    expect(key).toContain(`axfluxo/${blompRoleFolders[role]}/`);
     uploads.set(key, bytes);
     const completed = await call(`/files/${id}/complete`, {});
     expect(await completed.json()).toMatchObject({
@@ -584,4 +694,49 @@ it("rejects an opaque checkpoint MIME outside the checkpoint category", async ()
       .status,
   ).toBe(400);
   expect(await counts()).toEqual([0, 0]);
+});
+
+it("keeps the original filename and project label for same-name files with different UUIDs", async () => {
+  const name = " 素材.mp4 ";
+  const first = await start({ ...metadata, name, projectName: "春の編集" });
+  const second = await start({ ...metadata, name, projectName: "夏の編集" });
+  expect(first).not.toBe(second);
+  const page = await (await call("/files")).json();
+  expect(page.files).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: first,
+        name,
+        projectName: "春の編集",
+      }),
+      expect.objectContaining({
+        id: second,
+        name,
+        projectName: "夏の編集",
+      }),
+    ]),
+  );
+  expect(
+    page.files.every(
+      (file: object) => !("objectKey" in file) && !("object_key" in file),
+    ),
+  ).toBe(true);
+  const otherPage = await (await call("/files", undefined, other)).json();
+  expect(otherPage.files).toEqual([]);
+});
+
+it("reuses a legacy catalog key for resumed uploads and rejects a foreign-owner key", async () => {
+  const id = await start();
+  const legacy = `axfluxo/originals/${owner}/${randomUUID()}`;
+  await engine.query(
+    "UPDATE axfluxo_video.blomp_files SET object_key=$2 WHERE id=$1",
+    [id, legacy],
+  );
+  expect(await resume(id)).toBe(legacy);
+  expect((await call(`/files/${id}`, undefined, other)).status).toBe(404);
+  await engine.query(
+    "UPDATE axfluxo_video.blomp_files SET object_key=$2 WHERE id=$1",
+    [id, `axfluxo/02_元素材/${other}/未指定/${randomUUID()}/unsafe.mp4`],
+  );
+  expect((await call(`/files/${id}`)).status).toBe(404);
 });

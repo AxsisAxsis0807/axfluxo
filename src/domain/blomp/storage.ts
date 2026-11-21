@@ -9,14 +9,15 @@ const fileMetadata = z.strictObject({
   role: blompRole,
   name: z
     .string()
-    .trim()
     .min(1)
     .max(255)
-    .regex(/^[^\x00-\x1f\x7f/\\]+$/),
+    .regex(/^[^\x00-\x1f\x7f/\\]+$/)
+    .refine((name) => name.trim().length > 0),
   mime: mimeSchema.or(z.enum(["application/json", "application/octet-stream"])),
   size: z.number().int().positive().max(blompMaxSize),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
   projectId: z.uuid().nullable(),
+  projectName: z.string().trim().min(1).max(120).optional(),
   jobId: z.uuid().nullable(),
 });
 function allowedRoleMime(value: z.infer<typeof fileMetadata>) {

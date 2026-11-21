@@ -1,3 +1,4 @@
+import { matchesBlompFileKey } from "./blomp-keys";
 import { storageRoles } from "../../src/domain/storage/destinations";
 import { z } from "zod";
 import type { VerifyToken } from "../api/auth";
@@ -43,7 +44,7 @@ export function blompReadSigner(config: {
         !file ||
         file.owner !== ownerId ||
         !storageRoles.some((role) =>
-          file.ref.key.startsWith(`axfluxo/${role}/${ownerId}/`),
+          matchesBlompFileKey(file.ref.key, role, ownerId),
         ) ||
         !file.verified ||
         !file.readable ||

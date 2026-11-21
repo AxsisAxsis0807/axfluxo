@@ -31,7 +31,7 @@ const digest = (bytes: Buffer) =>
   createHash("sha256").update(bytes).digest("hex");
 const payloadHash = digest(original);
 
-async function receiver(frontend: string) {
+async function receiver(frontend: string, firstHtml = false) {
   const attempts: { size: number; sha256: string; status: number }[] = [];
   let preflights = 0;
   let writes = 0;
@@ -45,7 +45,7 @@ async function receiver(frontend: string) {
       return;
     }
     response.setHeader("access-control-allow-origin", frontend);
-    response.setHeader("access-control-allow-methods", "PUT, OPTIONS");
+    response.setHeader("access-control-allow-methods", "PUT, GET, OPTIONS");
     response.setHeader("access-control-allow-headers", "content-type");
     if (request.method === "OPTIONS") {
       if (request.headers["access-control-request-method"] !== "PUT") {
@@ -54,6 +54,10 @@ async function receiver(frontend: string) {
       }
       preflights++;
       response.writeHead(204).end();
+      return;
+    }
+    if (request.method === "GET") {
+      response.writeHead(200, { "content-type": "video/mp4" }).end(original);
       return;
     }
     if (request.method !== "PUT") {
@@ -80,10 +84,18 @@ async function receiver(frontend: string) {
     const status =
       bytes.equals(original) && sha256 === payloadHash
         ? ++writes === 1
-          ? 503
+          ? firstHtml
+            ? 200
+            : 503
           : 200
         : 422;
     attempts.push({ size, sha256, status });
+    if (firstHtml && writes === 1 && status === 200) {
+      response
+        .writeHead(200, { "content-type": "text/html" })
+        .end("<html>unconfirmed</html>");
+      return;
+    }
     response.writeHead(status).end();
   });
   const origin = await listen(server);
@@ -101,11 +113,23 @@ async function receiver(frontend: string) {
   };
 }
 
-async function fixtureBundle(storageOrigin: string) {
+async function fixtureBundle(storageOrigin: string, completedExport = false) {
   const result = await build({
     stdin: {
-      contents:
-        'import {createRoot} from "react-dom/client"; import Library from "./src/features/developer/BlompLibrary"; createRoot(document.getElementById("root")).render(<Library />);',
+      contents: `
+        import {createRoot} from "react-dom/client";
+        import Library from "./src/features/developer/BlompLibrary";
+        import ExportDock from "./src/features/video-common/ExportDock";
+        import {localExportQueue} from "./src/services/video/local-export-runtime";
+        import {LOCK_KEY, SESSION_KEY} from "./src/services/developer/local-lock";
+        if (${completedExport}) {
+          localStorage.setItem(LOCK_KEY, JSON.stringify({salt:"0".repeat(32),hash:"0".repeat(64)}));
+          sessionStorage.setItem(SESSION_KEY, String(Date.now()+60000));
+          const blob = new Blob([Uint8Array.from(atob(${JSON.stringify(original.toString("base64"))}), char => char.charCodeAt(0))], {type:"video/mp4"});
+          localExportQueue.restore([{id:"fixture-complete", filename:"test.mp4", state:"completed", progress:1, message:"", rest:false, result:{blob,filename:"test.mp4"}}]);
+        }
+        createRoot(document.getElementById("root")).render(<><Library />{${completedExport} && <ExportDock />}</>);
+      `,
       loader: "tsx",
       resolveDir: process.cwd(),
     },
@@ -149,207 +173,275 @@ async function fixtureBundle(storageOrigin: string) {
   return result.outputFiles[0].text;
 }
 
-test("interrupted direct transfer survives reload and verifies reselected bytes", async ({
-  page,
-}) => {
-  let file: BlompFile | undefined;
-  const editor = createServer((request, response) => {
-    if (request.method !== "GET" || request.url !== "/") {
-      response.writeHead(404).end();
-      return;
-    }
-    response
-      .writeHead(200, { "content-type": "text/html" })
-      .end('<!doctype html><div id="root"></div>');
-  });
-  const frontend = await listen(editor);
-  const storage = await receiver(frontend).catch(async (error) => {
-    await close(editor);
-    throw error;
-  });
-  try {
-    const bundle = await fixtureBundle(storage.origin);
-    let signed = 0;
-    let maxFileBytes: number | null = null;
-    let starts = 0;
-    let completes = 0;
-    const resumed: string[] = [];
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    await page.addInitScript(
-      ({ owner }) => {
-        localStorage.setItem(
-          "axfluxo-auth",
-          JSON.stringify({
-            access_token: "private-fixture-token",
-            refresh_token: "private-fixture-refresh",
-            expires_at: Date.now() / 1000 + 3600,
-            expires_in: 3600,
-            token_type: "bearer",
-            user: { id: owner },
-          }),
-        );
-      },
-      { owner },
-    );
-    await page.route("**/*", async (route) => {
-      const request = route.request(),
-        url = new URL(request.url());
-      if (url.href === frontend + "/") return route.continue();
-      const headers = {
-        "access-control-allow-origin": frontend,
-        "access-control-allow-methods": "GET,POST,PUT,OPTIONS",
-        "access-control-allow-headers":
-          "authorization,content-type,idempotency-key",
-      };
-      if (url.href === storage.url) return route.continue();
-      if (url.origin !== api) return route.abort();
-      if (request.method() === "OPTIONS")
-        return route.fulfill({ status: 204, headers });
-      expect(request.headers().authorization).toBe(
-        "Bearer private-fixture-token",
-      );
-      const path = url.pathname;
-      if (path.endsWith("/overview"))
-        return route.fulfill({
-          headers,
-          json: {
-            state: "available",
-            capacity: 1000,
-            capabilities: { multipartWrites: true, maxFileBytes },
-            measuredUsed: 0,
-            estimatedUsed: 0,
-            available: 1000,
-            reserved: 0,
-            verifiedAt: null,
-          },
-        });
-      if (path.endsWith("/files") && request.method() === "GET")
-        return route.fulfill({
-          headers,
-          json: { files: file ? [file] : [], cursor: null },
-        });
-      if (path.endsWith("/files")) {
-        starts++;
-        const metadata = request.postDataJSON();
-        expect(metadata.sha256).toBe(payloadHash);
-        expect(metadata.size).toBe(original.length);
-        const now = new Date().toISOString();
-        file = {
-          ...metadata,
-          id,
-          provider: "blomp",
-          status: "queued",
-          version: 1,
-          createdAt: now,
-          updatedAt: now,
-          expiresAt: now,
-        };
-      } else if (path.endsWith("/resume")) {
-        resumed.push(path.split("/").at(-2)!);
-        file!.status = "uploading";
-        return route.fulfill({ headers, json: { file, parts: [] } });
-      } else if (path.endsWith("/part")) {
-        signed++;
-        return route.fulfill({
-          headers,
-          json: {
-            url: storage.url,
-            expiresAt: Date.now() + 60000,
-          },
-        });
-      } else if (path.endsWith("/pause")) {
-        file!.status = "interrupted";
-      } else if (path.endsWith("/complete")) {
-        expect(storage.writes).toBe(2);
-        completes++;
-        file!.status = "ready";
+for (const firstHtml of [false, true]) {
+  test(`interrupted direct transfer survives reload and verifies reselected bytes (${firstHtml ? "HTML" : "503"})`, async ({
+    page,
+  }) => {
+    let file: BlompFile | undefined;
+    const editor = createServer((request, response) => {
+      if (request.method !== "GET" || request.url !== "/") {
+        response.writeHead(404).end();
+        return;
       }
-      return route.fulfill({ headers, json: file });
+      response
+        .writeHead(200, { "content-type": "text/html" })
+        .end('<!doctype html><div id="root"></div>');
     });
-    async function open() {
-      await page.addScriptTag({ content: bundle });
-      await page.getByText("Blompストレージ", { exact: true }).click();
-      await page.getByRole("button", { name: "状態と一覧を更新" }).click();
+    const frontend = await listen(editor);
+    const storage = await receiver(frontend, firstHtml).catch(async (error) => {
+      await close(editor);
+      throw error;
+    });
+    try {
+      const bundle = await fixtureBundle(storage.origin, firstHtml);
+      let signed = 0;
+      let maxFileBytes: number | null = null;
+      let starts = 0;
+      let completes = 0;
+      const resumed: string[] = [];
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.addInitScript(
+        ({ owner }) => {
+          localStorage.setItem(
+            "axfluxo-auth",
+            JSON.stringify({
+              access_token: "private-fixture-token",
+              refresh_token: "private-fixture-refresh",
+              expires_at: Date.now() / 1000 + 3600,
+              expires_in: 3600,
+              token_type: "bearer",
+              user: { id: owner },
+            }),
+          );
+        },
+        { owner },
+      );
+      await page.route("**/*", async (route) => {
+        const request = route.request(),
+          url = new URL(request.url());
+        if (url.href === frontend + "/") return route.continue();
+        const headers = {
+          "access-control-allow-origin": frontend,
+          "access-control-allow-methods": "GET,POST,PUT,OPTIONS",
+          "access-control-allow-headers":
+            "authorization,content-type,idempotency-key",
+        };
+        if (url.href === storage.url) return route.continue();
+        if (url.origin !== api) return route.abort();
+        if (request.method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers });
+        expect(request.headers().authorization).toBe(
+          "Bearer private-fixture-token",
+        );
+        const path = url.pathname;
+        if (path.endsWith("/overview"))
+          return route.fulfill({
+            headers,
+            json: {
+              state: "available",
+              capacity: 1000,
+              capabilities: { multipartWrites: true, maxFileBytes },
+              measuredUsed: 0,
+              estimatedUsed: 0,
+              available: 1000,
+              reserved: 0,
+              verifiedAt: null,
+            },
+          });
+        if (path.endsWith("/files") && request.method() === "GET")
+          return route.fulfill({
+            headers,
+            json: { files: file ? [file] : [], cursor: null },
+          });
+        if (path.endsWith("/files")) {
+          starts++;
+          const metadata = request.postDataJSON();
+          expect(metadata.sha256).toBe(payloadHash);
+          expect(metadata.size).toBe(original.length);
+          expect(metadata.projectName).toBe("春の編集");
+          expect(metadata.role).toBe(firstHtml ? "outputs" : "originals");
+          const now = new Date().toISOString();
+          file = {
+            ...metadata,
+            id,
+            provider: "blomp",
+            status: "queued",
+            version: 1,
+            createdAt: now,
+            updatedAt: now,
+            expiresAt: now,
+          };
+        } else if (path.endsWith("/resume")) {
+          resumed.push(path.split("/").at(-2)!);
+          file!.status = "uploading";
+          return route.fulfill({
+            headers,
+            json: {
+              file,
+              parts:
+                firstHtml && storage.writes
+                  ? [{ number: 1, size: original.length }]
+                  : [],
+            },
+          });
+        } else if (path.endsWith("/part")) {
+          signed++;
+          return route.fulfill({
+            headers,
+            json: {
+              url: storage.url,
+              expiresAt: Date.now() + 60000,
+            },
+          });
+        } else if (path.endsWith("/pause")) {
+          file!.status = "interrupted";
+        } else if (path.endsWith("/download")) {
+          expect(path.split("/").at(-2)).toBe(id);
+          return route.fulfill({
+            headers,
+            json: { url: storage.url, expiresAt: Date.now() + 60000 },
+          });
+        } else if (path.endsWith("/complete")) {
+          expect(storage.writes).toBe(firstHtml ? 1 : 2);
+          completes++;
+          file!.status = "ready";
+        }
+        return route.fulfill({ headers, json: file });
+      });
+      async function open() {
+        await page.addScriptTag({ content: bundle });
+        await page.getByText("Blompストレージ", { exact: true }).click();
+        await page.getByRole("button", { name: "状態と一覧を更新" }).click();
+      }
+      await page.goto(frontend);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await open();
+      await expect(
+        page.getByRole("combobox", { name: "用途" }).locator("option"),
+      ).toHaveText([
+        "入力素材",
+        "元素材",
+        "途中データ",
+        "チェックポイント",
+        "完成品",
+      ]);
+      await expect(
+        page.getByRole("heading", { name: "接続テスト" }),
+      ).toBeVisible();
+      const dock = page.getByRole("dialog", { name: "エクスポート管理" });
+      const uploadPanel = firstHtml ? dock : page;
+      if (firstHtml) {
+        await page
+          .getByLabel("エクスポートミニバー")
+          .getByRole("button")
+          .click();
+        await expect(
+          dock.getByRole("link", { name: "test.mp4を保存" }),
+        ).toBeVisible();
+        await expect(dock.getByText(/用途 完成品/)).toBeVisible();
+      }
+      await uploadPanel.getByLabel("プロジェクト名（任意）").fill("春の編集");
+      if (!firstHtml)
+        await page.getByLabel("Blompへ保存するファイル").setInputFiles({
+          name: "test.mp4",
+          mimeType: "video/mp4",
+          buffer: original,
+        });
+      await uploadPanel
+        .getByRole("button", { name: "Blompに保存", exact: true })
+        .click();
+      await expect(
+        page.getByText(
+          "Blompの公式ファイル上限が未確認です。確認できるまでクラウド保存を保留します。",
+        ),
+      ).toBeVisible();
+      expect(starts).toBe(0);
+      expect(signed).toBe(0);
+      expect(storage.writes).toBe(0);
+      maxFileBytes = original.length - 1;
+      await uploadPanel
+        .getByRole("button", { name: "Blompに保存", exact: true })
+        .click();
+      await expect(
+        page.getByText(
+          "保存先のファイル上限を超えています。端末に保存するか、小さいファイルを選んでください。",
+        ),
+      ).toBeVisible();
+      expect(starts).toBe(0);
+      expect(signed).toBe(0);
+      expect(storage.writes).toBe(0);
+      maxFileBytes = original.length;
+      await uploadPanel
+        .getByRole("button", { name: "Blompに保存", exact: true })
+        .click();
+      await expect.poll(() => file?.status).toBe("interrupted");
+      if (firstHtml)
+        await expect(page.getByText(/パートの保存結果が未確認/)).toBeVisible();
+      if (firstHtml)
+        await expect(
+          dock.getByRole("link", { name: "test.mp4を保存" }),
+        ).toBeVisible();
+      await page.reload();
+      await open();
+      const reselect = page.getByLabel("元ファイルを選び直す");
+      await reselect.setInputFiles({
+        name: "test.mp4",
+        mimeType: "video/mp4",
+        buffer: Buffer.alloc(original.length),
+      });
+      await page.getByRole("button", { name: "転送を再開" }).click();
+      await expect(
+        page.getByText("保存開始時と同じ元ファイルを選び直してください。"),
+      ).toBeVisible();
+      expect(signed).toBe(1);
+      expect(storage.writes).toBe(1);
+      expect(completes).toBe(0);
+      await reselect.setInputFiles({
+        name: "test.mp4",
+        mimeType: "video/mp4",
+        buffer: original,
+      });
+      await page.getByRole("button", { name: "転送を再開" }).click();
+      await expect(
+        page.getByRole("button", { name: "ダウンロードを準備" }),
+      ).toBeVisible();
+      const row = page.getByRole("listitem").filter({ hasText: "test.mp4" });
+      await expect(row.getByText("春の編集", { exact: true })).toBeVisible();
+      const roleLabel = firstHtml ? "完成品" : "元素材";
+      await expect(row.getByText(roleLabel, { exact: true })).toBeVisible();
+      await expect(row.locator("time")).toHaveAttribute(
+        "datetime",
+        file!.createdAt,
+      );
+      await row.getByRole("button", { name: "ダウンロードを準備" }).click();
+      await expect(
+        row.getByRole("link", {
+          name: `${roleLabel}をダウンロード（SHA-256確認済み）`,
+        }),
+      ).toHaveAttribute("download", "test.mp4");
+      expect(signed).toBe(firstHtml ? 1 : 2);
+      expect(starts).toBe(1);
+      expect(resumed).toEqual([id, id]);
+      expect(completes).toBe(1);
+      expect(storage.attempts).toEqual(
+        (firstHtml ? [200] : [503, 200]).map((status) => ({
+          size: original.length,
+          sha256: payloadHash,
+          status,
+        })),
+      );
+      expect(
+        await page.evaluate(() =>
+          JSON.stringify([localStorage, sessionStorage]),
+        ),
+      ).not.toContain("private-signed-fixture");
+      expect(errors).toEqual([]);
+    } finally {
+      await Promise.all([storage.close(), close(editor)]);
     }
-    await page.goto(frontend);
-    await open();
-    await page.getByLabel("Blompへ保存するファイル").setInputFiles({
-      name: "test.mp4",
-      mimeType: "video/mp4",
-      buffer: original,
-    });
-    await page
-      .getByRole("button", { name: "Blompに保存", exact: true })
-      .click();
-    await expect(
-      page.getByText(
-        "Blompの公式ファイル上限が未確認です。確認できるまでクラウド保存を保留します。",
-      ),
-    ).toBeVisible();
-    expect(starts).toBe(0);
-    expect(signed).toBe(0);
-    expect(storage.writes).toBe(0);
-    maxFileBytes = original.length - 1;
-    await page
-      .getByRole("button", { name: "Blompに保存", exact: true })
-      .click();
-    await expect(
-      page.getByText(
-        "保存先のファイル上限を超えています。端末に保存するか、小さいファイルを選んでください。",
-      ),
-    ).toBeVisible();
-    expect(starts).toBe(0);
-    expect(signed).toBe(0);
-    expect(storage.writes).toBe(0);
-    maxFileBytes = original.length;
-    await page
-      .getByRole("button", { name: "Blompに保存", exact: true })
-      .click();
-    await expect.poll(() => file?.status).toBe("interrupted");
-    await page.reload();
-    await open();
-    const reselect = page.getByLabel("元ファイルを選び直す");
-    await reselect.setInputFiles({
-      name: "test.mp4",
-      mimeType: "video/mp4",
-      buffer: Buffer.alloc(original.length),
-    });
-    await page.getByRole("button", { name: "転送を再開" }).click();
-    await expect(
-      page.getByText("保存開始時と同じ元ファイルを選び直してください。"),
-    ).toBeVisible();
-    expect(signed).toBe(1);
-    expect(storage.writes).toBe(1);
-    expect(completes).toBe(0);
-    await reselect.setInputFiles({
-      name: "test.mp4",
-      mimeType: "video/mp4",
-      buffer: original,
-    });
-    await page.getByRole("button", { name: "転送を再開" }).click();
-    await expect(
-      page.getByRole("button", { name: "ダウンロードを準備" }),
-    ).toBeVisible();
-    expect(signed).toBe(2);
-    expect(starts).toBe(1);
-    expect(resumed).toEqual([id, id]);
-    expect(completes).toBe(1);
-    expect(storage.attempts).toEqual(
-      [503, 200].map((status) => ({
-        size: original.length,
-        sha256: payloadHash,
-        status,
-      })),
-    );
-    expect(
-      await page.evaluate(() => JSON.stringify([localStorage, sessionStorage])),
-    ).not.toContain("private-signed-fixture");
-    expect(errors).toEqual([]);
-  } finally {
-    await Promise.all([storage.close(), close(editor)]);
-  }
-});
+  });
+}
 
 test("loopback receiver rejects missing and corrupted upload bytes", async () => {
   const frontend = "http://127.0.0.1";

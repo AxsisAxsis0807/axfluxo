@@ -19,7 +19,11 @@ function fixture() {
     (command: { input: Record<string, unknown> }) => Promise<unknown>
   >;
   const storage = blompStorage(config, client);
-  return { storage, send, ref: storage.newReference("originals", owner) };
+  return {
+    storage,
+    send,
+    ref: storage.newReference("originals", owner, null, "素材 #%.mp4"),
+  };
 }
 describe("configuration boundaries", () => {
   it("defaults OFF and does not alter R2/admission", () => {
@@ -281,7 +285,7 @@ describe("isolated contract (no provider connection)", () => {
   });
   it("generates real SDK SigV4 short-lived path-style signatures without network", async () => {
     const storage = blompStorage(config);
-    const ref = storage.newReference("outputs", owner);
+    const ref = storage.newReference("outputs", owner, null, "素材 #%.mp4");
     for (const operation of ["GET", "HEAD", "PART"] as const) {
       const signed = await storage.sign(ref, operation, {
         id: "upload-1",
@@ -317,7 +321,7 @@ it.each([1, 2, 5])(
   "signs %s GiB metadata without allocating those bytes",
   async (gib) => {
     const storage = blompStorage(config),
-      ref = storage.newReference("originals", owner);
+      ref = storage.newReference("originals", owner, null, "素材 #%.mp4");
     const result = await storage.sign(ref, "PART", {
       id: "upload",
       number: 1,
@@ -391,4 +395,38 @@ it("rejects test filename wildcard substitution", async () => {
     storage.head({ ...ref, key: ref.key.replace("probe.bin", "probeXbin") }),
   ).rejects.toThrow("BLOMP_INVALID_REFERENCE");
   expect(send).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["inputs", "01_入力素材"],
+  ["originals", "02_元素材"],
+  ["intermediates", "03_途中データ"],
+  ["checkpoints", "04_チェックポイント"],
+  ["outputs", "05_完成品"],
+] as const)("places %s in the requested Japanese folder", (role, folder) => {
+  const { storage } = fixture();
+  try {
+    const project = "22222222-2222-4222-8222-222222222222";
+    const key = storage.newReference(
+      role,
+      owner,
+      project,
+      "元ファイル.png",
+    ).key;
+    const segments = key.split("/");
+    expect(segments).toEqual([
+      "axfluxo",
+      folder,
+      owner,
+      project,
+      expect.stringMatching(/^[a-f0-9-]{36}$/),
+      "元ファイル.png",
+    ]);
+    expect(storage.newTestReference().key.split("/").slice(0, 2)).toEqual([
+      "axfluxo",
+      "99_接続テスト",
+    ]);
+  } finally {
+    storage.close();
+  }
 });

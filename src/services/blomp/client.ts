@@ -11,6 +11,7 @@ import {
   blompStart,
   partLength,
   type BlompStart,
+  type BlompFile,
 } from "../../domain/blomp/storage";
 import {
   createVideoApiClient,
@@ -112,43 +113,34 @@ export async function blompDigest(blob: Blob, signal: AbortSignal) {
   return bytesToHex(hash.digest());
 }
 
-function sendPart(
+async function sendPart(
   url: string,
   blob: Blob,
   signal: AbortSignal,
   progress: (bytes: number) => void,
 ) {
-  return new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const abort = () => xhr.abort();
-    xhr.open("PUT", checkedBlompUrl(url));
-    xhr.timeout = 120000;
-    xhr.upload.onprogress = (event) =>
-      progress(Math.min(blob.size, event.loaded));
-    xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(
-            new UploadError(
-              xhr.status === 401 || xhr.status === 403
-                ? "UPLOAD_SIGNATURE_EXPIRED"
-                : "UPLOAD_INTERRUPTED",
-            ),
-          );
-    xhr.ontimeout =
-      xhr.onerror =
-      xhr.onabort =
-        () => reject(new UploadError("UPLOAD_INTERRUPTED"));
-    xhr.onloadend = () => signal.removeEventListener("abort", abort);
-    signal.throwIfAborted();
-    signal.addEventListener("abort", abort, { once: true });
-    try {
-      xhr.send(blob);
-    } catch {
-      signal.removeEventListener("abort", abort);
-      reject(new UploadError("UPLOAD_INTERRUPTED"));
-    }
+  const response = await fetch(checkedBlompUrl(url), {
+    method: "PUT",
+    body: blob,
+    credentials: "omit",
+    redirect: "error",
+    referrerPolicy: "no-referrer",
+    signal: AbortSignal.any([signal, AbortSignal.timeout(120000)]),
+  }).catch(() => {
+    throw new UploadError("UPLOAD_INTERRUPTED");
   });
+  const contentType = response.headers
+    .get("content-type")
+    ?.split(";", 1)[0]
+    .trim()
+    .toLowerCase();
+  await response.body?.cancel().catch(() => undefined);
+  if (!response.ok) throw new UploadError("UPLOAD_INTERRUPTED");
+  if (contentType === "text/html" || contentType === "application/xhtml+xml") {
+    throw new UploadError("UPLOAD_PART_UNCONFIRMED");
+  }
+  // Browsers do not expose upload progress for fetch with redirects disabled.
+  progress(blob.size);
 }
 
 let transferActive = false;
@@ -239,39 +231,118 @@ export async function uploadBlomp({
 /** Bounded import into local tools. Larger source files use browser navigation. */
 export async function importBlompSource(
   api: BlompClient,
-  file: import("../../domain/blomp/storage").BlompFile,
+  file: BlompFile,
   limit: number,
   transport = fetch,
 ) {
   if (!isSourceRole(file.role) || file.status !== "ready" || file.size > limit)
     throw new UploadError("INVALID_RESPONSE");
+  return downloadVerifiedBlomp(api, file, limit, transport);
+}
+
+export async function downloadVerifiedBlomp(
+  api: BlompClient,
+  file: BlompFile,
+  limit: number,
+  transport = fetch,
+  signal = AbortSignal.timeout(120000),
+) {
+  if (file.size > limit) throw new UploadError("INVALID_RESPONSE");
+  const chunks: Uint8Array<ArrayBuffer>[] = [];
+  await streamVerifiedBlomp(api, file, transport, signal, (chunk) => {
+    chunks.push(new Uint8Array(chunk));
+  });
+  return new File(chunks, file.name, { type: file.mime });
+}
+
+async function streamVerifiedBlomp(
+  api: BlompClient,
+  file: BlompFile,
+  transport: typeof fetch,
+  signal: AbortSignal,
+  write: (chunk: Uint8Array<ArrayBuffer>) => void | Promise<void>,
+) {
+  if (file.status !== "ready") throw new UploadError("INVALID_RESPONSE");
+  signal.throwIfAborted();
   const access = value(await api.download(file.id));
+  signal.throwIfAborted();
   const response = await transport(checkedBlompUrl(access.url), {
     credentials: "omit",
     redirect: "error",
     referrerPolicy: "no-referrer",
     cache: "no-store",
-    signal: AbortSignal.timeout(30000),
+    signal,
   });
-  if (!response.ok || !response.body) throw new UploadError("REQUEST_FAILED");
+  if (response.status !== 200 || !response.body) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new UploadError("REQUEST_FAILED");
+  }
   const reader = response.body.getReader();
-  const hash = sha256.create(),
-    chunks: Uint8Array<ArrayBuffer>[] = [];
+  const hash = sha256.create();
   let size = 0;
   try {
     while (true) {
+      signal.throwIfAborted();
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
       if (size > file.size) throw new UploadError("UPLOAD_FILE_MISMATCH");
       hash.update(value);
-      chunks.push(new Uint8Array(value));
+      await write(value);
     }
+    signal.throwIfAborted();
   } finally {
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
   if (size !== file.size || bytesToHex(hash.digest()) !== file.sha256)
     throw new UploadError("UPLOAD_FILE_MISMATCH");
-  return new File(chunks, file.name, { type: file.mime });
+}
+
+/** Stages verified output in origin-private storage, never a whole-file JS buffer. */
+export async function stageVerifiedBlomp(
+  api: BlompClient,
+  file: BlompFile,
+  signal: AbortSignal,
+  storage = navigator.storage,
+  transport = fetch,
+) {
+  signal.throwIfAborted();
+  if (file.status !== "ready" || typeof storage?.getDirectory !== "function")
+    throw new UploadError("BLOMP_DOWNLOAD_STORAGE_UNAVAILABLE");
+  const estimate = await storage.estimate();
+  if (
+    estimate.quota === undefined ||
+    estimate.usage === undefined ||
+    estimate.quota - estimate.usage < file.size
+  )
+    throw new UploadError("BLOMP_DOWNLOAD_STORAGE_UNAVAILABLE");
+  const directory = await (
+    await storage.getDirectory()
+  ).getDirectoryHandle("axfluxo-blomp-verified", { create: true });
+  const name = crypto.randomUUID();
+  const release = async () => {
+    await directory.removeEntry(name).catch(() => undefined);
+  };
+  let writer: FileSystemWritableFileStream | undefined;
+  try {
+    signal.throwIfAborted();
+    const handle = await directory.getFileHandle(name, { create: true });
+    if (typeof handle.createWritable !== "function")
+      throw new UploadError("BLOMP_DOWNLOAD_STORAGE_UNAVAILABLE");
+    writer = await handle.createWritable();
+    const output = writer;
+    await streamVerifiedBlomp(api, file, transport, signal, (chunk) =>
+      output.write(chunk),
+    );
+    await output.close();
+    signal.throwIfAborted();
+    const blob = await handle.getFile();
+    if (blob.size !== file.size) throw new UploadError("UPLOAD_FILE_MISMATCH");
+    return { blob, release };
+  } catch (error) {
+    await writer?.abort().catch(() => undefined);
+    await release();
+    throw error;
+  }
 }

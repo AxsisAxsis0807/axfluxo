@@ -12,7 +12,12 @@ export type SignedStorageAccess = { url: string; expiresAt: number };
 /** A provider is bound to one immutable account/location. Resolve the reference before I/O. */
 export interface StorageProvider<Provider extends string = string> {
   readonly location: string;
-  newReference(role: StorageRole, owner: string): StorageReference<Provider>;
+  newReference(
+    role: StorageRole,
+    owner: string,
+    projectId: string | null,
+    filename: string,
+  ): StorageReference<Provider>;
   head(
     ref: StorageReference<Provider>,
     signal?: AbortSignal,

@@ -73,7 +73,7 @@ function fake({
   const handle = vi.fn(async (request: ProbeRequest) => {
     const key = decodeURIComponent(request.path).slice("/fake/".length);
     expect(key).toMatch(
-      /^axfluxo\/connection-tests\/[a-f0-9-]+\/(single|multipart|cancel)\.bin$/,
+      /^axfluxo\/99_接続テスト\/[a-f0-9-]+\/(single|multipart|cancel)\.bin$/,
     );
     const q = request.query;
     const pending = uploads.get(key);

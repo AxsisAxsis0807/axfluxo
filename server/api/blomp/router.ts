@@ -1,4 +1,8 @@
 import {
+  matchesBlompFileKey,
+  validBlompFilename,
+} from "../../storage/blomp-keys";
+import {
   defaultStorageProvider,
   type StorageRole,
 } from "../../../src/domain/storage/destinations";
@@ -47,6 +51,7 @@ type FileRow = {
   sha256: string;
   size: string;
   project_id: string | null;
+  project_name?: string | null;
   job_id: string | null;
   version: 1;
   status: z.infer<typeof blompFile>["status"];
@@ -82,6 +87,7 @@ const view = (file: FileRow) =>
     sha256: file.sha256,
     size: Number(file.size),
     projectId: file.project_id,
+    ...(file.project_name ? { projectName: file.project_name } : {}),
     jobId: file.job_id,
     version: file.version,
     status: file.status,
@@ -208,7 +214,7 @@ export function blompRouter({
       if (
         !file ||
         file.provider !== "blomp" ||
-        !file.object_key.startsWith(`axfluxo/${file.role}/${owner}/`)
+        !matchesBlompFileKey(file.object_key, file.role, owner)
       )
         throw new ApiError(404, "NOT_FOUND");
       return file;
@@ -258,6 +264,7 @@ export function blompRouter({
           `SELECT * FROM ${files}
           WHERE location=$1 AND owner_id=$2 AND role=$3 AND name=$4 AND mime=$5 AND size=$6 AND sha256=$7
           AND project_id IS NOT DISTINCT FROM $8::uuid AND job_id IS NOT DISTINCT FROM $9::uuid
+          AND project_name IS NOT DISTINCT FROM $10::text
           AND status<>'cancelled' ORDER BY created_at DESC LIMIT 1`,
           [
             storage.location,
@@ -269,9 +276,12 @@ export function blompRouter({
             input.sha256,
             input.projectId,
             input.jobId,
+            input.projectName ?? null,
           ],
         );
         if (duplicate.rows[0]) return reply(view(duplicate.rows[0]));
+        if (!validBlompFilename(input.name))
+          throw new ApiError(400, "INVALID_REQUEST");
         if (!fileAllowed(input.size))
           throw new ApiError(413, "BLOMP_FILE_LIMIT");
         if (
@@ -298,11 +308,16 @@ export function blompRouter({
         )
           throw new ApiError(404, "NOT_FOUND");
         const id = randomUUID();
-        const object = storage.newReference(input.role, owner);
+        const object = storage.newReference(
+          input.role,
+          owner,
+          input.projectId,
+          input.name,
+        );
         const added = await sql.query<FileRow>(
           `INSERT INTO ${files}
-          (id,owner_id,location,object_key,role,name,mime,size,sha256,project_id,job_id,request_key)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+          (id,owner_id,location,object_key,role,name,mime,size,sha256,project_id,job_id,request_key,project_name)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
           [
             id,
             owner,
@@ -316,6 +331,7 @@ export function blompRouter({
             input.projectId,
             input.jobId,
             key,
+            input.projectName ?? null,
           ],
         );
         await sql.query(

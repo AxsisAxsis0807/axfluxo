@@ -22,6 +22,23 @@ export class CompatibilityFailure extends Error {
   }
 }
 
+export class ProbeServiceStop extends CompatibilityFailure {}
+
+function serviceStopReason(status: number, contentType: string | undefined) {
+  switch (status) {
+    case 401:
+      return "PROBE_AUTH_REQUIRED";
+    case 402:
+      return "PROBE_PAYMENT_REQUIRED";
+    case 403:
+      return "PROBE_ACCESS_DENIED";
+    case 429:
+      return "PROBE_RATE_LIMITED";
+  }
+  if (status >= 300 && status < 400) return "PROBE_REDIRECT_BLOCKED";
+  if (/^text\/html\b/i.test(contentType ?? "")) return "PROBE_HTML_RESPONSE";
+}
+
 /** The SDK, signed requests and OPTIONS all use this single guarded transport. */
 export class CompatibilityTransport {
   readonly metadata = { handlerProtocol: "http/1.1" };
@@ -36,8 +53,19 @@ export class CompatibilityTransport {
     private readonly bucket: string,
     private readonly keys: ReadonlySet<string>,
     private readonly driver: Driver = blompHttpHandler(),
+    private readonly singleObjectLimit?: number,
+    private readonly recordStatus?: (method: string, status: number) => void,
+    private readonly imageRoundTrip = false,
   ) {
-    if (keys.size < 1 || keys.size > 3)
+    if (
+      keys.size < 1 ||
+      keys.size > 3 ||
+      (singleObjectLimit !== undefined &&
+        (keys.size !== 1 ||
+          !Number.isSafeInteger(singleObjectLimit) ||
+          singleObjectLimit < 1 ||
+          singleObjectLimit > (imageRoundTrip ? 1_027_053 : 1_000_000)))
+    )
       throw new CompatibilityFailure("OUT_OF_SCOPE");
   }
   get counters() {
@@ -81,6 +109,12 @@ export class CompatibilityTransport {
   }
   async handle(request: ProbeRequest) {
     const envelope = this.envelope;
+    if (
+      this.imageRoundTrip &&
+      (envelope?.cleanup ||
+        request.method !== (this.requestCount === 0 ? "PUT" : "GET"))
+    )
+      throw new CompatibilityFailure("OUT_OF_SCOPE");
     const prefix = "/" + this.bucket + "/";
     const path = decodeURIComponent(request.path);
     if (
@@ -122,17 +156,33 @@ export class CompatibilityTransport {
       typeof body === "string"
         ? Buffer.byteLength(body)
         : (body?.byteLength ?? 0);
+    if (
+      this.singleObjectLimit !== undefined &&
+      (!["GET", "HEAD", "PUT", "DELETE"].includes(request.method) ||
+        Object.hasOwn(request.query, "uploadId") ||
+        upload > this.singleObjectLimit ||
+        envelope.responseLimit > this.singleObjectLimit)
+    )
+      throw new CompatibilityFailure("OUT_OF_SCOPE");
     const declared = request.headers["content-length"];
     if (upload && Number(declared) !== upload)
       throw new CompatibilityFailure("INVALID_REQUEST_LENGTH");
     const starts =
       request.method === "POST" && Object.hasOwn(request.query, "uploads");
-    const requestLimit = envelope.cleanup
-      ? compatibilityMaximumRequests
-      : compatibilityMaximumRequests - compatibilityCleanupRequests;
-    const byteLimit = envelope.cleanup
-      ? compatibilityMaximumBytes
-      : compatibilityMaximumBytes - cleanupByteReserve;
+    const requestLimit =
+      this.singleObjectLimit !== undefined
+        ? this.imageRoundTrip
+          ? 2
+          : 6
+        : envelope.cleanup
+          ? compatibilityMaximumRequests
+          : compatibilityMaximumRequests - compatibilityCleanupRequests;
+    const byteLimit =
+      this.singleObjectLimit !== undefined
+        ? (this.imageRoundTrip ? 2 : 3) * this.singleObjectLimit
+        : envelope.cleanup
+          ? compatibilityMaximumBytes
+          : compatibilityMaximumBytes - cleanupByteReserve;
     if (
       this.requestCount >= requestLimit ||
       this.sent + this.received + upload + envelope.responseLimit > byteLimit ||
@@ -150,6 +200,29 @@ export class CompatibilityTransport {
     const incoming: unknown = response.body;
     if (!(incoming instanceof Readable))
       throw new CompatibilityFailure("INVALID_RESPONSE_BODY");
+    this.recordStatus?.(request.method, response.statusCode);
+    const stopReason =
+      this.singleObjectLimit === undefined
+        ? undefined
+        : serviceStopReason(
+            response.statusCode,
+            response.headers["content-type"],
+          );
+    if (stopReason) {
+      incoming.destroy();
+      throw new ProbeServiceStop(stopReason, response.statusCode);
+    }
+    if (
+      this.singleObjectLimit !== undefined &&
+      request.method === "PUT" &&
+      response.statusCode !== 200
+    ) {
+      incoming.destroy();
+      throw new CompatibilityFailure(
+        "PROBE_PUT_NOT_CONFIRMED",
+        response.statusCode,
+      );
+    }
     const length = response.headers["content-length"];
     const metadataOnly = request.method === "HEAD";
     const dataRead =
@@ -180,8 +253,9 @@ export class CompatibilityTransport {
     }
     this.pendingResponse = incoming;
     const accountResponse = (bytes: number) => {
+      if (this.sent + this.received + bytes > byteLimit)
+        throw new CompatibilityFailure("RESPONSE_BUDGET_EXCEEDED");
       this.received += bytes;
-      return this.sent + this.received;
     };
     const stop = () => incoming.destroy();
     signal.addEventListener("abort", stop, { once: true });
@@ -194,9 +268,9 @@ export class CompatibilityTransport {
             if (signal.aborted)
               throw new CompatibilityFailure("RESPONSE_TIMEOUT");
             count += chunk.length;
-            const total = accountResponse(chunk.length);
-            if (count > envelope.responseLimit || total > byteLimit)
+            if (count > envelope.responseLimit)
               throw new CompatibilityFailure("RESPONSE_BUDGET_EXCEEDED");
+            accountResponse(chunk.length);
             yield chunk;
           }
           if (signal.aborted)

@@ -1,10 +1,7 @@
-import {
-  storageRoles,
-  type StorageRole,
-} from "../../src/domain/storage/destinations";
+import type { StorageRole } from "../../src/domain/storage/destinations";
+import { newBlompFileKey, newBlompTestKey, validBlompKey } from "./blomp-keys";
 // Server-only experimental adapter. Deliberately NOT wired to cloudConfiguration/workers.
 import { Readable } from "node:stream";
-import { randomUUID } from "node:crypto";
 import {
   S3Client,
   type S3ClientConfig,
@@ -39,11 +36,6 @@ export const blompCapabilities = Object.freeze({
   cors: "unverified",
   usageApi: "unverified",
 });
-const uuid =
-  "[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}";
-const keyPattern = new RegExp(
-  `^axfluxo/(?:${storageRoles.join("|")})/${uuid}/${uuid}$|^axfluxo/connection-tests/${uuid}/probe\\.bin$`,
-);
 function validatedConfig(config: BlompConfig): BlompConfig {
   return blompConfiguration({
     BLOMP_ENABLED: "true",
@@ -138,8 +130,7 @@ export function blompStorage(config: BlompConfig, injected?: S3Client) {
     if (
       ref.provider !== "blomp" ||
       ref.location !== location ||
-      /[\x00-\x20\x7f]/.test(ref.key) ||
-      !keyPattern.test(ref.key)
+      !validBlompKey(ref.key)
     )
       throw new BlompError("BLOMP_INVALID_REFERENCE");
     return { Bucket: config.bucket, Key: ref.key };
@@ -164,11 +155,16 @@ export function blompStorage(config: BlompConfig, injected?: S3Client) {
   return {
     location,
     close: () => client.destroy(),
-    newReference(role: StorageRole, owner: string): BlompRef {
+    newReference(
+      role: StorageRole,
+      owner: string,
+      projectId: string | null,
+      filename: string,
+    ): BlompRef {
       const ref: BlompRef = {
         provider: "blomp",
         location,
-        key: `axfluxo/${role}/${owner}/${randomUUID()}`,
+        key: newBlompFileKey(role, owner, projectId, filename),
       };
       base(ref);
       return ref;
@@ -177,7 +173,7 @@ export function blompStorage(config: BlompConfig, injected?: S3Client) {
       const ref: BlompRef = {
         provider: "blomp",
         location,
-        key: `axfluxo/connection-tests/${randomUUID()}/probe.bin`,
+        key: newBlompTestKey("probe.bin"),
       };
       tests.add(ref.key);
       return ref;

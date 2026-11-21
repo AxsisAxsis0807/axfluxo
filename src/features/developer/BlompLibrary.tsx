@@ -10,6 +10,8 @@ import { blompRole, type BlompFile } from "../../domain/blomp/storage";
 import {
   checkedBlompUrl,
   currentBlompClient,
+  downloadVerifiedBlomp,
+  stageVerifiedBlomp,
   importBlompSource,
   uploadBlomp,
 } from "../../services/blomp/client";
@@ -19,11 +21,13 @@ import { localExportQueue } from "../../services/video/local-export-runtime";
 
 const roleLabels: Record<BlompFile["role"], string> = {
   inputs: "入力素材",
-  originals: "原本素材",
-  intermediates: "途中素材",
+  originals: "元素材",
+  intermediates: "途中データ",
   checkpoints: "チェックポイント",
-  outputs: "完成成果物",
+  outputs: "完成品",
 };
+
+const verifiedDownloadLimit = 16 * 1024 ** 2;
 
 const statuses: Record<BlompFile["status"], string> = {
   queued: "アップロード待ち",
@@ -46,6 +50,8 @@ const bytes = (size: number | null) =>
 const errorMessage = (error: unknown) => {
   const code = error instanceof UploadError ? error.code : "";
   switch (code) {
+    case "UPLOAD_PART_UNCONFIRMED":
+      return "パートの保存結果が未確認です。再開時にクラウド側のパート一覧と照合します。";
     case "UPLOAD_FILE_MISMATCH":
       return "保存開始時と同じ元ファイルを選び直してください。";
     case "BLOMP_FILE_LIMIT":
@@ -112,6 +118,7 @@ export function BlompUpload({
   );
   const [selected, setSelected] = useState<File | null>(null);
   const [role, setRole] = useState<BlompFile["role"]>("originals");
+  const [projectName, setProjectName] = useState("");
   const [active, setActive] = useState(false);
   const [sent, setSent] = useState(0);
   const [message, setMessage] = useState("");
@@ -193,6 +200,9 @@ export function BlompUpload({
           mime: mime as BlompFile["mime"],
           role: destinationRole,
           projectId: resume?.projectId ?? null,
+          projectName: resume
+            ? resume.projectName
+            : projectName.trim() || undefined,
           jobId: resume?.jobId ?? null,
         },
         resumeId: resume?.id,
@@ -215,11 +225,27 @@ export function BlompUpload({
   }
   return (
     <div>
+      <p>
+        保存先 Blomp
+        {(resume || source) &&
+          ` · 用途 ${roleLabels[resume?.role ?? "outputs"]}`}
+      </p>
+      {!resume && (
+        <label>
+          プロジェクト名（任意）{" "}
+          <input
+            value={projectName}
+            maxLength={120}
+            disabled={active}
+            onChange={(e) => setProjectName(e.target.value)}
+          />
+        </label>
+      )}
       {!source && (
         <>
           {!resume && (
             <label>
-              保存する種類{" "}
+              用途{" "}
               <select
                 value={role}
                 onChange={(e) => setRole(blompRole.parse(e.target.value))}
@@ -261,7 +287,7 @@ export function BlompUpload({
             value={sent}
             aria-label="Blomp転送進捗"
           />
-          <span>{bytes(sent)} 転送済み</span>
+          <span>{bytes(sent)} 確認済み（パート単位）</span>
           <button type="button" onClick={() => control.current?.abort()}>
             中断
           </button>
@@ -297,18 +323,34 @@ export default function BlompLibrary({
   const [search, setSearch] = useState("");
   const [newest, setNewest] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [access, setAccess] = useState<{
-    url: string;
-    expiresAt: number;
-    id: string;
-  } | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const downloadControl = useRef<AbortController | null>(null);
+  useEffect(() => () => downloadControl.current?.abort(), []);
+  const [access, setAccess] = useState<
+    | ({ url: string; id: string } & (
+        | { verified: true; release?: () => Promise<void> }
+        | { verified: false; expiresAt: number }
+      ))
+    | null
+  >(null);
   useEffect(() => {
     if (!access) return;
-    const expire = setTimeout(
-      () => setAccess(null),
-      Math.max(0, access.expiresAt - Date.now()),
-    );
-    return () => clearTimeout(expire);
+    const expire =
+      access.verified && access.release
+        ? undefined
+        : setTimeout(
+            () => setAccess(null),
+            access.verified
+              ? 120000
+              : Math.max(0, access.expiresAt - Date.now()),
+          );
+    return () => {
+      clearTimeout(expire);
+      if (access.verified) {
+        URL.revokeObjectURL(access.url);
+        void access.release?.();
+      }
+    };
   }, [access]);
   async function refresh(next?: string) {
     if (!api) return;
@@ -362,19 +404,85 @@ export default function BlompLibrary({
     setBusy(true);
     setMessage("");
     setAccess(null);
+    const controller = new AbortController();
+    if (!cancel) {
+      downloadControl.current = controller;
+      setDownloading(true);
+    }
     try {
       if (cancel) {
         const result = value(await api.cancel(file.id));
         setFiles((items) =>
           items.map((item) => (item.id === result.id ? result : item)),
         );
+      } else if (file.size <= verifiedDownloadLimit) {
+        const verified = await downloadVerifiedBlomp(
+          api,
+          file,
+          verifiedDownloadLimit,
+          fetch,
+          AbortSignal.any([controller.signal, AbortSignal.timeout(120000)]),
+        );
+        controller.signal.throwIfAborted();
+        setAccess({
+          id: file.id,
+          url: URL.createObjectURL(verified),
+          verified: true,
+        });
       } else {
-        const signed = value(await api.download(file.id));
-        setAccess({ ...signed, url: checkedBlompUrl(signed.url), id: file.id });
+        try {
+          const staged = await stageVerifiedBlomp(
+            api,
+            file,
+            AbortSignal.any([
+              controller.signal,
+              AbortSignal.timeout(10 * 60 * 1000),
+            ]),
+          );
+          try {
+            controller.signal.throwIfAborted();
+            setAccess({
+              id: file.id,
+              url: URL.createObjectURL(staged.blob),
+              verified: true,
+              release: staged.release,
+            });
+          } catch (error) {
+            await staged.release();
+            throw error;
+          }
+        } catch (error) {
+          if (
+            !(error instanceof UploadError) ||
+            error.code !== "BLOMP_DOWNLOAD_STORAGE_UNAVAILABLE"
+          )
+            throw error;
+          controller.signal.throwIfAborted();
+          const signed = value(await api.download(file.id));
+          controller.signal.throwIfAborted();
+          setAccess({
+            ...signed,
+            url: checkedBlompUrl(signed.url),
+            id: file.id,
+            verified: false,
+          });
+        }
       }
     } catch (error) {
-      setMessage(errorMessage(error));
+      setMessage(
+        controller.signal.aborted
+          ? "ダウンロード準備を中断しました。"
+          : !cancel &&
+              error instanceof UploadError &&
+              error.code === "UPLOAD_FILE_MISMATCH"
+            ? "取得したファイルのサイズまたはSHA-256が一致しません。"
+            : errorMessage(error),
+      );
     } finally {
+      if (downloadControl.current === controller) {
+        downloadControl.current = null;
+        setDownloading(false);
+      }
       setBusy(false);
     }
   }
@@ -433,6 +541,14 @@ export default function BlompLibrary({
               <BlompUpload onChange={() => void refresh()} />
             )}
           {message && <p role="status">{message}</p>}
+          {downloading && (
+            <button
+              type="button"
+              onClick={() => downloadControl.current?.abort()}
+            >
+              ダウンロード準備を中断
+            </button>
+          )}
           {files.length > 0 && (
             <>
               <label>
@@ -475,13 +591,37 @@ export default function BlompLibrary({
                       : a.name.localeCompare(b.name),
                   )
                   .map((file) => (
-                    <li key={file.id}>
-                      <strong>{file.name}</strong> {file.mime}・
-                      {bytes(file.size)}・{statuses[file.status]}・
-                      {new Date(file.createdAt).toLocaleString()}
-                      {file.projectId && (
-                        <span> プロジェクト {file.projectId}</span>
-                      )}
+                    <li
+                      key={file.id}
+                      style={{
+                        overflowWrap: "anywhere",
+                        marginBlockEnd: "1rem",
+                      }}
+                    >
+                      <strong style={{ whiteSpace: "pre-wrap" }}>
+                        {file.name}
+                      </strong>
+                      <dl>
+                        <dt>用途</dt>
+                        <dd>{roleLabels[file.role]}</dd>
+                        <dt>プロジェクト名</dt>
+                        <dd>
+                          {file.projectName ??
+                            (file.projectId ? "名前未登録" : "未設定")}
+                        </dd>
+                        <dt>作成日時</dt>
+                        <dd>
+                          <time dateTime={file.createdAt}>
+                            {new Date(file.createdAt).toLocaleString("ja-JP")}
+                          </time>
+                        </dd>
+                        <dt>ファイル形式・サイズ</dt>
+                        <dd>
+                          {file.mime}・{bytes(file.size)}
+                        </dd>
+                        <dt>保存状態</dt>
+                        <dd>{statuses[file.status]}</dd>
+                      </dl>
                       {file.status === "ready" && (
                         <button
                           type="button"
@@ -506,13 +646,26 @@ export default function BlompLibrary({
                         </p>
                       )}
                       {access?.id === file.id && (
-                        <a
-                          href={access.url}
-                          download={file.name}
-                          referrerPolicy="no-referrer"
-                        >
-                          ダウンロード
-                        </a>
+                        <>
+                          <a
+                            href={access.url}
+                            download={file.name}
+                            referrerPolicy="no-referrer"
+                          >
+                            {roleLabels[file.role]}をダウンロード
+                            {access.verified
+                              ? "（SHA-256確認済み）"
+                              : "（取得時の照合なし）"}
+                          </a>
+                          {access.verified && access.release && (
+                            <button
+                              type="button"
+                              onClick={() => setAccess(null)}
+                            >
+                              保存後に取得データを閉じる
+                            </button>
+                          )}
+                        </>
                       )}
                       {[
                         "queued",
@@ -549,6 +702,12 @@ export default function BlompLibrary({
               </ul>
             </section>
           ))}
+          {!onUseSource && (
+            <section>
+              <h3>接続テスト</h3>
+              <p>接続診断用ファイルは通常のファイル一覧には表示されません。</p>
+            </section>
+          )}
           {cursor && (
             <button
               type="button"
