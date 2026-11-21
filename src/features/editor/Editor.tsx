@@ -1,8 +1,12 @@
 "use client";
+import { blompApiOrigin } from "../../services/blomp/client";
 import Account from "../auth/Account";
 import { DeveloperStudioEntry } from "../developer/DeveloperAccess";
 import dynamic from "next/dynamic";
 import { WORKFLOW_ENABLED } from "../../config/workflow-limits";
+const BlompLibrary = dynamic(() => import("../developer/BlompLibrary"), {
+  ssr: false,
+});
 const Workflow = dynamic(() => import("../workflow/Workflow"), {
   ssr: false,
   loading: () => <p role="status">Workflowを読み込み中…</p>,
@@ -1209,6 +1213,14 @@ export default function Editor({
                 <small>PNG / JPEG / 静止WebP · 20MiBまで</small>
               </button>
             </div>
+            {blompApiOrigin() && (
+              <BlompLibrary
+                onUseSource={async (image) => {
+                  setView("studio");
+                  await addImage(image);
+                }}
+              />
+            )}
           </div>
         )}
         {view === "settings" && (

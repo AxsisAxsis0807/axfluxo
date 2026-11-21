@@ -1,5 +1,12 @@
 "use client";
+import {
+  audioFileAccept,
+  isDirectAudioFile,
+  localAudioDetails,
+} from "../../services/video/local-audio";
+import { blompApiOrigin } from "../../services/blomp/client";
 import { useEffect, useRef, useState } from "react";
+import BlompLibrary from "./BlompLibrary";
 import { isInteriorBoundary } from "../../services/video/timeline-math";
 import LocalCompositionPreview from "./LocalCompositionPreview";
 import LocalTimeline from "./LocalTimeline";
@@ -10,6 +17,7 @@ import { isUnlocked } from "../../services/developer/local-lock";
 import {
   buildLocalJobs,
   localProjectIssue,
+  versionNameSuggestions,
   type Source,
   type Range,
   type LocalProjectData,
@@ -76,6 +84,7 @@ export default function LocalVideoTool({
   mode: "all-versions" | "fnf-showcase";
   ownerId: string;
 }) {
+  const [loadingVersion, setLoadingVersion] = useState<string>();
   const [rest, setRest] = useState(true);
   const [ready, setReady] = useState(false);
   const [saveStatus, setSaveStatus] = useState("保存データを確認中…");
@@ -85,6 +94,7 @@ export default function LocalVideoTool({
   const [coverId, setCoverId] = useState("");
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewJobs, setPreviewJobs] = useState<LocalEncodeJob[]>([]);
+  const previewRequest = useRef(0);
   const [sources, setSources] = useState<Source[]>([]),
     [cover, setCover] = useState(""),
     [names, setNames] = useState("");
@@ -108,7 +118,7 @@ export default function LocalVideoTool({
   const previousSources = useRef<Source[]>([]);
   useEffect(() => {
     for (const source of previousSources.current) {
-      if (!sources.some((current) => current.id === source.id)) {
+      if (!sources.some((current) => current.url === source.url)) {
         URL.revokeObjectURL(source.url);
         urls.current = urls.current.filter((url) => url !== source.url);
       }
@@ -120,38 +130,108 @@ export default function LocalVideoTool({
     urls.current.push(url);
     return url;
   }
-  async function select(files: File[]) {
-    if (!files.length) return;
+  async function select(
+    files: File[],
+    kind?: "audio" | "video",
+    replacement?: Source,
+  ) {
+    if (!files.length || loading) return;
     setLoading(true);
+    setLoadingVersion(replacement?.id);
     setError("");
+    const pending: string[] = [];
+    let applied = false;
     try {
       const selected: Source[] = [];
-      for (const file of fnf ? files.slice(0, 1) : files) {
+      const audioCount = sources.filter((source) => source.audio).length;
+      for (const file of fnf || replacement ? files.slice(0, 1) : files) {
         if (!active.current) return;
-        selected.push(await metadata(file, objectUrl(file)));
+        const url = objectUrl(file);
+        pending.push(url);
+        if (kind === "audio" || (!kind && isDirectAudioFile(file))) {
+          const { duration, ...info } = await localAudioDetails(file, url);
+          const position =
+            audioCount + selected.filter((source) => source.audio).length;
+          selected.push({
+            id: replacement?.id ?? crypto.randomUUID(),
+            ...(replacement ? { assetId: crypto.randomUUID() } : {}),
+            file,
+            url,
+            duration,
+            width: 0,
+            height: 0,
+            start: 0,
+            end: duration,
+            markers: "",
+            audio: {
+              ...info,
+              status: "ready",
+              name:
+                replacement?.audio?.name ??
+                versionNameSuggestions[position] ??
+                `Version ${position + 1}`,
+            },
+          });
+        } else {
+          const video = await metadata(file, url);
+          if (fnf && (!video.width || !video.height))
+            throw Error(
+              "動画を選択してください。音声だけの場合は「音声ファイルを選択」を使ってください。",
+            );
+          selected.push(video);
+        }
       }
       if (!active.current) return;
-      if (fnf && (!selected[0].width || !selected[0].height))
-        throw Error("FNFには動画を選択してください。");
-      setSources((old) => (fnf ? selected : [...old, ...selected]));
-      setRanges(
-        fnf
-          ? [
-              {
-                id: crypto.randomUUID(),
-                start: 0,
-                end: Math.min(30, selected[0].duration),
-                name: "",
-              },
-            ]
-          : [],
+      invalidatePreview();
+      setSources((old) =>
+        replacement
+          ? old.map((source) =>
+              source.id === replacement.id ? selected[0] : source,
+            )
+          : fnf
+            ? selected
+            : [...old, ...selected],
       );
+      if (fnf)
+        setRanges([
+          {
+            id: crypto.randomUUID(),
+            start: 0,
+            end: Math.min(30, selected[0].duration),
+            name: "",
+          },
+        ]);
+      applied = true;
     } catch (e) {
       if (active.current)
         setError(e instanceof Error ? e.message : "素材を読み込めません。");
     } finally {
-      if (active.current) setLoading(false);
+      if (!applied) {
+        pending.forEach(URL.revokeObjectURL);
+        urls.current = urls.current.filter((url) => !pending.includes(url));
+      }
+      if (active.current) {
+        setLoading(false);
+        setLoadingVersion(undefined);
+      }
     }
+  }
+  function invalidatePreview() {
+    previewRequest.current++;
+    setPreviewJobs([]);
+  }
+  function moveSource(id: string, direction: -1 | 1) {
+    invalidatePreview();
+    setSources((old) => {
+      const position = old.findIndex((source) => source.id === id);
+      if (position < 0 || !old[position + direction]) return old;
+      const next = [...old];
+      [next[position], next[position + direction]] = [
+        next[position + direction],
+        next[position],
+      ];
+      return next;
+    });
   }
   function template(save: boolean) {
     try {
@@ -346,6 +426,7 @@ export default function LocalVideoTool({
     };
   }
   function patch(id: string, value: Partial<Source>) {
+    if (value.audio) invalidatePreview();
     setSources((old) => old.map((s) => (s.id === id ? { ...s, ...value } : s)));
   }
   if (!ready)
@@ -362,7 +443,7 @@ export default function LocalVideoTool({
     >
       <h1>{fnf ? "FNF Showcase Maker" : "All Versions Video Maker"}</h1>
       <p>
-        端末の素材を選択して制作します。素材・動画のアップロードは行いません。端末内機能はログイン・動画APIなしで利用できます。
+        端末の素材を選択して制作します。クラウド転送は明示操作で開始します。端末内機能はログイン・動画APIなしで利用できます。
       </p>
       <p
         role="status"
@@ -376,16 +457,40 @@ export default function LocalVideoTool({
         端末のテンプレートを読み込む
       </button>
       <label>
-        端末の素材
+        <span id="local-video-source-help">動画から音声を抽出</span>
         <input
           aria-label="端末の素材"
+          aria-describedby="local-video-source-help"
           type="file"
           accept={fnf ? "video/*" : "audio/*,video/*"}
           multiple={!fnf}
           disabled={loading}
-          onChange={(e) => void select(Array.from(e.target.files ?? []))}
+          onChange={(e) => void select(Array.from(e.target.files ?? []), "video")}
         />
       </label>
+      <label>
+        音声ファイルを選択
+        <input
+          type="file"
+          accept={audioFileAccept}
+          multiple={!fnf}
+          disabled={loading}
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            void select(files, "audio");
+          }}
+        />
+      </label>
+      {fnf && sources[0]?.audio && (
+        <p>音声と区間に合わせ、背景と譜面名から動画を作成します。</p>
+      )}
+      {blompApiOrigin() && !loading && (
+        <BlompLibrary
+          sourceKind={fnf ? "video" : "media"}
+          onUseSource={(source) => select([source])}
+        />
+      )}
       {loading && <p role="status">素材を読み込んでいます…</p>}
       {error && <p role="alert">{error}</p>}
       {sources.map((s, i) => (
@@ -393,16 +498,66 @@ export default function LocalVideoTool({
           <legend>
             素材 {i + 1}：{s.file.name}（{s.duration.toFixed(2)}秒）
           </legend>
-          <video
-            id={`local-media-${s.id}`}
-            src={s.url}
-            controls
-            playsInline
-            preload="metadata"
-            style={{ width: "100%", maxHeight: 360 }}
-            aria-label={`素材 ${i + 1} プレビュー`}
-          />
+          {s.audio ? (
+            <>
+              <audio
+                id={`local-media-${s.id}`}
+                src={s.url}
+                controls
+                preload="metadata"
+                aria-label={`素材 ${i + 1} プレビュー`}
+              />
+              <p>
+                {loadingVersion === s.id
+                  ? "差し替えファイルを検証中"
+                  : "読み込み・再生確認済み"}{" "}
+                · {s.audio.sampleRate ?? "未取得"} Hz ·{" "}
+                {s.audio.channels ?? "未取得"} ch
+              </p>
+              {!fnf && (
+                <>
+                  <label>
+                    バージョン名
+                    <input
+                      value={s.audio.name}
+                      list="local-version-suggestions"
+                      disabled={loadingVersion === s.id}
+                      onChange={(e) =>
+                        patch(s.id, {
+                          audio: { ...s.audio!, name: e.target.value },
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    このバージョンの音声を差し替え
+                    <input
+                      type="file"
+                      accept={audioFileAccept}
+                      disabled={loading}
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        e.target.value = "";
+                        void select(files, "audio", s);
+                      }}
+                    />
+                  </label>
+                </>
+              )}
+            </>
+          ) : (
+            <video
+              id={`local-media-${s.id}`}
+              src={s.url}
+              controls
+              playsInline
+              preload="metadata"
+              style={{ width: "100%", maxHeight: 360 }}
+              aria-label={`素材 ${i + 1} プレビュー`}
+            />
+          )}
           <LocalTimeline
+            key={s.assetId ?? s.id}
             file={s.file}
             timeline={s.timeline}
             onTimelineState={(state) => {
@@ -413,7 +568,7 @@ export default function LocalVideoTool({
             media={() =>
               document.getElementById(
                 `local-media-${s.id}`,
-              ) as HTMLVideoElement | null
+              ) as HTMLMediaElement | null
             }
             fnf={fnf}
             items={
@@ -434,7 +589,7 @@ export default function LocalVideoTool({
                   ]
             }
             onMarkerAdd={
-              fnf
+              fnf || s.audio
                 ? undefined
                 : (us) => {
                     const markers = s.markers
@@ -454,7 +609,7 @@ export default function LocalVideoTool({
                   }
             }
             onMarkerDelete={
-              fnf
+              fnf || s.audio
                 ? undefined
                 : (index) =>
                     patch(s.id, {
@@ -466,7 +621,7 @@ export default function LocalVideoTool({
                     })
             }
             onMarkerEdit={
-              fnf
+              fnf || s.audio
                 ? undefined
                 : (index, us) => {
                     const markers = s.markers.split(",").map(Number);
@@ -519,29 +674,33 @@ export default function LocalVideoTool({
                   onChange={(e) => patch(s.id, { end: Number(e.target.value) })}
                 />
               </label>
-              <label>
-                version境界（素材内の秒、カンマ区切り）
-                <input
-                  value={s.markers}
-                  onChange={(e) => patch(s.id, { markers: e.target.value })}
-                />
-              </label>
+              {!s.audio && (
+                <label>
+                  version境界（素材内の秒、カンマ区切り）
+                  <input
+                    value={s.markers}
+                    onChange={(e) => patch(s.id, { markers: e.target.value })}
+                  />
+                </label>
+              )}
               <button
-                disabled={i === 0}
-                onClick={() =>
-                  setSources((old) => {
-                    const next = [...old];
-                    [next[i - 1], next[i]] = [next[i], next[i - 1]];
-                    return next;
-                  })
-                }
+                disabled={loading || i === 0}
+                onClick={() => moveSource(s.id, -1)}
               >
-                素材を前へ
+                {s.audio ? "バージョンを上へ" : "素材を前へ"}
               </button>
               <button
-                onClick={() =>
-                  setSources((old) => old.filter((v) => v.id !== s.id))
-                }
+                disabled={loading || i === sources.length - 1}
+                onClick={() => moveSource(s.id, 1)}
+              >
+                {s.audio ? "バージョンを下へ" : "素材を後ろへ"}
+              </button>
+              <button
+                disabled={loading}
+                onClick={() => {
+                  invalidatePreview();
+                  setSources((old) => old.filter((v) => v.id !== s.id));
+                }}
               >
                 素材を外す
               </button>
@@ -662,27 +821,39 @@ export default function LocalVideoTool({
               }}
             />
           </label>
-          <label>
-            version名（1行に1つ）
-            <textarea
-              rows={6}
-              value={names}
-              onChange={(e) => setNames(e.target.value)}
-            />
-          </label>
+          <datalist id="local-version-suggestions">
+            {versionNameSuggestions.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+          {(!sources.length || sources.some((source) => !source.audio)) && (
+            <label>
+              version名（1行に1つ）
+              <textarea
+                rows={6}
+                value={names}
+                onChange={(e) => setNames(e.target.value)}
+              />
+            </label>
+          )}
         </>
       )}
       <button
         disabled={loading || !sources.length}
-        onClick={() =>
+        onClick={() => {
+          const request = ++previewRequest.current;
           void prepare(false)
-            .then(setPreviewJobs)
-            .catch((e) =>
-              setError(
-                e instanceof Error ? e.message : "プレビューを準備できません。",
-              ),
-            )
-        }
+            .then((jobs) => {
+              if (active.current && previewRequest.current === request)
+                setPreviewJobs(jobs);
+            })
+            .catch((e) => {
+              if (active.current && previewRequest.current === request)
+                setError(
+                  e instanceof Error ? e.message : "プレビューを準備できません。",
+                );
+            });
+        }}
       >
         合成プレビューを更新
       </button>

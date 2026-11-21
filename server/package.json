@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": "24.x"
+    "node": "^24.5.0"
   },
   "scripts": {
     "start": "node ../work/video-server/api.mjs",
@@ -19,12 +19,15 @@
     "build:deletion": "esbuild worker/deletion/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/deletion.mjs",
     "build:notifications": "esbuild worker/notifications/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/notifications.mjs",
     "build:worker": "esbuild worker/runtime/main.ts --bundle --platform=node --target=node24 --packages=external --format=esm --outfile=../work/video-server/worker.mjs",
-    "worker": "node ../work/video-server/worker.mjs"
+    "worker": "node ../work/video-server/worker.mjs",
+    "verify:blomp": "node --use-env-proxy --import tsx scripts/verify-blomp.ts",
+    "verify:blomp-compatibility": "node --use-env-proxy --import tsx scripts/verify-blomp-compatibility.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1161.0",
     "@aws-sdk/s3-request-presigner": "3.1161.0",
     "@napi-rs/canvas": "1.1.0",
+    "@smithy/node-http-handler": "4.14.1",
     "jose": "6.2.14",
     "pg": "8.23.1",
     "web-push": "3.6.7",

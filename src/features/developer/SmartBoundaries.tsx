@@ -41,7 +41,7 @@ export default function SmartBoundaries({
   currentUs: number;
   onSeek: (us: number) => void;
   onApply: (us: number) => void;
-  media: () => HTMLVideoElement | null;
+  media: () => HTMLMediaElement | null;
   bounds: { startUs: number; endUs: number };
 }) {
   const [progress, setProgress] = useState<number | null>(null);

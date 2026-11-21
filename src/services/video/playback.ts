@@ -30,11 +30,11 @@ export class PlaybackController {
   private renewing: Promise<void> | null = null;
   private generation = 0;
   constructor(
-    private media: HTMLVideoElement,
+    private media: HTMLMediaElement,
     private renew: () => Promise<{ url: string; mapping: PtsMapping }>,
     public mapping: PtsMapping,
   ) {
-    media.playsInline = true;
+    if ("playsInline" in media) media.playsInline = true;
     media.preload = "metadata";
   }
   currentUs() {

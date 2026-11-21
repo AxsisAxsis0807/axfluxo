@@ -2,6 +2,7 @@ import { fnfCodes } from "../../domain/video/fnf-showcase";
 import { projectCodes } from "../../domain/video/all-versions";
 import { z } from "zod";
 import { previewCodeSchema } from "../../domain/video/preview";
+import { blompErrorCodes } from "../../domain/blomp/storage";
 import { cloudErrorCodes } from "../../domain/cloud-library/media";
 import {
   batchViewSchema,
@@ -199,6 +200,7 @@ export function createVideoApiClient(options: {
               error: z.strictObject({
                 code: z.enum([
                   ...cloudErrorCodes,
+                  ...blompErrorCodes,
                   ...projectCodes,
                   ...fnfCodes,
                   ...previewCodeSchema.options,

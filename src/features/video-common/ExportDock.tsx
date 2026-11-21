@@ -8,6 +8,7 @@ import {
   retryRecoveryPersistence,
 } from "../../services/video/local-export-runtime";
 import { isUnlocked, readVerifier } from "../../services/developer/local-lock";
+import { BlompUpload } from "../developer/BlompLibrary";
 import type { ExportEntry } from "../../services/video/export-queue";
 function SavedFile({ entry }: { entry: ExportEntry }) {
   const [url, setUrl] = useState("");
@@ -18,9 +19,16 @@ function SavedFile({ entry }: { entry: ExportEntry }) {
     return () => URL.revokeObjectURL(value);
   }, [entry.result]);
   return url ? (
-    <a href={url} download={entry.filename}>
-      {entry.filename}を保存
-    </a>
+    <>
+      <a href={url} download={entry.filename}>
+        {entry.filename}を保存
+      </a>
+      {entry.result && (
+        <BlompUpload
+          source={{ blob: entry.result.blob, name: entry.filename }}
+        />
+      )}
+    </>
   ) : null;
 }
 export default function ExportDock() {

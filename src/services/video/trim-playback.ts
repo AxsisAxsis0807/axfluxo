@@ -27,7 +27,7 @@ export function clampToTrim(time: number, ranges: TrimRange[]) {
     );
 }
 /** Bind to a preview element only; encoding owns a different media element. */
-export function bindTrimPlayback(video: HTMLVideoElement, ranges: TrimRange[]) {
+export function bindTrimPlayback(video: HTMLMediaElement, ranges: TrimRange[]) {
   let frame = 0;
   const start = ranges[0].start,
     end = ranges.at(-1)!.end;
