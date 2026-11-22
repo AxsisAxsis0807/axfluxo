@@ -1,29 +1,43 @@
 "use client";
 import { useEffect, useRef } from "react";
 
-/** Only mount a native decoder while the user is actively inspecting this source.
- * Keep the shared object URL alive for timeline edits and the export queue. */
+/** Keep at most one native media decoder alive. All Versions only needs audio:
+ * it renders an independent cover image rather than source video frames. */
 export default function LocalMediaPreview({
   id,
   url,
+  audioOnly,
   onError,
 }: {
   id: string;
   url: string;
+  audioOnly: boolean;
   onError: () => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
+  const audio = useRef<HTMLAudioElement>(null);
   useEffect(() => {
-    const element = video.current;
+    const element = audioOnly ? audio.current : video.current;
     return () => {
       if (!element) return;
-      // Removing the source AND calling load() releases Safari's media pipeline.
+      // Keep the File URL for editing/export, but release native media state.
       element.pause();
       element.removeAttribute("src");
       element.load();
     };
-  }, [url]);
-  return (
+  }, [url, audioOnly]);
+  return audioOnly ? (
+    <audio
+      ref={audio}
+      id={`local-media-${id}`}
+      src={url}
+      controls
+      preload="none"
+      onError={onError}
+      style={{ width: "100%" }}
+      aria-label="素材音声プレビュー"
+    />
+  ) : (
     <video
       ref={video}
       id={`local-media-${id}`}
@@ -33,7 +47,7 @@ export default function LocalMediaPreview({
       preload="none"
       onError={onError}
       style={{ width: "100%", maxHeight: 360 }}
-      aria-label="素材プレビュー"
+      aria-label="素材動画プレビュー"
     />
   );
 }
