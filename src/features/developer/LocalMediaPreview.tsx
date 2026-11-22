@@ -47,7 +47,9 @@ export default function LocalMediaPreview({
       controls
       playsInline
       preload={warmMetadata ? "metadata" : "none"}
-      onError={onError}
+      // Keep the original video-element EOF behavior: WebKit sometimes fires
+      // a transient media error when seeking a PCM file to its final sample.
+      // Destroying the element there loses the editor's exact cursor.
       style={{ width: "100%", maxHeight: 360 }}
       aria-label="素材動画プレビュー"
     />
