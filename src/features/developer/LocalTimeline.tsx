@@ -27,6 +27,7 @@ import type { TimelineState } from "../../services/video/local-project";
 export default function LocalTimeline({
   file,
   duration,
+  analysisEnabled = true,
   media,
   items,
   markers,
@@ -42,6 +43,7 @@ export default function LocalTimeline({
   onTimelineState?: (state: TimelineState) => void;
   file: File;
   duration: number;
+  analysisEnabled?: boolean;
   media: () => HTMLVideoElement | null;
   items: TimelineItem[];
   markers: number[];
@@ -83,7 +85,8 @@ export default function LocalTimeline({
       const pending = Math.abs(video.currentTime - physical) > 0.0000005;
       cursorSeek.current = { us, pending };
       setCurrent(us);
-      if (pending) video.currentTime = physical;
+      // Deferred media has no source until its preview is requested.
+      if (pending && video.readyState >= 1) video.currentTime = physical;
     },
     [duration],
   );
@@ -153,7 +156,7 @@ export default function LocalTimeline({
     () => ({ startUs: ranges[0].start * 1e6, endUs: ranges.at(-1)!.end * 1e6 }),
     [ranges],
   );
-  const analysis = useLocalWaveform(file, duration);
+  const analysis = useLocalWaveform(file, duration, analysisEnabled);
   const detail = useWaveformDetail(
     file,
     duration,
@@ -322,7 +325,8 @@ export default function LocalTimeline({
           { id: `${i.id}:end`, time: i.endUs },
         ])
         .find((i) => i.id === selectedBoundary)?.time;
-  const busy = analysis.status === "queued" || analysis.status === "analyzing";
+  const busy = analysisEnabled &&
+    (analysis.status === "queued" || analysis.status === "analyzing");
   const messages = {
     queued: "音声波形の解析待ち…",
     analyzing: `音声波形を解析中 ${Math.floor(analysis.progress * 100)}%（編集できます）`,
@@ -336,15 +340,18 @@ export default function LocalTimeline({
   return (
     <section aria-label="素材のタイムライン">
       <p role="status">
-        {messages[analysis.status]}{" "}
-        {analysis.status === "failed" ? analysis.reason : ""}
+        {analysisEnabled
+          ? messages[analysis.status]
+          : "波形解析は未開始です。素材のプレビューとは別に開始できます。"}{" "}
+        {analysisEnabled && analysis.status === "failed" ? analysis.reason : ""}
       </p>
       {busy && (
         <button type="button" onClick={analysis.cancel}>
           波形解析をキャンセル
         </button>
       )}
-      {["cancelled", "paused", "failed"].includes(analysis.status) && (
+      {analysisEnabled &&
+        ["cancelled", "paused", "failed"].includes(analysis.status) && (
         <button type="button" onClick={analysis.retry}>
           波形を再解析
         </button>
