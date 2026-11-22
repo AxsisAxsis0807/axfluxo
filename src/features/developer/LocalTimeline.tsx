@@ -85,7 +85,10 @@ export default function LocalTimeline({
       const pending = Math.abs(video.currentTime - physical) > 0.0000005;
       cursorSeek.current = { us, pending };
       setCurrent(us);
-      if (pending) video.currentTime = physical;
+      // The deferred preview has no src until the user opts in. Seeking an
+      // uninitialized native element can throw in Safari; retain cursor UI
+      // and apply the seek after metadata has loaded.
+      if (pending && video.getAttribute("src")) video.currentTime = physical;
     },
     [duration],
   );
