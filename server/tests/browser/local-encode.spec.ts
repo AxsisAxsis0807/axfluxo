@@ -161,7 +161,13 @@ test("encoder records a real 1.5-second silent interval rather than pausing the 
   await page.route("https://encode.test/?gap=1", (r) =>
     r.fulfill({
       contentType: "text/html",
-      body: `<html><div id="root"></div><script>${built.outputFiles[0].text.replace(/<\\/script/gi, "<\\\\/script")}</script></html>`,
+      body: '<html><div id="root"></div><script src="/bundle.js"></script></html>',
+    }),
+  );
+  await page.route("https://encode.test/bundle.js", (r) =>
+    r.fulfill({
+      contentType: "application/javascript",
+      body: built.outputFiles[0].text,
     }),
   );
   await page.addInitScript(() => {
