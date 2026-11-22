@@ -290,6 +290,8 @@ for (const mode of ["all", "fnf"]) {
       "この端末に自動保存済み",
     );
     await page.reload();
+    await page.getByRole("button", { name: /前回の作業を再開/ }).click({ timeout: 35000 });
+    await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
     // Recovery deliberately waits for the previous tab's ~20s writer lease.
     await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
       timeout: 35000,
