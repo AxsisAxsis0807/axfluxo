@@ -69,39 +69,47 @@ for (const [kind, cancelDuringRest] of [
       createElement: (tag: string) => (tag === "canvas" ? canvas : media),
       body: { append: vi.fn() },
     });
-    class Recorder {
+    class Recorder extends EventTarget {
       static isTypeSupported() {
         return true;
       }
       state = "inactive";
-      onstart: (() => void) | null = null;
-      onstop: (() => void) | null = null;
       start() {
         this.state = "recording";
         states.push("start");
         setTimeout(() => {
           expect(playing).toBe(false);
           expect(position).toBe(0);
-          this.onstart?.();
+          this.dispatchEvent(new Event("start"));
         }, 100);
       }
       pause() {
         this.state = "paused";
         states.push("pause");
+        this.dispatchEvent(new Event("pause"));
       }
       resume() {
         this.state = "recording";
         states.push("resume");
+        expect(playing).toBe(false);
+        this.dispatchEvent(new Event("resume"));
       }
       stop() {
         this.state = "inactive";
         states.push("stop");
-        this.onstop?.();
+        this.dispatchEvent(new Event("stop"));
       }
     }
     vi.stubGlobal("MediaRecorder", Recorder);
+    let audioState: AudioContextState = "running";
+    const resumeAudio = vi.fn(async () => {
+      audioState = "running";
+    });
     const audio = {
-      state: "running",
+      get state() {
+        return audioState;
+      },
+      resume: resumeAudio,
       createMediaStreamDestination: () => ({
         stream: {
           getAudioTracks: () => [{ readyState: "live", stop: vi.fn() }],
@@ -146,11 +154,13 @@ for (const [kind, cancelDuringRest] of [
       expect(states.at(-1)).toBe("stop");
       return;
     }
+    audioState = "suspended";
     await vi.advanceTimersByTimeAsync(239_000);
     expect((media as unknown as HTMLVideoElement).currentTime).toBe(pausedAt);
     expect(states.at(-1)).toBe("pause");
     await vi.advanceTimersByTimeAsync(2_000);
     expect((await result).filename).toBe("test.mp4");
+    expect(resumeAudio).toHaveBeenCalledTimes(1);
     expect(validateLocalOutput).toHaveBeenCalled();
     expect(states).toEqual(["start", "pause", "resume", "stop"]);
     expect(

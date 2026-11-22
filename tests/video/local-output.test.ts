@@ -122,3 +122,70 @@ it("checks both track ranges beyond ten minutes without decoding samples", async
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+it.each([
+  ["映像", 2, 5],
+  ["音声", 5, 2],
+] as const)(
+  "rejects an interior %s gap even when track endpoints match",
+  async (kind, videoSeconds, audioSeconds) => {
+    const dir = await mkdtemp(join(tmpdir(), "validate-gaps-local-"));
+    try {
+      const output = join(dir, "gap.mp4");
+      const gap = "PTS+gte(T\\,1)*3/TB";
+      execFileSync("ffmpeg", [
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        `color=blue:s=16x16:r=30:d=${videoSeconds}`,
+        "-f",
+        "lavfi",
+        "-i",
+        `sine=frequency=440:duration=${audioSeconds}`,
+        ...(kind === "映像"
+          ? ["-vf", `setpts=${gap}`, "-fps_mode", "vfr", "-bf", "0"]
+          : ["-af", `asetpts=${gap}`]),
+        "-threads",
+        "1",
+        "-c:v",
+        "libx264",
+        "-c:a",
+        "aac",
+        "-y",
+        output,
+      ]);
+      const probe = JSON.parse(
+        execFileSync(
+          "ffprobe",
+          [
+            "-v",
+            "error",
+            "-select_streams",
+            kind === "映像" ? "v:0" : "a:0",
+            "-show_entries",
+            "packet=pts_time",
+            "-of",
+            "json",
+            output,
+          ],
+          { encoding: "utf8" },
+        ),
+      ) as { packets: { pts_time: string }[] };
+      const times = probe.packets.map((packet) => Number(packet.pts_time));
+      expect(
+        times.some((time, index) => index > 0 && time - times[index - 1] > 2.5),
+      ).toBe(true);
+      await expect(
+        validateLocalOutput(
+          new Blob([await readFile(output)], { type: "video/mp4" }),
+          new AbortController().signal,
+          5,
+        ),
+      ).rejects.toThrow(`${kind}の途中`);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);

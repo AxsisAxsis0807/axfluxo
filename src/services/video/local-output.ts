@@ -1,3 +1,62 @@
+import type { EncodedPacket } from "mediabunny";
+
+async function checkPacketContinuity(
+  packets: AsyncIterable<EncodedPacket>,
+  kind: "映像" | "音声",
+  signal: AbortSignal,
+) {
+  let sequence = -Infinity;
+  let latest = -Infinity;
+  let audioEnd = -Infinity;
+  // Video arrives in decode order. Keep a bounded presentation-time window
+  // so B-frame reordering does not look like a gap or a reversed timestamp.
+  const window: number[] = [];
+  let presented = -Infinity;
+  const invalid = () => {
+    const error = Error(
+      `完成動画の${kind}の途中に時刻の欠落または重複があるため、保存を停止しました。`,
+    );
+    if (kind === "映像") error.name = "LocalVideoOutputError";
+    return error;
+  };
+  const advance = (timestamp: number) => {
+    if (
+      timestamp < presented ||
+      (timestamp - presented > 1.25 && Number.isFinite(presented))
+    )
+      throw invalid();
+    presented = timestamp;
+  };
+  for await (const { timestamp, duration, sequenceNumber } of packets) {
+    signal.throwIfAborted();
+    if (
+      !Number.isFinite(timestamp) ||
+      !Number.isFinite(duration) ||
+      duration < 0 ||
+      sequenceNumber <= sequence
+    )
+      throw invalid();
+    sequence = sequenceNumber;
+    if (kind === "音声") {
+      // Small overlaps are normal with encoder priming and WebM rounding.
+      if (
+        timestamp <= latest ||
+        (timestamp - latest > 0.5 && Number.isFinite(latest)) ||
+        timestamp < audioEnd - 0.1 ||
+        (timestamp > audioEnd + 0.5 && Number.isFinite(audioEnd))
+      )
+        throw invalid();
+      latest = timestamp;
+      audioEnd = Math.max(audioEnd, timestamp + duration);
+      continue;
+    }
+    const index = window.findIndex((value) => value > timestamp);
+    window.splice(index === -1 ? window.length : index, 0, timestamp);
+    if (window.length > 16) advance(window.shift()!);
+  }
+  for (const timestamp of window) advance(timestamp);
+}
+
 /** Validate actual encoded packets before exposing or persisting a completed file.
  * A MIME support claim or nonempty Blob alone does not prove a playable video. */
 export async function validateLocalOutput(
@@ -71,6 +130,17 @@ export async function validateLocalOutput(
         throw Error(
           "完成動画の音声が指定区間より短いため、保存を停止しました。",
         );
+      // Count unintended recorder warm-up or pause time as an overrun.
+      if (
+        Math.max(videoEnd - videoStart, audioEnd - audioStart) >
+        expectedDuration + 0.5
+      ) {
+        const error = Error(
+          "完成動画に指定区間を超える録画時間が含まれるため、保存を停止しました。",
+        );
+        error.name = "LocalVideoOutputError";
+        throw error;
+      }
       if (
         Math.abs(videoStart - audioStart) > 0.4 ||
         Math.abs(videoEnd - audioEnd) > 0.4
@@ -78,6 +148,19 @@ export async function validateLocalOutput(
         throw Error(
           "完成動画の映像と音声の記録時刻が一致しないため、保存を停止しました。",
         );
+    }
+    if (video && audio) {
+      const timingOnly = { metadataOnly: true };
+      await checkPacketContinuity(
+        new EncodedPacketSink(video).packets(undefined, undefined, timingOnly),
+        "映像",
+        signal,
+      );
+      await checkPacketContinuity(
+        new EncodedPacketSink(audio).packets(undefined, undefined, timingOnly),
+        "音声",
+        signal,
+      );
     }
     signal.throwIfAborted();
   } catch (error) {
