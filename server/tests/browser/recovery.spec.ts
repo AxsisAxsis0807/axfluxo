@@ -121,6 +121,30 @@ test("All Versions accepts MP3 and has an unrestricted iOS picker fallback; FNF 
     page.getByRole("group", { name: /素材 2：tone\.mp3/ }),
   ).toBeVisible();
 });
+test("All Versions has one active native decoder and releases it when switching or closing previews", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await open(page);
+  await page.goto("https://recovery.test/all");
+  const picker = page.getByLabel("端末の素材", { exact: true });
+  await expect(picker).toBeEnabled({ timeout: 35000 });
+  await picker.setInputFiles([source, source]);
+  await expect(page.getByRole("group", { name: /素材 2：source\\.mp4/ })).toBeVisible();
+  const active = page.locator('video[id^="local-media-"]');
+  await expect(active).toHaveCount(0);
+  await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
+  await expect(active).toHaveCount(1);
+  const first = await active.getAttribute("id");
+  expect(await active.getAttribute("preload")).toBe("none");
+  await page.getByRole("button", { name: "素材 2 のプレビューを読み込む" }).click();
+  await expect(active).toHaveCount(1);
+  expect(await active.getAttribute("id")).not.toBe(first);
+  await page.getByRole("button", { name: "素材 2 のプレビューを閉じる" }).click();
+  await expect(active).toHaveCount(0);
+  await expect(page.getByRole("group", { name: /素材 1：source\\.mp4/ })).toBeVisible();
+  await expect(page.getByRole("group", { name: /素材 2：source\\.mp4/ })).toBeVisible();
+});
 test("editor files, trim, labels and timeline restore after opt-in and stay separate from All Versions", async ({
   page,
 }) => {
