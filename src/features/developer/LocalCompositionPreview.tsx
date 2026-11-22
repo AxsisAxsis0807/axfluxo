@@ -27,11 +27,13 @@ export default function LocalCompositionPreview({
     };
   }, [job, selectedIndex]);
   useEffect(() => {
+    const media = video.current;
+    if (!media) return;
     let frame = 0;
     const draw = () => {
-      const ctx = canvas.current?.getContext("2d"),
-        media = video.current;
-      if (ctx && media && media.readyState >= 2) {
+      if (document.hidden) return;
+      const ctx = canvas.current?.getContext("2d");
+      if (ctx && media.readyState >= 2) {
         const piece = job.pieces[selectedIndex],
           offset = job.pieces
             .slice(0, selectedIndex)
@@ -46,11 +48,48 @@ export default function LocalCompositionPreview({
           setMessage("区間の再生が完了しました。次の素材を選択できます。");
         }
       }
+      // No constant canvas work while paused or on a background tab.
+      if (!media.paused && !document.hidden) frame = requestAnimationFrame(draw);
+    };
+    const once = () => {
+      cancelAnimationFrame(frame);
       frame = requestAnimationFrame(draw);
     };
-    frame = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(frame);
-  }, [job, selectedIndex]);
+    const stop = () => {
+      cancelAnimationFrame(frame);
+      frame = 0;
+      if (!document.hidden) once();
+    };
+    const hidden = () => {
+      if (document.hidden) {
+        cancelAnimationFrame(frame);
+        media.pause();
+      }
+    };
+    media.addEventListener("play", once);
+    media.addEventListener("pause", stop);
+    media.addEventListener("loadeddata", once);
+    media.addEventListener("seeked", once);
+    document.addEventListener("visibilitychange", hidden);
+    once();
+    return () => {
+      cancelAnimationFrame(frame);
+      media.removeEventListener("play", once);
+      media.removeEventListener("pause", stop);
+      media.removeEventListener("loadeddata", once);
+      media.removeEventListener("seeked", once);
+      document.removeEventListener("visibilitychange", hidden);
+    };
+  }, [job, selectedIndex, url]);
+  useEffect(() => {
+    const media = video.current;
+    return () => {
+      if (!media) return;
+      media.pause();
+      media.removeAttribute("src");
+      media.load();
+    };
+  }, [url, selectedIndex]);
   return (
     <section aria-label="合成プレビュー">
       <h2>合成プレビュー</h2>
