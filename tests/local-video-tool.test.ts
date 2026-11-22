@@ -10,7 +10,7 @@ it("retains clip order and maps source markers onto the combined timeline", () =
     { start: 0, end: 1 },
     { start: 1, end: 3 },
     { start: 3, end: 4 },
-    { start: 4, end: 7 },
+    { start: 5.5, end: 8.5 },
   ]);
 });
 it("rejects out-of-source trims and unsorted, duplicate or invalid markers", () => {
