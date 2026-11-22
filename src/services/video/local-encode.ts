@@ -362,9 +362,12 @@ async function encodeLocalAttempt(
         throw Error(
           "録画用の音声処理が停止しています。音声処理を許可してください。",
         );
-      const needsSeek = Math.abs(media.currentTime - piece.start) > 0.001;
+      // Warm up playback, then hold the source at the requested start.
+      // Starting the recorder while the source is already running loses the
+      // beginning of short clips when the native encoder opens slowly.
       await playForEncode(media, signal, status);
-      if (needsSeek) {
+      media.pause();
+      if (Math.abs(media.currentTime - piece.start) > 0.001) {
         await mediaReady(
           media,
           ["seeked"],
@@ -390,11 +393,27 @@ async function encodeLocalAttempt(
           "映像フレームの読み込みがタイムアウトしました。",
         );
       }
+      drawFrame(kind, media, elapsed);
       if (!recordingStarted) {
+        const started = new Promise<void>((resolve) => {
+          recorder.onstart = () => resolve();
+        });
         recorder.start(1000);
+        const startTimeout = AbortSignal.timeout(30_000);
+        try {
+          await abortable(started, AbortSignal.any([signal, startTimeout]));
+        } catch (error) {
+          signal.throwIfAborted();
+          if (startTimeout.aborted)
+            throw Error("録画の開始がタイムアウトしました。");
+          throw error;
+        } finally {
+          recorder.onstart = null;
+        }
         recordingStarted = true;
       } else recorder.resume();
       drawFrame(kind, media, elapsed);
+      await playForEncode(media, signal, status);
       let last = media.currentTime,
         stalled = performance.now();
       while (media.currentTime < piece.end - 1 / 120) {

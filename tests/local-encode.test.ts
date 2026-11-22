@@ -74,10 +74,16 @@ for (const [kind, cancelDuringRest] of [
         return true;
       }
       state = "inactive";
+      onstart: (() => void) | null = null;
       onstop: (() => void) | null = null;
       start() {
         this.state = "recording";
         states.push("start");
+        setTimeout(() => {
+          expect(playing).toBe(false);
+          expect(position).toBe(0);
+          this.onstart?.();
+        }, 100);
       }
       pause() {
         this.state = "paused";
@@ -125,7 +131,7 @@ for (const [kind, cancelDuringRest] of [
       { processing: 0 },
       status,
     );
-    await vi.advanceTimersByTimeAsync(600_100);
+    await vi.advanceTimersByTimeAsync(600_250);
     expect(status).toHaveBeenLastCalledWith(
       "4分休憩中（処理と録画を停止しています）",
     );
