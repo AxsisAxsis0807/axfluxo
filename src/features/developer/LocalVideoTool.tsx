@@ -23,7 +23,10 @@ import {
   type LocalProjectData,
 } from "../../services/video/local-project";
 import {
-  loadLocalProject,
+  loadLocalProjectById,
+  listLocalProjects,
+  countStoredExportEntries,
+  type LocalProjectSummary,
   saveLocalProject,
   renewRecoveryLease,
   releaseProjectUrls,
@@ -32,6 +35,7 @@ import {
 } from "../../services/video/recovery-store";
 import {
   initializeExportRecovery,
+  initializeNewExportSession,
   localExportQueue,
 } from "../../services/video/local-export-runtime";
 export { localIntervals } from "../../services/video/local-project";
@@ -88,6 +92,15 @@ export default function LocalVideoTool({
   const [rest, setRest] = useState(true);
   const [ready, setReady] = useState(false);
   const [saveStatus, setSaveStatus] = useState("保存データを確認中…");
+  const [startup, setStartup] = useState<
+    { kind: "new" } | { kind: "resume"; id?: string }
+  >();
+  const [savedOverview, setSavedOverview] = useState<{
+    projects: LocalProjectSummary[];
+    jobs: number;
+  }>();
+  // Existing restored assets do not start media decoders until the user taps.
+  const [previewEnabledIds, setPreviewEnabledIds] = useState<string[]>([]);
   const saveTail = useRef(Promise.resolve());
   const [projectId, setProjectId] = useState("");
   const [coverFile, setCoverFile] = useState<File>();
@@ -183,6 +196,10 @@ export default function LocalVideoTool({
       }
       if (!active.current) return;
       invalidatePreview();
+      setPreviewEnabledIds((old) => [
+        ...old,
+        ...selected.map((source) => source.id).filter((id) => !old.includes(id)),
+      ]);
       setSources((old) =>
         replacement
           ? old.map((source) =>
@@ -296,26 +313,45 @@ export default function LocalVideoTool({
     let disposed = false;
     let timer: ReturnType<typeof setInterval> | undefined;
     void (async () => {
+      let saved: LocalProjectData | undefined;
+      let handedOff = false;
       try {
-        let saved: LocalProjectData | undefined;
-        for (let attempt = 0; ; attempt++) {
-          if (disposed) return;
-          try {
-            saved = await loadLocalProject(mode);
-            break;
-          } catch (error) {
-            if (!(error instanceof RecoveryLeaseError) || attempt >= 25)
-              throw error;
-            setSaveStatus(
-              "前のタブの処理終了を確認中… 自動復旧まで最大約20秒お待ちください。",
-            );
-            await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (!startup) {
+          // Metadata only: never hydrate a previous 6-minute file on mount.
+          for (let attempt = 0; ; attempt++) {
+            if (disposed) return;
+            try {
+              const projects = await listLocalProjects(mode);
+              const jobs = await countStoredExportEntries();
+              if (disposed) return;
+              if (projects.length || jobs) {
+                setSavedOverview({ projects, jobs });
+                setSaveStatus(
+                  "保存済みデータがあります。復元するか新規作成するか選んでください。",
+                );
+              } else {
+                setStartup({ kind: "new" });
+              }
+              return;
+            } catch (error) {
+              if (!(error instanceof RecoveryLeaseError) || attempt >= 25)
+                throw error;
+              setSaveStatus(
+                "前のタブの処理終了を確認中… 自動復旧まで最大約20秒お待ちください。",
+              );
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
           }
         }
-        if (disposed) {
-          if (saved) releaseProjectUrls(saved);
-          return;
+        if (startup.kind === "resume") {
+          if (startup.id) saved = await loadLocalProjectById(mode, startup.id);
+          // Existing queue data is loaded only after the user explicitly opts in.
+          await initializeExportRecovery();
+        } else {
+          // An empty session must not delete old queued/completed jobs.
+          await initializeNewExportSession();
         }
+        if (disposed) return;
         if (saved) {
           urls.current.push(
             ...saved.sources.map((s) => s.url),
@@ -323,6 +359,7 @@ export default function LocalVideoTool({
           );
           setProjectId(saved.id);
           setSources(saved.sources);
+          setPreviewEnabledIds([]);
           setCover(saved.cover);
           setCoverFile(saved.coverFile);
           setCoverId(saved.coverId);
@@ -333,31 +370,35 @@ export default function LocalVideoTool({
           setScaleFactor(saved.scaleFactor);
           setCropTop(saved.cropTop);
           setCropBottom(saved.cropBottom);
-        } else setProjectId(crypto.randomUUID());
-        await initializeExportRecovery();
-        if (disposed) return;
+        } else {
+          setProjectId(crypto.randomUUID());
+          setPreviewEnabledIds([]);
+        }
+        handedOff = true;
         setReady(true);
         setSaveStatus(
           saved
-            ? "編集内容と書き出しを自動復元しました。"
-            : "変更はこの端末に自動保存します。",
+            ? "編集内容と書き出しを復元しました。プレビューは個別に読み込めます。"
+            : "新しい作業を開始しました。古い保存済みデータは削除していません。",
         );
         timer = setInterval(() => {
-          void renewRecoveryLease().catch((e) => {
+          void renewRecoveryLease().catch((error) => {
             localExportQueue.pause(true);
             setReady(false);
-            setSaveStatus(recoveryMessage(e));
+            setSaveStatus(recoveryMessage(error));
           });
         }, 5000);
-      } catch (e) {
-        if (!disposed) setSaveStatus(recoveryMessage(e));
+      } catch (error) {
+        if (!disposed) setSaveStatus(recoveryMessage(error));
+      } finally {
+        if (saved && !handedOff) releaseProjectUrls(saved);
       }
     })();
     return () => {
       disposed = true;
       clearInterval(timer);
     };
-  }, [mode]);
+  }, [mode, startup]);
   useEffect(() => {
     if (!ready || !projectId) return;
     const snapshot: LocalProjectData = {
@@ -434,6 +475,51 @@ export default function LocalVideoTool({
       <main style={{ maxWidth: 1000, margin: "auto", padding: 16 }}>
         <h1>{fnf ? "FNF Showcase Maker" : "All Versions Video Maker"}</h1>
         <p role="status">{saveStatus}</p>
+        {savedOverview && !startup && (
+          <section aria-label="保存済み作業の選択">
+            <h2>作業を開始</h2>
+            <p>
+              新しく作る場合、以前の動画・音声・完成品は読み込みません。
+              保存済みデータも削除しません。
+            </p>
+            <button onClick={() => setStartup({ kind: "new" })}>
+              新しく作成（古い動画を読み込まない）
+            </button>
+            {savedOverview.projects.map((project) => (
+              <button
+                key={project.id}
+                onClick={() => setStartup({ kind: "resume", id: project.id })}
+              >
+                {project.active ? "前回の作業を再開" : "保存済みの作業を再開"}
+                ：{project.label}（素材{project.sourceCount}件）
+              </button>
+            ))}
+            {savedOverview.jobs > 0 && (
+              <>
+                <p>保存済みの書き出しジョブ：{savedOverview.jobs}件</p>
+                {!savedOverview.projects.length && (
+                  <button onClick={() => setStartup({ kind: "resume" })}>
+                    保存済みの書き出しキューを復元
+                  </button>
+                )}
+              </>
+            )}
+            <p>
+              復元すると保存済み動画の読み込みが始まります。大きい動画で
+              ページが落ちる場合は「新しく作成」を選んでください。
+            </p>
+          </section>
+        )}
+        {startup && !ready && (
+          <button
+            onClick={() => {
+              setStartup(undefined);
+              setSaveStatus("保存データを確認中…");
+            }}
+          >
+            作業の選択に戻る
+          </button>
+        )}
       </main>
     );
   return (
@@ -504,11 +590,20 @@ export default function LocalVideoTool({
           </legend>
           {s.audio ? (
             <>
+              {!previewEnabledIds.includes(s.id) && (
+                <button
+                  onClick={() =>
+                    setPreviewEnabledIds((ids) => [...ids, s.id])
+                  }
+                >
+                  素材 {i + 1} のプレビューを読み込む
+                </button>
+              )}
               <audio
                 id={`local-media-${s.id}`}
-                src={s.url}
+                src={previewEnabledIds.includes(s.id) ? s.url : undefined}
                 controls
-                preload="metadata"
+                preload="none"
                 aria-label={`素材 ${i + 1} プレビュー`}
               />
               <p>
@@ -550,15 +645,26 @@ export default function LocalVideoTool({
               )}
             </>
           ) : (
-            <video
+            <>
+              {!previewEnabledIds.includes(s.id) && (
+                <button
+                  onClick={() =>
+                    setPreviewEnabledIds((ids) => [...ids, s.id])
+                  }
+                >
+                  素材 {i + 1} のプレビューを読み込む
+                </button>
+              )}
+              <video
               id={`local-media-${s.id}`}
-              src={s.url}
+              src={previewEnabledIds.includes(s.id) ? s.url : undefined}
               controls
               playsInline
-              preload="metadata"
+              preload="none"
               style={{ width: "100%", maxHeight: 360 }}
               aria-label={`素材 ${i + 1} プレビュー`}
-            />
+              />
+            </>
           )}
           <LocalTimeline
             key={s.assetId ?? s.id}
