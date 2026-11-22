@@ -392,27 +392,6 @@ it("coalesces rapid edits and restores boundaries, trim, names and timeline stat
   s.releaseProjectUrls(restored!);
 });
 
-it("fences a stale writer when another tab owns the lease", async () => {
-  const s = await store();
-  await s.renewRecoveryLease();
-  await new Promise<void>((resolve) => {
-    const req = indexedDB.open("axfluxo.local-video-recovery", 1);
-    req.onsuccess = () => {
-      const db = req.result,
-        tx = db.transaction("meta", "readwrite");
-      tx.objectStore("meta").put(
-        { owner: "other-tab", until: Date.now() + 30000 },
-        "lease",
-      );
-      tx.oncomplete = () => {
-        db.close();
-        resolve();
-      };
-    };
-  });
-  await expect(s.saveLocalProject(project())).rejects.toThrow("別のタブ");
-});
-
 it("indexes saved projects and output jobs without reading video asset data", async () => {
   const s = await store();
   const old = project("fnf-showcase");
@@ -487,3 +466,25 @@ it("fresh session writes leave older unhydrated jobs and archived projects untou
   expect((await s.listLocalProjects("fnf-showcase")).map((item) => item.id)).toContain(old.id);
   expect((await s.loadLocalProjectById("fnf-showcase", old.id)).id).toBe(old.id);
 });
+
+it("fences a stale writer when another tab owns the lease", async () => {
+  const s = await store();
+  await s.renewRecoveryLease();
+  await new Promise<void>((resolve) => {
+    const req = indexedDB.open("axfluxo.local-video-recovery", 1);
+    req.onsuccess = () => {
+      const db = req.result,
+        tx = db.transaction("meta", "readwrite");
+      tx.objectStore("meta").put(
+        { owner: "other-tab", until: Date.now() + 30000 },
+        "lease",
+      );
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+    };
+  });
+  await expect(s.saveLocalProject(project())).rejects.toThrow("別のタブ");
+});
+
