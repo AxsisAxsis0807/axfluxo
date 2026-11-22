@@ -256,6 +256,7 @@ test("All Versions plays supported audio formats, restores order and exports the
     { timeout: 30000 },
   );
   await page.reload();
+  await page.getByRole("button", { name: /前回の作業を再開/ }).click();
   await expect(versions.first()).toHaveValue("Versão lenta", {
     timeout: 35000,
   });
