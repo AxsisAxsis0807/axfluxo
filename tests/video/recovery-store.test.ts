@@ -412,3 +412,73 @@ it("fences a stale writer when another tab owns the lease", async () => {
   });
   await expect(s.saveLocalProject(project())).rejects.toThrow("別のタブ");
 });
+
+it("indexes saved projects and output jobs without reading video asset data", async () => {
+  const s = await store();
+  const old = project("fnf-showcase");
+  await s.saveLocalProject(old);
+  const next = project("fnf-showcase");
+  await s.saveLocalProject(next);
+  await s.saveExportEntries([{
+    id: crypto.randomUUID(),
+    filename: "saved.mp4",
+    state: "completed",
+    progress: 1,
+    message: "done",
+    rest: false,
+    result: { filename: "saved.mp4", blob: new Blob(["saved"]) },
+  }]);
+  const reads = vi.spyOn(IDBObjectStore.prototype, "get");
+  const projects = await s.listLocalProjects("fnf-showcase");
+  const count = await s.countStoredExportEntries();
+  expect(projects.map((item) => item.id).slice(0, 2)).toEqual([next.id, old.id]);
+  expect(projects[0].active).toBe(true);
+  expect(count).toBeGreaterThan(0);
+  expect(reads.mock.instances.filter((instance) =>
+    (instance as IDBObjectStore).name === "assets",
+  )).toHaveLength(0);
+  reads.mockRestore();
+  const restored = await s.loadLocalProjectById("fnf-showcase", old.id);
+  expect(restored.sources[0].file.name).toBe("source.mp4");
+  s.releaseProjectUrls(restored);
+});
+
+it("fresh session writes leave older unhydrated jobs and archived projects untouched", async () => {
+  const s = await store();
+  const old = project("fnf-showcase");
+  await s.saveLocalProject(old);
+  const older: ExportEntry = {
+    id: crypto.randomUUID(),
+    filename: "older.mp4",
+    state: "completed",
+    progress: 1,
+    message: "done",
+    rest: false,
+    recovery: { project: old, index: 0 },
+    result: { filename: "older.mp4", blob: new Blob(["older"]) },
+  };
+  await s.saveExportEntries([older]);
+  // An empty new session must not delete an older completed file.
+  await s.saveExportEntries([], new Set());
+  let remaining = await s.loadExportEntries();
+  expect(remaining.map((entry) => entry.id)).toContain(older.id);
+  const fresh = project("fnf-showcase");
+  await s.saveLocalProject(fresh);
+  const newer: ExportEntry = {
+    ...older,
+    id: crypto.randomUUID(),
+    filename: "newer.mp4",
+    recovery: { project: fresh, index: 0 },
+    result: { filename: "newer.mp4", blob: new Blob(["newer"]) },
+  };
+  const managed = new Set([newer.id]);
+  await s.saveExportEntries([newer], managed);
+  remaining = await s.loadExportEntries();
+  expect(remaining.map((entry) => entry.id).sort()).toEqual([older.id, newer.id].sort());
+  await s.saveExportEntries([], managed);
+  remaining = await s.loadExportEntries();
+  expect(remaining.map((entry) => entry.id)).toEqual([older.id]);
+  expect(await remaining[0].result?.blob.text()).toBe("older");
+  expect((await s.listLocalProjects("fnf-showcase")).map((item) => item.id)).toContain(old.id);
+  expect((await s.loadLocalProjectById("fnf-showcase", old.id)).id).toBe(old.id);
+});
