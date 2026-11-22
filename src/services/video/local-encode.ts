@@ -401,8 +401,8 @@ async function encodeLocalAttempt(
         signal,
       );
       recordingStarted = true;
-      drawFrame(kind, media, elapsed);
       await playForEncode(media, signal, status);
+      drawFrame(kind, media, elapsed);
       let last = media.currentTime,
         stalled = performance.now();
       while (media.currentTime < piece.end - 1 / 120) {
@@ -452,8 +452,8 @@ async function encodeLocalAttempt(
               "音声処理を再開できません。端末を前面に保って再試行してください。",
             );
           await transitionRecorder(recorder, "resume", signal);
-          drawFrame(kind, media, elapsed + media.currentTime - piece.start);
           await playForEncode(media, signal, status);
+          drawFrame(kind, media, elapsed + media.currentTime - piece.start);
           stalled = performance.now();
         }
         progress((elapsed + current - piece.start) / total);
