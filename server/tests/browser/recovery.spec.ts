@@ -131,8 +131,9 @@ test("All Versions has one active native decoder and releases it when switching 
   await expect(picker).toBeEnabled({ timeout: 35000 });
   await picker.setInputFiles([source, source]);
   await expect(page.getByRole("group", { name: /素材 2：source\.mp4/ })).toBeVisible();
-  const active = page.locator('video[id^="local-media-"]');
+  const active = page.locator('audio[id^="local-media-"]');
   await expect(active).toHaveCount(0);
+  await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
   await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(active).toHaveCount(1);
   const first = await active.getAttribute("id");
