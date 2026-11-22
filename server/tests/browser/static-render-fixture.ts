@@ -75,10 +75,31 @@ async function compareStaticRendering() {
   legacyLine(f, "HIGH QUALITY VERSION IS ON YOUTUBE", 130, 1000, 46);
   legacyLine(f, "Song Name", 240, 1000, 44);
   legacyLine(f, "@Axsis", 1770, 1000, 64);
+  const fnfAudioProject: LocalProjectData = {
+    ...fnfProject,
+    sources: [{
+      ...source, width: 0, height: 0,
+      audio: { name: "Audio only", status: "ready", sampleRate: 48000, channels: 2 },
+    }],
+  };
+  const [fnfAudio] = await buildLocalJobs(fnfAudioProject);
+  const fnfAudioActual = canvas(1080, 1920), fnfAudioExpected = canvas(1080, 1920);
+  fnfAudio.drawAudio!(fnfAudioActual.getContext("2d")!, 0);
+  const audioExpectedCtx = fnfAudioExpected.getContext("2d")!;
+  audioExpectedCtx.fillStyle = "black";
+  audioExpectedCtx.fillRect(0, 0, 1080, 1920);
+  legacyLine(audioExpectedCtx, "HIGH QUALITY VERSION IS ON YOUTUBE", 130, 1000, 46);
+  legacyLine(audioExpectedCtx, "Song Name", 240, 1000, 44);
+  legacyLine(audioExpectedCtx, "@Axsis", 1770, 1000, 64);
+  // Exercise reuse, not just first-frame construction, for both source kinds.
+  fnfAudio.drawAudio!(fnfAudioActual.getContext("2d")!, 0.5);
+  fnf.draw(fnfActual.getContext("2d")!, videoCanvas as unknown as HTMLVideoElement, 0.5);
   return {
     all: allResult, fnf: compare(fnfExpected, fnfActual),
-    dimensions: [all.width, all.height, fnf.width, fnf.height],
-    filenames: [all.filename, fnf.filename],
+    fnfAudio: compare(fnfAudioExpected, fnfAudioActual),
+    dimensions: [all.width, all.height, fnf.width, fnf.height, fnfAudio.width, fnfAudio.height],
+    filenames: [all.filename, fnf.filename, fnfAudio.filename],
+    kinds: [fnf.pieces[0].kind, fnfAudio.pieces[0].kind],
   };
 }
 (window as typeof window & { compareStaticRendering?: typeof compareStaticRendering }).compareStaticRendering = compareStaticRendering;
