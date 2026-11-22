@@ -95,6 +95,7 @@ export default function LocalVideoTool({
   const [startup, setStartup] = useState<
     { kind: "new" } | { kind: "resume"; id?: string }
   >();
+  const [startupFailed, setStartupFailed] = useState(false);
   const [savedOverview, setSavedOverview] = useState<{
     projects: LocalProjectSummary[];
     jobs: number;
@@ -335,6 +336,7 @@ export default function LocalVideoTool({
               const jobs = await countStoredExportEntries();
               if (disposed) return;
               if (projects.length || jobs) {
+                setStartupFailed(false);
                 setSavedOverview({ projects, jobs });
                 setSaveStatus(
                   "保存済みデータがあります。復元するか新規作成するか選んでください。",
@@ -401,7 +403,10 @@ export default function LocalVideoTool({
           });
         }, 5000);
       } catch (error) {
-        if (!disposed) setSaveStatus(recoveryMessage(error));
+        if (!disposed) {
+          setStartupFailed(true);
+          setSaveStatus(recoveryMessage(error));
+        }
       } finally {
         if (saved && !handedOff) releaseProjectUrls(saved);
       }
@@ -522,9 +527,10 @@ export default function LocalVideoTool({
             </p>
           </section>
         )}
-        {startup && !ready && (
+        {startup && startupFailed && (
           <button
             onClick={() => {
+              setStartupFailed(false);
               setStartup(undefined);
               setSaveStatus("保存データを確認中…");
             }}
@@ -621,7 +627,9 @@ export default function LocalVideoTool({
               <p>
                 {loadingVersion === s.id
                   ? "差し替えファイルを検証中"
-                  : "読み込み・再生確認済み"}{" "}
+                  : previewEnabledIds.includes(s.id)
+                    ? "ファイル選択済み"
+                    : "プレビュー未読み込み"}{" "}
                 · {s.audio.sampleRate ?? "未取得"} Hz ·{" "}
                 {s.audio.channels ?? "未取得"} ch
               </p>
