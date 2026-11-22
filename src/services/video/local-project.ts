@@ -125,6 +125,35 @@ function line(
   ctx.strokeText(text, ctx.canvas.width / 2, y, max);
   ctx.fillText(text, ctx.canvas.width / 2, y, max);
 }
+/** Pre-render immutable text at its original canvas scale and integer baseline.
+ * Small strips avoid allocating a full 1080x1920 overlay for each FNF range. */
+function staticText(text: string, max: number, size: number) {
+  try {
+    const layer = document.createElement("canvas");
+    layer.width = 1080;
+    layer.height = size * 2 + 16;
+    const context = layer.getContext("2d");
+    if (!context) return null;
+    line(context, text, layer.height / 2, max, size);
+    return layer;
+  } catch {
+    // A constrained device can still use the original per-frame text path.
+    return null;
+  }
+}
+
+function drawStaticText(
+  context: CanvasRenderingContext2D,
+  layer: HTMLCanvasElement | null,
+  text: string,
+  y: number,
+  max: number,
+  size: number,
+) {
+  if (layer) context.drawImage(layer, 0, y - layer.height / 2);
+  else line(context, text, y, max, size);
+}
+
 /** The picture comes from the user's selected cover, never a replacement asset. */
 function drawAllVersionsBackground(
   context: CanvasRenderingContext2D,
@@ -219,6 +248,11 @@ async function createLocalJobs(
           Math.min(2, Math.max(0.1, scaleFactor)),
       w = source.width * scale,
       h = cropped * scale;
+    // Build each text strip only on the first render of its range.
+    // Avoid extra allocations for queued or restored jobs.
+    let headingLayer: HTMLCanvasElement | null | undefined;
+    let usernameLayer: HTMLCanvasElement | null | undefined;
+    const titleLayers: (HTMLCanvasElement | null | undefined)[] = [];
     return ordered.map((range, i) => {
       function draw(ctx: CanvasRenderingContext2D, media?: HTMLVideoElement) {
         ctx.fillStyle = "black";
@@ -235,9 +269,15 @@ async function createLocalJobs(
             w,
             h,
           );
-        line(ctx, FNF_HEADING, 130, 1000, 46);
-        line(ctx, range.name, 240, 1000, 44);
-        line(ctx, username, 1770, 1000, 64);
+        if (headingLayer === undefined)
+          headingLayer = staticText(FNF_HEADING, 1000, 46);
+        if (usernameLayer === undefined)
+          usernameLayer = staticText(username, 1000, 64);
+        if (titleLayers[i] === undefined)
+          titleLayers[i] = staticText(range.name, 1000, 44);
+        drawStaticText(ctx, headingLayer, FNF_HEADING, 130, 1000, 46);
+        drawStaticText(ctx, titleLayers[i] ?? null, range.name, 240, 1000, 44);
+        drawStaticText(ctx, usernameLayer, username, 1770, 1000, 64);
       }
       return {
         filename: filenames[i],
