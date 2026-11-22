@@ -5,6 +5,8 @@ export type LocalEncodeJob = {
   filename: string;
   width: number;
   height: number;
+  /** Record this much silence between consecutive source files; 0 by default. */
+  gapBetweenPiecesSeconds?: number;
   pieces: {
     file?: File;
     url: () => Promise<string>;
@@ -188,14 +190,21 @@ export async function encodeLocal(
   media.style.cssText =
     "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";
   document.body.append(media);
-  const { source, stream, recorder } = (() => {
+  const { source, silence, stream, recorder } = (() => {
     let source: MediaElementAudioSourceNode | undefined;
+    let silence: ConstantSourceNode | undefined;
     let destination: MediaStreamAudioDestinationNode | undefined;
     let stream: MediaStream | undefined;
     try {
       destination = audio.createMediaStreamDestination();
       source = audio.createMediaElementSource(media);
       source.connect(destination);
+      // A zero-valued clock keeps the recording's audio track alive during
+      // source transitions, including when the native media element is paused.
+      silence = audio.createConstantSource();
+      silence.offset.value = 0;
+      silence.connect(destination);
+      silence.start();
       stream = canvas.captureStream(60);
       destination.stream.getAudioTracks().forEach((t) => stream!.addTrack(t));
       const recorder = new MediaRecorder(stream, {
@@ -203,8 +212,10 @@ export async function encodeLocal(
         videoBitsPerSecond: 8_000_000,
         audioBitsPerSecond: 320_000,
       });
-      return { source, stream, recorder };
+      return { source, silence, stream, recorder };
     } catch (error) {
+      silence?.stop();
+      silence?.disconnect();
       source?.disconnect();
       stream?.getTracks().forEach((t) => t.stop());
       destination?.stream.getTracks().forEach((t) => t.stop());
@@ -231,7 +242,12 @@ export async function encodeLocal(
   recorder.onerror = () => {
     recordError = Error("端末内エンコードに失敗しました。");
   };
-  const total = job.pieces.reduce((n, p) => n + p.end - p.start, 0);
+  const gapSeconds = job.gapBetweenPiecesSeconds ?? 0;
+  if (!Number.isFinite(gapSeconds) || gapSeconds < 0)
+    throw Error("音源間の無音秒数が不正です。");
+  const total =
+    job.pieces.reduce((n, p) => n + p.end - p.start, 0) +
+    Math.max(0, job.pieces.length - 1) * gapSeconds;
   let recordingStarted = false;
   let elapsed = 0;
   let outputBytes = 0;
@@ -246,7 +262,7 @@ export async function encodeLocal(
     } else collect?.call(recorder, event);
   };
   try {
-    for (const piece of job.pieces) {
+    for (const [index, piece] of job.pieces.entries()) {
       signal.throwIfAborted();
       const url = await piece.url();
       signal.throwIfAborted();
@@ -303,8 +319,26 @@ export async function encodeLocal(
         await wait(16, signal);
       }
       media.pause();
-      recorder.pause();
       elapsed += piece.end - piece.start;
+      if (gapSeconds && index < job.pieces.length - 1) {
+        // Recorder deliberately remains RUNNING here. Pausing it would omit
+        // the gap entirely; the paused media plus zero-valued AudioContext
+        // source produces silence while the cover art keeps being captured.
+        status("曲間の無音（1.5秒）を記録中…");
+        const started = performance.now();
+        let gapElapsed = 0;
+        while (gapElapsed < gapSeconds) {
+          signal.throwIfAborted();
+          if (recordError) throw recordError;
+          drawFrame(elapsed + gapElapsed);
+          progress((elapsed + gapElapsed) / total);
+          await wait(Math.min(16, Math.max(1, (gapSeconds - gapElapsed) * 1000)), signal);
+          gapElapsed = Math.min(gapSeconds, (performance.now() - started) / 1000);
+        }
+        drawFrame(elapsed + gapSeconds);
+        elapsed += gapSeconds;
+      }
+      recorder.pause();
     }
     signal.throwIfAborted();
     if (recorder.state !== "inactive") recorder.stop();
@@ -327,6 +361,8 @@ export async function encodeLocal(
     media.load();
     media.remove();
     source.disconnect();
+    silence.stop();
+    silence.disconnect();
     stream.getTracks().forEach((t) => t.stop());
   }
 }
