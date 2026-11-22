@@ -146,6 +146,29 @@ test("All Versions has one active native decoder and releases it when switching 
   await expect(page.getByRole("group", { name: /素材 1：source\.mp4/ })).toBeVisible();
   await expect(page.getByRole("group", { name: /素材 2：source\.mp4/ })).toBeVisible();
 });
+test("All Versions composition uses audio-only playback and a cover canvas", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await open(page);
+  await page.goto("https://recovery.test/all");
+  await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
+  await page.getByLabel("version名（1行に1つ）").fill("ONE");
+  await page.getByLabel("カバー画像").setInputFiles({
+    name: "cover.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/Yp8AAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  await page.getByRole("button", { name: "合成プレビューを更新" }).click();
+  const composition = page.getByRole("region", { name: "合成プレビュー" });
+  await expect(composition).toBeVisible();
+  await expect(composition.locator("audio")).toHaveCount(1);
+  await expect(composition.locator("video")).toHaveCount(0);
+  await expect(composition.locator("canvas")).toBeVisible();
+});
 test("editor files, trim, labels and timeline restore after opt-in and stay separate from All Versions", async ({
   page,
 }) => {
