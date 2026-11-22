@@ -360,7 +360,7 @@ export async function listLocalProjects(
         sourceCount: project.sources.length,
         label:
           project.mode === "all-versions"
-            ? project.names.split("\\n")[0] || "All Versions"
+            ? project.names.split("\n")[0] || "All Versions"
             : project.ranges[0]?.name || "FNF Showcase",
         active: project.id === active,
       }))
