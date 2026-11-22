@@ -81,7 +81,14 @@ export default function LocalTimeline({
   );
   const writeMediaSeek = useCallback(
     (video: HTMLMediaElement, us: number) => {
-      const physical = Math.max(0, Math.min(us, duration * 1e6 - 1)) / 1e6;
+      // Keep the logical closed end-point exact, but seek the last playable
+      // native sample. Audio decoders may round a 1µs-before-EOF seek UP to
+      // the end and report no playable sample, unlike the video element.
+      const lastPlayableUs = Math.max(
+        0,
+        duration * 1e6 - (video instanceof HTMLAudioElement ? 125 : 1),
+      );
+      const physical = Math.max(0, Math.min(us, lastPlayableUs)) / 1e6;
       const pending = Math.abs(video.currentTime - physical) > 0.0000005;
       cursorSeek.current = { us, pending };
       setCurrent(us);
@@ -211,7 +218,19 @@ export default function LocalTimeline({
           : video.currentTime * 1e6,
       );
     const seeking = () => {
-      if (!cursorSeek.current?.pending && !initial.current)
+      // Native controls (pointer/keyboard) explicitly clear the editor cursor.
+      // Also accept external/scripted seeks, but do not clear the exact logical
+      // EOF when an audio decoder rounds the final playable sample.
+      const cursor = cursorSeek.current;
+      if (cursor?.pending || initial.current) return;
+      if (!cursor) return;
+      const isEnd = Math.abs(cursor.us - duration * 1e6) < 0.5;
+      const expectedUs = Math.min(
+        cursor.us,
+        Math.max(0, duration * 1e6 - (video instanceof HTMLAudioElement ? 125 : 1)),
+      );
+      const toleranceUs = isEnd ? 150 : 0.5;
+      if (Math.abs(video.currentTime * 1e6 - expectedUs) > toleranceUs)
         cursorSeek.current = null;
     };
     const seeked = () => {
