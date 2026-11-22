@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { isInteriorBoundary } from "../../services/video/timeline-math";
 import LocalCompositionPreview from "./LocalCompositionPreview";
+import LocalMediaPreview from "./LocalMediaPreview";
 import LocalTimeline from "./LocalTimeline";
 import { LocalExport } from "../video-common/LocalExport";
 import { type LocalEncodeJob } from "../../services/video/local-encode";
@@ -94,7 +95,8 @@ export default function LocalVideoTool({
     projects: LocalProjectSummary[];
     jobs: number;
   }>();
-  const [previewEnabledIds, setPreviewEnabledIds] = useState<string[]>([]);
+  // A single native decoder at a time is critical for mobile Safari.
+  const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
   const [analysisEnabledIds, setAnalysisEnabledIds] = useState<string[]>([]);
   const saveTail = useRef(Promise.resolve());
   const [projectId, setProjectId] = useState("");
@@ -122,6 +124,24 @@ export default function LocalVideoTool({
       urls.current.forEach(URL.revokeObjectURL);
     };
   }, []);
+  useEffect(() => {
+    if (!activePreviewId && !previewJobs.length) return;
+    const releaseOnBackground = () => {
+      if (!document.hidden) return;
+      setActivePreviewId(null);
+      setPreviewJobs([]);
+    };
+    const releaseOnPageHide = () => {
+      setActivePreviewId(null);
+      setPreviewJobs([]);
+    };
+    document.addEventListener("visibilitychange", releaseOnBackground);
+    window.addEventListener("pagehide", releaseOnPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", releaseOnBackground);
+      window.removeEventListener("pagehide", releaseOnPageHide);
+    };
+  }, [activePreviewId, previewJobs.length]);
   const previousSources = useRef<Source[]>([]);
   useEffect(() => {
     for (const source of previousSources.current) {
@@ -157,10 +177,9 @@ export default function LocalVideoTool({
       const lightweight = selected
         .filter((source) => source.duration <= 60 && source.file.size <= 64 * 1024 * 1024)
         .map((source) => source.id);
-      setPreviewEnabledIds((old) => [
-        ...(fnf ? [] : old),
-        ...lightweight,
-      ]);
+      // Preserve FNF's lightweight preview; All Versions stays fully on-demand.
+      setActivePreviewId(fnf ? (lightweight[0] ?? null) : null);
+      setPreviewJobs([]);
       setAnalysisEnabledIds((old) => [
         ...(fnf ? [] : old),
         ...lightweight,
@@ -293,7 +312,7 @@ export default function LocalVideoTool({
           );
           setProjectId(saved.id);
           setSources(saved.sources);
-          setPreviewEnabledIds([]);
+          setActivePreviewId(null);
           setAnalysisEnabledIds([]);
           setCover(saved.cover);
           setCoverFile(saved.coverFile);
@@ -307,7 +326,7 @@ export default function LocalVideoTool({
           setCropBottom(saved.cropBottom);
         } else {
           setProjectId(crypto.randomUUID());
-          setPreviewEnabledIds([]);
+          setActivePreviewId(null);
           setAnalysisEnabledIds([]);
         }
         handedOff = true;
@@ -508,22 +527,30 @@ export default function LocalVideoTool({
           <legend>
             素材 {i + 1}：{s.file.name}（{s.duration.toFixed(2)}秒）
           </legend>
-          {!previewEnabledIds.includes(s.id) && (
+          {activePreviewId === s.id ? (
+            <>
+              <button onClick={() => setActivePreviewId(null)}>
+                素材 {i + 1} のプレビューを閉じる
+              </button>
+              <LocalMediaPreview
+                id={s.id}
+                url={s.url}
+                onError={() => {
+                  setActivePreviewId(null);
+                  setError("この端末では素材プレビューを再生できません。元の素材と編集内容は保持されています。");
+                }}
+              />
+            </>
+          ) : (
             <button
-              onClick={() => setPreviewEnabledIds((ids) => [...ids, s.id])}
+              onClick={() => {
+                setPreviewJobs([]);
+                setActivePreviewId(s.id);
+              }}
             >
               素材 {i + 1} のプレビューを読み込む
             </button>
           )}
-          <video
-            id={`local-media-${s.id}`}
-            src={previewEnabledIds.includes(s.id) ? s.url : undefined}
-            controls
-            playsInline
-            preload={previewEnabledIds.includes(s.id) ? "metadata" : "none"}
-            style={{ width: "100%", maxHeight: 360 }}
-            aria-label={`素材 ${i + 1} プレビュー`}
-          />
           {!analysisEnabledIds.includes(s.id) && (
             <button
               onClick={() => setAnalysisEnabledIds((ids) => [...ids, s.id])}
@@ -805,15 +832,16 @@ export default function LocalVideoTool({
       )}
       <button
         disabled={loading || !sources.length}
-        onClick={() =>
+        onClick={() => {
+          setActivePreviewId(null);
           void prepare(false)
             .then(setPreviewJobs)
             .catch((e) =>
               setError(
                 e instanceof Error ? e.message : "プレビューを準備できません。",
               ),
-            )
-        }
+            );
+        }}
       >
         合成プレビューを更新
       </button>
