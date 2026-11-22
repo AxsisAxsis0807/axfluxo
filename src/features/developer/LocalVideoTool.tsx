@@ -101,6 +101,7 @@ export default function LocalVideoTool({
   }>();
   // Existing restored assets do not start media decoders until the user taps.
   const [previewEnabledIds, setPreviewEnabledIds] = useState<string[]>([]);
+  const [analysisEnabledIds, setAnalysisEnabledIds] = useState<string[]>([]);
   const saveTail = useRef(Promise.resolve());
   const [projectId, setProjectId] = useState("");
   const [coverFile, setCoverFile] = useState<File>();
@@ -196,9 +197,18 @@ export default function LocalVideoTool({
       }
       if (!active.current) return;
       invalidatePreview();
+      // Small newly chosen files keep the fast default. Large/long files
+      // never auto-open a decoder or start waveform analysis on selection.
+      const light = selected
+        .filter((source) => source.duration <= 60 && source.file.size <= 64 * 1024 * 1024)
+        .map((source) => source.id);
       setPreviewEnabledIds((old) => [
-        ...old,
-        ...selected.map((source) => source.id).filter((id) => !old.includes(id)),
+        ...old.filter((id) => !replacement || id !== replacement.id),
+        ...light,
+      ]);
+      setAnalysisEnabledIds((old) => [
+        ...old.filter((id) => !replacement || id !== replacement.id),
+        ...light,
       ]);
       setSources((old) =>
         replacement
@@ -360,6 +370,7 @@ export default function LocalVideoTool({
           setProjectId(saved.id);
           setSources(saved.sources);
           setPreviewEnabledIds([]);
+          setAnalysisEnabledIds([]);
           setCover(saved.cover);
           setCoverFile(saved.coverFile);
           setCoverId(saved.coverId);
@@ -373,6 +384,7 @@ export default function LocalVideoTool({
         } else {
           setProjectId(crypto.randomUUID());
           setPreviewEnabledIds([]);
+          setAnalysisEnabledIds([]);
         }
         handedOff = true;
         setReady(true);
@@ -666,9 +678,19 @@ export default function LocalVideoTool({
               />
             </>
           )}
+          {!analysisEnabledIds.includes(s.id) && (
+            <button
+              onClick={() =>
+                setAnalysisEnabledIds((ids) => [...ids, s.id])
+              }
+            >
+              素材 {i + 1} の波形を解析する
+            </button>
+          )}
           <LocalTimeline
             key={s.assetId ?? s.id}
             file={s.file}
+            analysisEnabled={analysisEnabledIds.includes(s.id)}
             timeline={s.timeline}
             onTimelineState={(state) => {
               if (JSON.stringify(s.timeline) !== JSON.stringify(state))
