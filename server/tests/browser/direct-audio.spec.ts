@@ -368,3 +368,74 @@ test("stereo 48 kHz export preserves audio at the start, middle and end", async 
     expect(Math.abs(crossings / 0.2 - frequency)).toBeLessThan(25);
   }
 });
+
+test("three trimmed versions preserve decoded audio on both sides of each cut", async ({
+  page,
+}) => {
+  await open(page, "all-versions");
+  const picker = page.getByLabel("音声ファイルを選択", { exact: true });
+  const tones = [330, 550, 770];
+  for (const [index, frequency] of tones.entries()) {
+    const file = join(dir, `boundary-tone-${frequency}.wav`);
+    execFileSync("ffmpeg", [
+      "-v",
+      "error",
+      "-f",
+      "lavfi",
+      "-i",
+      `sine=frequency=${frequency}:duration=3`,
+      "-y",
+      file,
+    ]);
+    await picker.setInputFiles(file);
+    await expect(page.getByLabel("バージョン名", { exact: true })).toHaveCount(
+      index + 1,
+    );
+    await page.getByLabel("開始秒", { exact: true }).nth(index).fill("0.5");
+    await page.getByLabel("終了秒", { exact: true }).nth(index).fill("2.5");
+  }
+  await page.getByLabel("カバー画像").setInputFiles(join(dir, "cover.png"));
+  const path = await exportAndDecode(page);
+  if (!path) {
+    test
+      .info()
+      .annotations.push({
+        type: "recorder unavailable",
+        description: "Only the unsupported UI was verified.",
+      });
+    return;
+  }
+  for (const [position, frequency] of [
+    [0.3, tones[0]],
+    [1.55, tones[0]],
+    [2.35, tones[1]],
+    [3.55, tones[1]],
+    [4.35, tones[2]],
+    [5.55, tones[2]],
+  ]) {
+    const pcm = execFileSync("ffmpeg", [
+      "-v",
+      "error",
+      "-ss",
+      String(position),
+      "-i",
+      path,
+      "-map",
+      "0:a:0",
+      "-af",
+      "aresample=8000,atrim=end_sample=1600",
+      "-ac",
+      "1",
+      "-f",
+      "s16le",
+      "-",
+    ]);
+    expect(pcm.length).toBe(3200);
+    let crossings = 0;
+    for (let offset = 2; offset < pcm.length; offset += 2) {
+      if (pcm.readInt16LE(offset - 2) < 0 && pcm.readInt16LE(offset) >= 0)
+        crossings++;
+    }
+    expect(Math.abs(crossings / 0.2 - frequency)).toBeLessThan(25);
+  }
+});

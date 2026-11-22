@@ -122,3 +122,45 @@ it("checks both track ranges beyond ten minutes without decoding samples", async
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+it("rejects an interior video freeze or audio gap even when track endpoints match", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "validate-gaps-local-"));
+  try {
+    for (const [kind, filter] of [
+      ["映像", ["-vf", "select=not(between(t\\,1\\,4))", "-fps_mode", "vfr"]],
+      ["音声", ["-af", "aselect=not(between(t\\,1\\,4))"]],
+    ] as const) {
+      const output = join(dir, "gap.mp4");
+      execFileSync("ffmpeg", [
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=blue:s=16x16:r=30:d=5",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=5",
+        ...filter,
+        "-threads",
+        "1",
+        "-c:v",
+        "libx264",
+        "-c:a",
+        "aac",
+        "-y",
+        output,
+      ]);
+      await expect(
+        validateLocalOutput(
+          new Blob([await readFile(output)], { type: "video/mp4" }),
+          new AbortController().signal,
+          5,
+        ),
+      ).rejects.toThrow(`${kind}の途中`);
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

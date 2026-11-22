@@ -1,3 +1,4 @@
+import { transitionRecorder } from "./local-recorder";
 import { validateLocalOutput } from "./local-output";
 import type { LocalProjectData } from "./local-project";
 export type LocalEncodeJob = {
@@ -320,9 +321,6 @@ async function encodeLocalAttempt(
     if (e.data.size) chunks.push(e.data);
   };
   let recordError: Error | null = null;
-  const stopped = new Promise<void>((resolve) => {
-    recorder.onstop = () => resolve();
-  });
   recorder.onerror = () => {
     recordError = Error("端末内エンコードに失敗しました。");
   };
@@ -332,14 +330,17 @@ async function encodeLocalAttempt(
   let outputBytes = 0;
   const collect = recorder.ondataavailable;
   recorder.ondataavailable = (event) => {
+    if (recordError) return;
     outputBytes += event.data.size;
     if (outputBytes > 256 * 1024 * 1024) {
       recordError = Error(
-        "完成ファイルが安全な保持上限256MiBを超えました。区間を短くしてください。",
+        "録画データがこの端末内書き出し方式の上限256MiBを超えました。元の素材は保持されています。短い区間を指定して再試行してください。",
       );
+      chunks.length = 0;
       if (recorder.state !== "inactive") recorder.stop();
     } else collect?.call(recorder, event);
   };
+  let blob: Blob;
   try {
     for (const [index, piece] of job.pieces.entries()) {
       const kind = piece.kind ?? "video";
@@ -394,24 +395,12 @@ async function encodeLocalAttempt(
         );
       }
       drawFrame(kind, media, elapsed);
-      if (!recordingStarted) {
-        const started = new Promise<void>((resolve) => {
-          recorder.onstart = () => resolve();
-        });
-        recorder.start(1000);
-        const startTimeout = AbortSignal.timeout(30_000);
-        try {
-          await abortable(started, AbortSignal.any([signal, startTimeout]));
-        } catch (error) {
-          signal.throwIfAborted();
-          if (startTimeout.aborted)
-            throw Error("録画の開始がタイムアウトしました。");
-          throw error;
-        } finally {
-          recorder.onstart = null;
-        }
-        recordingStarted = true;
-      } else recorder.resume();
+      await transitionRecorder(
+        recorder,
+        recordingStarted ? "resume" : "start",
+        signal,
+      );
+      recordingStarted = true;
       drawFrame(kind, media, elapsed);
       await playForEncode(media, signal, status);
       let last = media.currentTime,
@@ -419,6 +408,12 @@ async function encodeLocalAttempt(
       while (media.currentTime < piece.end - 1 / 120) {
         signal.throwIfAborted();
         if (recordError) throw recordError;
+        if (recorder.state !== "recording")
+          throw Error("録画が途中で停止しました。");
+        if ((audio.state as AudioContextState) !== "running")
+          throw Error(
+            "録画中に音声処理が停止しました。端末を前面に保って再試行してください。",
+          );
         if (media.ended) {
           if (piece.end - media.currentTime > 0.1)
             throw Error("素材が指定区間より短いため停止しました。");
@@ -434,13 +429,32 @@ async function encodeLocalAttempt(
         last = current;
         if (rest && budget.processing >= 600) {
           media.pause();
-          recorder.pause();
+          await transitionRecorder(recorder, "pause", signal);
           status("4分休憩中（処理と録画を停止しています）");
           await wait(240_000, signal);
           budget.processing = 0;
-          stalled = performance.now();
+          if ((audio.state as AudioContextState) !== "running") {
+            const timeout = AbortSignal.timeout(30_000);
+            try {
+              await abortable(
+                audio.resume(),
+                AbortSignal.any([signal, timeout]),
+              );
+            } catch (error) {
+              signal.throwIfAborted();
+              if (timeout.aborted)
+                throw Error("音声処理の再開がタイムアウトしました。");
+              throw error;
+            }
+          }
+          if ((audio.state as AudioContextState) !== "running")
+            throw Error(
+              "音声処理を再開できません。端末を前面に保って再試行してください。",
+            );
+          await transitionRecorder(recorder, "resume", signal);
+          drawFrame(kind, media, elapsed + media.currentTime - piece.start);
           await playForEncode(media, signal, status);
-          recorder.resume();
+          stalled = performance.now();
         }
         progress((elapsed + current - piece.start) / total);
         status(
@@ -449,41 +463,38 @@ async function encodeLocalAttempt(
         await wait(16, signal);
       }
       media.pause();
-      if (index + 1 < job.pieces.length && recorder.state === "recording")
-        recorder.pause();
+      if (recordError) throw recordError;
+      if (index + 1 < job.pieces.length)
+        await transitionRecorder(recorder, "pause", signal);
       elapsed += piece.end - piece.start;
     }
     signal.throwIfAborted();
-    if (recorder.state !== "inactive") recorder.stop();
-    const stopTimeout = AbortSignal.timeout(30_000);
-    try {
-      await abortable(stopped, AbortSignal.any([signal, stopTimeout]));
-    } catch (error) {
-      signal.throwIfAborted();
-      if (stopTimeout.aborted)
-        throw Error("録画データの確定がタイムアウトしました。");
-      throw error;
-    }
+    await transitionRecorder(recorder, "stop", signal);
     signal.throwIfAborted();
     if (recordError) throw recordError;
-    const blob = new Blob(chunks, { type: mimeType });
-    await validateLocalOutput(blob, signal, expectedDuration);
-    return {
-      blob,
-      filename:
-        job.filename.replace(/\.(mp4|webm)$/i, "") +
-        (mimeType.startsWith("video/mp4") ? ".mp4" : ".webm"),
-    };
+    blob = new Blob(chunks, { type: mimeType });
   } finally {
-    if (recorder.state !== "inactive") recorder.stop();
-    recorder.ondataavailable = recorder.onstop = recorder.onerror = null;
-    mediaByKind.forEach((media) => media.pause());
-    mediaByKind.forEach((media) => {
-      media.removeAttribute("src");
-      media.load();
-      media.remove();
-    });
-    sources.forEach((source) => source.disconnect());
-    stream.getTracks().forEach((track) => track.stop());
+    recorder.ondataavailable = recorder.onerror = null;
+    try {
+      if (recorder.state !== "inactive") recorder.stop();
+    } finally {
+      chunks.length = 0;
+      canvas.width = canvas.height = 0;
+      mediaByKind.forEach((media) => {
+        media.pause();
+        media.removeAttribute("src");
+        media.load();
+        media.remove();
+      });
+      sources.forEach((source) => source.disconnect());
+      stream.getTracks().forEach((track) => track.stop());
+    }
   }
+  await validateLocalOutput(blob, signal, expectedDuration);
+  return {
+    blob,
+    filename:
+      job.filename.replace(/\.(mp4|webm)$/i, "") +
+      (mimeType.startsWith("video/mp4") ? ".mp4" : ".webm"),
+  };
 }
