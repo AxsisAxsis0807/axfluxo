@@ -118,6 +118,8 @@ localExportQueue.subscribe(releaseIdleExportAudio);
 let initialized: Promise<void> | undefined;
 let persistenceTail = Promise.resolve();
 let persistenceEnabled = false;
+// A new session may manage only its new jobs, never previous saved output.
+let managedEntries: Set<string> | undefined;
 let recoveryFailure = "";
 const recoveryListeners = new Set<() => void>();
 export const subscribeRecovery = (listener: () => void) => {
@@ -139,6 +141,22 @@ export function initializeExportRecovery() {
     localExportQueue.pause();
     const entries = await loadExportEntries();
     localExportQueue.restore(entries);
+    managedEntries = undefined;
+    persistenceEnabled = true;
+    localExportQueue.resume();
+  })().catch((error) => {
+    initialized = undefined;
+    reportRecoveryFailure(error);
+    throw error;
+  }));
+}
+/** Admit a fresh editing session without restoring legacy media into RAM. */
+export function initializeNewExportSession() {
+  return (initialized ??= (async () => {
+    localExportQueue.pause();
+    await renewRecoveryLease();
+    localExportQueue.restore([]);
+    managedEntries = new Set<string>();
     persistenceEnabled = true;
     localExportQueue.resume();
   })().catch((error) => {
@@ -150,9 +168,11 @@ export function initializeExportRecovery() {
 localExportQueue.subscribe(() => {
   if (!persistenceEnabled) return;
   const entries = localExportQueue.getSnapshot().entries;
+  if (managedEntries) entries.forEach((entry) => managedEntries!.add(entry.id));
+  const managed = managedEntries ? new Set(managedEntries) : undefined;
   persistenceTail = persistenceTail
     .catch(() => {})
-    .then(() => saveExportEntries(entries));
+    .then(() => saveExportEntries(entries, managed));
   void persistenceTail.catch((error) => {
     // Do not recursively publish more failed writes.
     persistenceEnabled = false;
@@ -171,7 +191,10 @@ export async function retryRecoveryPersistence() {
   if (!recoveryFailure) return;
   await persistenceTail.catch(() => {});
   await renewRecoveryLease();
-  await saveExportEntries(localExportQueue.getSnapshot().entries);
+  await saveExportEntries(
+    localExportQueue.getSnapshot().entries,
+    managedEntries ? new Set(managedEntries) : undefined,
+  );
   persistenceTail = Promise.resolve();
   persistenceEnabled = true;
   recoveryFailure = "";
