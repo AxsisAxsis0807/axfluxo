@@ -17,12 +17,15 @@ test("cached All Versions background and FNF text preserve the legacy compositio
       compareStaticRendering: () => Promise<{
         all: { mean: number; max: number; major: number };
         fnf: { mean: number; max: number; major: number };
+        fnfAudio: { mean: number; max: number; major: number };
         dimensions: number[];
         filenames: string[];
+        kinds: string[];
       }>;
     }).compareStaticRendering(),
   );
-  expect(report.dimensions).toEqual([1920, 1080, 1080, 1920]);
+  expect(report.dimensions).toEqual([1920, 1080, 1080, 1920, 1080, 1920]);
+  expect(report.kinds).toEqual(["video", "audio"]);
   expect(report.filenames[0]).toBe("All Versions.mp4");
   expect(report.filenames[1].length).toBeGreaterThan(4);
   // Pixel equality may differ at antialiased edges by a few color levels.
@@ -31,4 +34,6 @@ test("cached All Versions background and FNF text preserve the legacy compositio
   expect(report.all.max).toBeLessThanOrEqual(6);
   expect(report.fnf.mean).toBeLessThan(0.05);
   expect(report.fnf.max).toBeLessThanOrEqual(6);
+  expect(report.fnfAudio.mean).toBeLessThan(0.05);
+  expect(report.fnfAudio.max).toBeLessThanOrEqual(6);
 });
