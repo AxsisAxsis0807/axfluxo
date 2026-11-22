@@ -150,18 +150,18 @@ test("PCM analysis, candidate navigation, candidate addition, audition, deletion
   await expect
     .poll(() =>
       page
-        .locator("video")
+        .locator('audio[id^="local-media-"]')
         .first()
-        .evaluate((n) => (n as HTMLVideoElement).paused),
+        .evaluate((n) => (n as HTMLMediaElement).paused),
     )
     .toBe(false);
   await smart.getByRole("button", { name: "試聴停止", exact: true }).click();
   await expect
     .poll(() =>
       page
-        .locator("video")
+        .locator('audio[id^="local-media-"]')
         .first()
-        .evaluate((n) => (n as HTMLVideoElement).paused),
+        .evaluate((n) => (n as HTMLMediaElement).paused),
     )
     .toBe(true);
   await candidate.getByRole("button", { name: "削除", exact: true }).click();
@@ -210,19 +210,19 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
     .click();
   const timeline = page.getByTestId("video-timeline");
   await page
-    .locator("video")
+    .locator('audio[id^="local-media-"]')
     .first()
     .evaluate((n) => {
-      (n as HTMLVideoElement).currentTime = 12.345625;
+      (n as HTMLMediaElement).currentTime = 12.345625;
     });
   // 98765 / 8000 is a real sample position. WebKit exposes currentTime on
   // this PCM sample grid; keep the same 0.5 microsecond assertion before/after.
   await expect
     .poll(() =>
       page
-        .locator("video")
+        .locator('audio[id^="local-media-"]')
         .first()
-        .evaluate((n) => (n as HTMLVideoElement).currentTime),
+        .evaluate((n) => (n as HTMLMediaElement).currentTime),
     )
     .toBeCloseTo(12.345625, 6);
   await expect
@@ -253,9 +253,9 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
     await expect
       .poll(() =>
         page
-          .locator("video")
+          .locator('audio[id^="local-media-"]')
           .first()
-          .evaluate((n) => (n as HTMLVideoElement).currentTime),
+          .evaluate((n) => (n as HTMLMediaElement).currentTime),
       )
       .toBeCloseTo(12.345625, 6);
   }
@@ -281,10 +281,10 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
     await expect
       .poll(() =>
         page
-          .locator("video")
+          .locator('audio[id^="local-media-"]')
           .first()
           .evaluate((n) =>
-            Math.floor((n as HTMLVideoElement).currentTime * 8000 + 1e-7),
+            Math.floor((n as HTMLMediaElement).currentTime * 8000 + 1e-7),
           ),
       )
       .toBe(42 * 8000 - 1);
@@ -304,10 +304,10 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
   await expect
     .poll(() =>
       page
-        .locator("video")
+        .locator('audio[id^="local-media-"]')
         .first()
         .evaluate((n) =>
-          Math.floor((n as HTMLVideoElement).currentTime * 8000 + 1e-7),
+          Math.floor((n as HTMLMediaElement).currentTime * 8000 + 1e-7),
         ),
     )
     .toBe(42 * 8000 - 1);

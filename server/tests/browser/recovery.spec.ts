@@ -121,6 +121,52 @@ test("All Versions accepts MP3 and has an unrestricted iOS picker fallback; FNF 
     page.getByRole("group", { name: /素材 2：tone\.mp3/ }),
   ).toBeVisible();
 });
+test("All Versions has one active native decoder and releases it when switching or closing previews", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await open(page);
+  await page.goto("https://recovery.test/all");
+  const picker = page.getByLabel("端末の素材", { exact: true });
+  await expect(picker).toBeEnabled({ timeout: 35000 });
+  await picker.setInputFiles([source, source]);
+  await expect(page.getByRole("group", { name: /素材 2：source\.mp4/ })).toBeVisible();
+  const active = page.locator('audio[id^="local-media-"]');
+  await expect(active).toHaveCount(1);
+  await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
+  const first = await active.getAttribute("id");
+  expect(await active.getAttribute("preload")).toBe("metadata");
+  await page.getByRole("button", { name: "素材 2 のプレビューを読み込む" }).click();
+  await expect(active).toHaveCount(1);
+  expect(await active.getAttribute("id")).not.toBe(first);
+  await page.getByRole("button", { name: "素材 2 のプレビューを閉じる" }).click();
+  await expect(active).toHaveCount(0);
+  await expect(page.getByRole("group", { name: /素材 1：source\.mp4/ })).toBeVisible();
+  await expect(page.getByRole("group", { name: /素材 2：source\.mp4/ })).toBeVisible();
+});
+test("All Versions composition uses audio-only playback and a cover canvas", async ({
+  page,
+}) => {
+  test.setTimeout(90000);
+  await open(page);
+  await page.goto("https://recovery.test/all");
+  await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
+  await page.getByLabel("version名（1行に1つ）").fill("ONE");
+  await page.getByLabel("カバー画像").setInputFiles({
+    name: "cover.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/Yp8AAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  await page.getByRole("button", { name: "合成プレビューを更新" }).click();
+  const composition = page.getByRole("region", { name: "合成プレビュー" });
+  await expect(composition).toBeVisible();
+  await expect(composition.locator("audio")).toHaveCount(1);
+  await expect(composition.locator("video")).toHaveCount(0);
+  await expect(composition.locator("canvas")).toBeVisible();
+});
 test("editor files, trim, labels and timeline restore after opt-in and stay separate from All Versions", async ({
   page,
 }) => {
@@ -319,7 +365,7 @@ test("new session skips old media bytes and keeps archived work restorable", asy
     timeout: 35000,
   });
   await expect(page.getByRole("button", { name: "素材 1 のプレビューを読み込む" })).toBeVisible();
-  expect(await page.locator("video").first().getAttribute("src")).toBeNull();
+  await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
   await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
-  await expect(page.locator("video").first()).toHaveAttribute("src", /blob:/);
+  await expect(page.locator('video[id^="local-media-"]')).toHaveAttribute("src", /blob:/);
 });

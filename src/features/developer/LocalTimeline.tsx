@@ -44,7 +44,7 @@ export default function LocalTimeline({
   file: File;
   duration: number;
   analysisEnabled?: boolean;
-  media: () => HTMLVideoElement | null;
+  media: () => HTMLMediaElement | null;
   items: TimelineItem[];
   markers: number[];
   onMarkerAdd?: (us: number) => void;
@@ -80,8 +80,15 @@ export default function LocalTimeline({
     timeline ? { us: timeline.currentUs, pending: false } : null,
   );
   const writeMediaSeek = useCallback(
-    (video: HTMLVideoElement, us: number) => {
-      const physical = Math.max(0, Math.min(us, duration * 1e6 - 1)) / 1e6;
+    (video: HTMLMediaElement, us: number) => {
+      // Keep the logical closed end-point exact, but seek the last playable
+      // native sample. Audio decoders may round a 1µs-before-EOF seek UP to
+      // the end and report no playable sample, unlike the video element.
+      const lastPlayableUs = Math.max(
+        0,
+        duration * 1e6 - (video instanceof HTMLAudioElement ? 125 : 1),
+      );
+      const physical = Math.max(0, Math.min(us, lastPlayableUs)) / 1e6;
       const pending = Math.abs(video.currentTime - physical) > 0.0000005;
       cursorSeek.current = { us, pending };
       setCurrent(us);
@@ -181,10 +188,9 @@ export default function LocalTimeline({
   );
   useEffect(() => {
     const video = media();
-    if (!video || !initial.current) return;
-    const target = initial.current.currentUs;
+    const target = initial.current?.currentUs ?? cursorSeek.current?.us;
+    if (!video || target === undefined) return;
     const restore = () => {
-      if (!initial.current) return;
       const hasFrame = video.readyState >= 2;
       writeMediaSeek(video, cursorSeek.current?.us ?? target);
       // Safari can discard a seek issued at metadata-only readiness. Reapply
@@ -212,7 +218,19 @@ export default function LocalTimeline({
           : video.currentTime * 1e6,
       );
     const seeking = () => {
-      if (!cursorSeek.current?.pending && !initial.current)
+      // Native controls (pointer/keyboard) explicitly clear the editor cursor.
+      // Also accept external/scripted seeks, but do not clear the exact logical
+      // EOF when an audio decoder rounds the final playable sample.
+      const cursor = cursorSeek.current;
+      if (cursor?.pending || initial.current) return;
+      if (!cursor) return;
+      const isEnd = Math.abs(cursor.us - duration * 1e6) < 0.5;
+      const expectedUs = Math.min(
+        cursor.us,
+        Math.max(0, duration * 1e6 - (video instanceof HTMLAudioElement ? 125 : 1)),
+      );
+      const toleranceUs = isEnd ? 150 : 0.5;
+      if (Math.abs(video.currentTime * 1e6 - expectedUs) > toleranceUs)
         cursorSeek.current = null;
     };
     const seeked = () => {
@@ -264,6 +282,10 @@ export default function LocalTimeline({
     if (!navigation) return;
     const video = mediaRef.current();
     if (video) writeMediaSeek(video, navigation.us);
+    else {
+      cursorSeek.current = { us: navigation.us, pending: true };
+      setCurrent(navigation.us);
+    }
   }, [navigation, writeMediaSeek]);
   function seek(us: number) {
     const video = media();
@@ -271,7 +293,11 @@ export default function LocalTimeline({
       ? Math.max(0, Math.min(duration, us / 1e6))
       : clampToTrim(us / 1e6, ranges);
     if (video) writeMediaSeek(video, target * 1e6);
-    setCurrent(target * 1e6);
+    else {
+      // Persist the editor cursor while its decoder is fully detached.
+      cursorSeek.current = { us: target * 1e6, pending: true };
+      setCurrent(target * 1e6);
+    }
   }
   function applyBoundary(us: number) {
     setBoundaryError("");

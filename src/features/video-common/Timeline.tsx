@@ -171,7 +171,7 @@ export function Timeline({
   waveform?: TimelineWaveform;
   bounds?: { startUs: number; endUs: number };
   editing?: boolean;
-  media?: () => HTMLVideoElement | null;
+  media?: () => HTMLMediaElement | null;
   onVisibleWindow?: (view: { start: number; end: number; pps: number }) => void;
 }) {
   const viewport = useRef<HTMLDivElement>(null),
