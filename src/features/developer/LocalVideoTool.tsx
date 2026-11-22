@@ -177,8 +177,9 @@ export default function LocalVideoTool({
       const lightweight = selected
         .filter((source) => source.duration <= 60 && source.file.size <= 64 * 1024 * 1024)
         .map((source) => source.id);
-      // Preserve FNF's lightweight preview; All Versions stays fully on-demand.
-      setActivePreviewId(fnf ? (lightweight[0] ?? null) : null);
+      // Only the first short/small source auto-opens, never multiple decoders.
+      // Long videos remain opt-in; All Versions uses audio-only playback.
+      setActivePreviewId(lightweight[0] ?? null);
       setPreviewJobs([]);
       setAnalysisEnabledIds((old) => [
         ...(fnf ? [] : old),
