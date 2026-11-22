@@ -135,7 +135,7 @@ test("All Versions has one active native decoder and releases it when switching 
   await expect(active).toHaveCount(1);
   await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
   const first = await active.getAttribute("id");
-  expect(await active.getAttribute("preload")).toBe("none");
+  expect(await active.getAttribute("preload")).toBe("metadata");
   await page.getByRole("button", { name: "素材 2 のプレビューを読み込む" }).click();
   await expect(active).toHaveCount(1);
   expect(await active.getAttribute("id")).not.toBe(first);
