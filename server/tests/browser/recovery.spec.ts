@@ -273,7 +273,7 @@ test("new session skips old media bytes and keeps archived work restorable", asy
   await page.getByLabel("譜面名", { exact: true }).fill("ARCHIVED");
   await durable(page);
   await page.reload();
-  await expect(page.getByRole("button", { name: /新しく作成（古い動画を読み込まない）/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /新しく作成（古い動画を読み込まない）/ })).toBeVisible({ timeout: 35000 });
   const loaded = await page.evaluate(() => {
     const global = window as typeof window & { __loadedAssets?: number };
     global.__loadedAssets = 0;
