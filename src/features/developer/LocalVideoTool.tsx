@@ -621,7 +621,7 @@ export default function LocalVideoTool({
                 id={`local-media-${s.id}`}
                 src={previewEnabledIds.includes(s.id) ? s.url : undefined}
                 controls
-                preload="none"
+                preload={previewEnabledIds.includes(s.id) ? "metadata" : "none"}
                 aria-label={`素材 ${i + 1} プレビュー`}
               />
               <p>
@@ -680,7 +680,7 @@ export default function LocalVideoTool({
               src={previewEnabledIds.includes(s.id) ? s.url : undefined}
               controls
               playsInline
-              preload="none"
+              preload={previewEnabledIds.includes(s.id) ? "metadata" : "none"}
               style={{ width: "100%", maxHeight: 360 }}
               aria-label={`素材 ${i + 1} プレビュー`}
               />
