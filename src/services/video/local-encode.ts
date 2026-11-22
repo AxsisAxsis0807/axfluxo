@@ -70,28 +70,43 @@ function wait(ms: number, signal: AbortSignal) {
 }
 function mediaReady(
   media: HTMLMediaElement,
-  event: "loadeddata" | "seeked",
+  events: readonly string[],
+  ready: () => boolean,
   signal: AbortSignal,
+  timeoutMessage: string,
+  begin: () => void = () => {},
 ) {
   return new Promise<void>((resolve, reject) => {
+    signal.throwIfAborted();
     const cleanup = () => {
       clearTimeout(timer);
-      media.removeEventListener(event, done);
-      media.removeEventListener("error", fail);
-      signal.removeEventListener("abort", fail);
+      events.forEach((event) => media.removeEventListener(event, check));
+      media.removeEventListener("error", failed);
+      signal.removeEventListener("abort", cancelled);
     };
-    const done = () => {
+    const fail = (error: unknown) => {
+      cleanup();
+      reject(error);
+    };
+    const check = () => {
+      if (!ready()) return;
       cleanup();
       resolve();
     };
-    const fail = () => {
-      cleanup();
-      reject(Error("素材を読み込めません。接続と形式を確認してください。"));
-    };
-    const timer = setTimeout(fail, 30_000);
-    media.addEventListener(event, done, { once: true });
-    media.addEventListener("error", fail, { once: true });
-    signal.addEventListener("abort", fail, { once: true });
+    const failed = () =>
+      fail(Error("素材を読み込めません。接続と形式を確認してください。"));
+    const cancelled = () => fail(signal.reason);
+    const timer = setTimeout(() => fail(Error(timeoutMessage)), 30_000);
+    events.forEach((event) => media.addEventListener(event, check));
+    media.addEventListener("error", failed, { once: true });
+    signal.addEventListener("abort", cancelled, { once: true });
+    try {
+      begin();
+      if (media.error) failed();
+      else check();
+    } catch (error) {
+      fail(error);
+    }
   });
 }
 function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -115,7 +130,7 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
     if (signal.aborted) aborted();
   });
 }
-async function playForEncode(
+async function playWithPermission(
   media: HTMLMediaElement,
   signal: AbortSignal,
   status: (message: string) => void,
@@ -160,6 +175,20 @@ async function playForEncode(
     document.body.append(button);
   });
 }
+async function playForEncode(
+  media: HTMLMediaElement,
+  signal: AbortSignal,
+  status: (message: string) => void,
+) {
+  const timeout = AbortSignal.timeout(30_000);
+  try {
+    await playWithPermission(media, AbortSignal.any([signal, timeout]), status);
+  } catch (error) {
+    signal.throwIfAborted();
+    if (timeout.aborted) throw Error("素材の再生開始がタイムアウトしました。");
+    throw error;
+  }
+}
 /** Real-time, on-device encoding. No render job or video upload is created. */
 export async function encodeLocal(
   job: LocalEncodeJob,
@@ -190,7 +219,7 @@ export async function encodeLocal(
       status,
       progress,
       format,
-      shortJob ? duration : undefined,
+      duration,
     );
   try {
     return await attempt(mimeType);
@@ -221,7 +250,7 @@ async function encodeLocalAttempt(
   status: (s: string) => void,
   progress: (fraction: number) => void,
   mimeType: string,
-  expectedDuration: number | undefined,
+  expectedDuration: number,
 ) {
   const canvas = document.createElement("canvas");
   canvas.width = job.width;
@@ -260,9 +289,10 @@ async function encodeLocalAttempt(
       // Use a single native capture cadence. Explicit requestFrame calls
       // combined with a capture timer can duplicate timestamps at cuts.
       stream = canvas.captureStream(60);
-      destination.stream
-        .getAudioTracks()
-        .forEach((track) => stream!.addTrack(track));
+      const audioTracks = destination.stream.getAudioTracks();
+      if (!audioTracks.some((track) => track.readyState === "live"))
+        throw Error("録画用の音声トラックを作成できません。");
+      audioTracks.forEach((track) => stream!.addTrack(track));
       const recorder = new MediaRecorder(stream, {
         mimeType,
         videoBitsPerSecond: 8_000_000,
@@ -317,21 +347,73 @@ async function encodeLocalAttempt(
       signal.throwIfAborted();
       const url = await piece.url();
       signal.throwIfAborted();
-      const ready = mediaReady(media, "loadeddata", signal);
-      media.src = url;
-      media.load();
-      await ready;
-      if (piece.start > 0) {
-        const seek = mediaReady(media, "seeked", signal);
-        media.currentTime = piece.start;
-        await seek;
-      }
+      await mediaReady(
+        media,
+        ["loadedmetadata", "durationchange"],
+        () => media.readyState >= 1,
+        signal,
+        "素材のメタデータの読み込みがタイムアウトしました。",
+        () => {
+          media.src = url;
+          media.load();
+        },
+      );
+      if (audio.state !== "running")
+        throw Error(
+          "録画用の音声処理が停止しています。音声処理を許可してください。",
+        );
+      // Warm up playback, then hold the source at the requested start.
+      // Starting the recorder while the source is already running loses the
+      // beginning of short clips when the native encoder opens slowly.
       await playForEncode(media, signal, status);
+      media.pause();
+      if (Math.abs(media.currentTime - piece.start) > 0.001) {
+        await mediaReady(
+          media,
+          ["seeked"],
+          () =>
+            !media.seeking && Math.abs(media.currentTime - piece.start) <= 0.05,
+          signal,
+          "指定した再生位置への移動がタイムアウトしました。",
+          () => {
+            media.currentTime = piece.start;
+          },
+        );
+      }
+      if (kind === "video") {
+        const video = media as HTMLVideoElement;
+        await mediaReady(
+          video,
+          ["loadeddata", "canplay", "playing", "timeupdate", "resize"],
+          () =>
+            video.readyState >= 2 &&
+            video.videoWidth > 0 &&
+            video.videoHeight > 0,
+          signal,
+          "映像フレームの読み込みがタイムアウトしました。",
+        );
+      }
+      drawFrame(kind, media, elapsed);
       if (!recordingStarted) {
+        const started = new Promise<void>((resolve) => {
+          recorder.onstart = () => resolve();
+        });
         recorder.start(1000);
+        const startTimeout = AbortSignal.timeout(30_000);
+        try {
+          await abortable(started, AbortSignal.any([signal, startTimeout]));
+        } catch (error) {
+          signal.throwIfAborted();
+          if (startTimeout.aborted)
+            throw Error("録画の開始がタイムアウトしました。");
+          throw error;
+        } finally {
+          recorder.onstart = null;
+        }
         recordingStarted = true;
       } else recorder.resume();
       drawFrame(kind, media, elapsed);
+      await playForEncode(media, signal, status);
       let last = media.currentTime,
         stalled = performance.now();
       while (media.currentTime < piece.end - 1 / 120) {
@@ -373,7 +455,15 @@ async function encodeLocalAttempt(
     }
     signal.throwIfAborted();
     if (recorder.state !== "inactive") recorder.stop();
-    await stopped;
+    const stopTimeout = AbortSignal.timeout(30_000);
+    try {
+      await abortable(stopped, AbortSignal.any([signal, stopTimeout]));
+    } catch (error) {
+      signal.throwIfAborted();
+      if (stopTimeout.aborted)
+        throw Error("録画データの確定がタイムアウトしました。");
+      throw error;
+    }
     signal.throwIfAborted();
     if (recordError) throw recordError;
     const blob = new Blob(chunks, { type: mimeType });
@@ -386,8 +476,8 @@ async function encodeLocalAttempt(
     };
   } finally {
     if (recorder.state !== "inactive") recorder.stop();
+    recorder.ondataavailable = recorder.onstop = recorder.onerror = null;
     mediaByKind.forEach((media) => media.pause());
-    if (recordingStarted) await stopped;
     mediaByKind.forEach((media) => {
       media.removeAttribute("src");
       media.load();

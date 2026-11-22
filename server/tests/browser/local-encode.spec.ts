@@ -40,9 +40,34 @@ test("device encoder joins trimmed audio/video or reports an unavailable encoder
     jsx: "automatic",
     define: { "process.env.NODE_ENV": '"test"' },
   });
-  await page.route("https://encode.test/source.mp4", async (r) =>
-    r.fulfill({ contentType: "video/mp4", body: await readFile(path) }),
-  );
+  const bytes = await readFile(path);
+  await page.route("https://encode.test/source.mp4", (route) => {
+    // The native media element needs a seekable response for trimmed inputs.
+    const range = /^bytes=(\d+)-(\d*)$/.exec(
+      route.request().headers().range ?? "",
+    );
+    const start = range ? Number(range[1]) : 0;
+    const end = range?.[2]
+      ? Math.min(Number(range[2]), bytes.length - 1)
+      : bytes.length - 1;
+    if (start > end)
+      return route.fulfill({
+        status: 416,
+        headers: { "content-range": `bytes */${bytes.length}` },
+      });
+    return route.fulfill({
+      status: range ? 206 : 200,
+      contentType: "video/mp4",
+      headers: {
+        "accept-ranges": "bytes",
+        "content-length": String(end - start + 1),
+        ...(range && {
+          "content-range": `bytes ${start}-${end}/${bytes.length}`,
+        }),
+      },
+      body: bytes.subarray(start, end + 1),
+    });
+  });
   await page.route("https://encode.test/", (r) =>
     r.fulfill({
       contentType: "text/html",

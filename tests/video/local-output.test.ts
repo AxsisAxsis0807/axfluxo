@@ -83,3 +83,42 @@ it("accepts real video/audio packets and rejects a nonempty audio-only MP4 befor
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+it("checks both track ranges beyond ten minutes without decoding samples", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "validate-long-local-"));
+  try {
+    const signal = new AbortController().signal;
+    for (const audioSeconds of [601, 590]) {
+      const output = join(dir, `audio-${audioSeconds}.mp4`);
+      execFileSync("ffmpeg", [
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=black:size=16x16:rate=1:duration=601",
+        "-f",
+        "lavfi",
+        "-i",
+        `anullsrc=r=8000:cl=mono:d=${audioSeconds}`,
+        "-threads",
+        "1",
+        "-c:v",
+        "libx264",
+        "-c:a",
+        "aac",
+        "-y",
+        output,
+      ]);
+      const check = validateLocalOutput(
+        new Blob([await readFile(output)], { type: "video/mp4" }),
+        signal,
+        601,
+      );
+      if (audioSeconds === 601) await expect(check).resolves.toBeUndefined();
+      else await expect(check).rejects.toThrow("音声が指定区間より短い");
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

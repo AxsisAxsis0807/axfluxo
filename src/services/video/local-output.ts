@@ -42,11 +42,20 @@ export async function validateLocalOutput(
         error.name = "LocalVideoOutputError";
       throw error;
     }
-    if (expectedDuration !== undefined && video) {
-      const duration = await video.computeDuration();
+    if (expectedDuration !== undefined && video && audio) {
+      // These calls inspect packet timestamps through the bounded Blob cache.
+      // Neither the video pixels nor the audio samples are decoded.
+      const [videoStart, videoEnd, audioStart, audioEnd] = await Promise.all([
+        video.getFirstTimestamp(),
+        video.computeDuration(),
+        audio.getFirstTimestamp(),
+        audio.computeDuration(),
+      ]);
+      const tolerance = Math.min(0.35, expectedDuration / 3);
       if (
-        !Number.isFinite(duration) ||
-        duration < expectedDuration - Math.min(0.35, expectedDuration / 3)
+        !Number.isFinite(videoStart) ||
+        !Number.isFinite(videoEnd) ||
+        videoEnd - videoStart < expectedDuration - tolerance
       ) {
         const error = Error(
           "完成動画の映像が指定区間より短いため、保存を停止しました。",
@@ -54,6 +63,21 @@ export async function validateLocalOutput(
         error.name = "LocalVideoOutputError";
         throw error;
       }
+      if (
+        !Number.isFinite(audioStart) ||
+        !Number.isFinite(audioEnd) ||
+        audioEnd - audioStart < expectedDuration - tolerance
+      )
+        throw Error(
+          "完成動画の音声が指定区間より短いため、保存を停止しました。",
+        );
+      if (
+        Math.abs(videoStart - audioStart) > 0.4 ||
+        Math.abs(videoEnd - audioEnd) > 0.4
+      )
+        throw Error(
+          "完成動画の映像と音声の記録時刻が一致しないため、保存を停止しました。",
+        );
     }
     signal.throwIfAborted();
   } catch (error) {
