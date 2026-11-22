@@ -535,6 +535,7 @@ export default function LocalVideoTool({
               <LocalMediaPreview
                 id={s.id}
                 url={s.url}
+                audioOnly={!fnf}
                 onError={() => {
                   setActivePreviewId(null);
                   setError("この端末では素材プレビューを再生できません。元の素材と編集内容は保持されています。");
@@ -571,7 +572,7 @@ export default function LocalVideoTool({
             media={() =>
               document.getElementById(
                 `local-media-${s.id}`,
-              ) as HTMLVideoElement | null
+              ) as HTMLMediaElement | null
             }
             fnf={fnf}
             items={
