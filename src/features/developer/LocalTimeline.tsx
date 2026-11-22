@@ -88,7 +88,7 @@ export default function LocalTimeline({
       // The deferred preview has no src until the user opts in. Seeking an
       // uninitialized native element can throw in Safari; retain cursor UI
       // and apply the seek after metadata has loaded.
-      if (pending && video.readyState >= HTMLMediaElement.HAVE_METADATA)
+      if (pending && video.readyState >= 1)
         video.currentTime = physical;
     },
     [duration],
