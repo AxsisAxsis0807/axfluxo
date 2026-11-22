@@ -84,9 +84,10 @@ export default function LocalTimeline({
       // Keep the logical closed end-point exact, but seek the last playable
       // native sample. Audio decoders may round a 1µs-before-EOF seek UP to
       // the end and report no playable sample, unlike the video element.
-      // 125µs is one sample at 8 kHz. Seeking 1µs before EOF can round
-      // UP to EOF in WebKit for both audio and video HTML media elements.
-      const lastPlayableUs = Math.max(0, duration * 1e6 - 125);
+      const lastPlayableUs = Math.max(
+        0,
+        duration * 1e6 - (video instanceof HTMLAudioElement ? 125 : 1),
+      );
       const physical = Math.max(0, Math.min(us, lastPlayableUs)) / 1e6;
       const pending = Math.abs(video.currentTime - physical) > 0.0000005;
       cursorSeek.current = { us, pending };
@@ -226,7 +227,7 @@ export default function LocalTimeline({
       const isEnd = Math.abs(cursor.us - duration * 1e6) < 0.5;
       const expectedUs = Math.min(
         cursor.us,
-        Math.max(0, duration * 1e6 - 125),
+        Math.max(0, duration * 1e6 - (video instanceof HTMLAudioElement ? 125 : 1)),
       );
       const toleranceUs = isEnd ? 150 : 0.5;
       if (Math.abs(video.currentTime * 1e6 - expectedUs) > toleranceUs)
