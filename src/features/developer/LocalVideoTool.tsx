@@ -524,7 +524,7 @@ export default function LocalVideoTool({
       {loading && <p role="status">素材を読み込んでいます…</p>}
       {error && <p role="alert">{error}</p>}
       {!fnf && (
-        <p>All Versionsの素材プレビューは音声のみ再生します。元動画の高解像度映像を読み込まず、iPhoneの負荷を抑えます。</p>
+        <p>All Versionsでは映像付き素材のプレビューを音声専用で再生します。音声のみの素材は互換性を重視して読み込みます。元動画の高解像度映像は読み込みません。</p>
       )}
       {sources.map((s, i) => (
         <fieldset key={s.id}>
@@ -539,7 +539,9 @@ export default function LocalVideoTool({
               <LocalMediaPreview
                 id={s.id}
                 url={s.url}
-                audioOnly={!fnf}
+                // Source video tracks are never decoded in All Versions.
+                // Pure audio files keep the proven video-element audio pipeline.
+                audioOnly={!fnf && s.width > 0 && s.height > 0}
                 warmMetadata={s.duration <= 60 && s.file.size <= 64 * 1024 * 1024}
                 onError={() => {
                   setActivePreviewId(null);
@@ -869,7 +871,7 @@ export default function LocalVideoTool({
           <LocalCompositionPreview
             key={Math.min(previewIndex, previewJobs.length - 1)}
             job={previewJobs[Math.min(previewIndex, previewJobs.length - 1)]}
-            audioOnly={!fnf}
+            audioOnlyByPiece={fnf ? undefined : sources.map((source) => source.width > 0 && source.height > 0)}
           />
         </>
       )}
