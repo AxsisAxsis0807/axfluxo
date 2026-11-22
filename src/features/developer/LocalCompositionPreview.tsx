@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import type { LocalEncodeJob } from "../../services/video/local-encode";
 export default function LocalCompositionPreview({
   job,
-  audioOnly = false,
+  audioOnlyByPiece,
 }: {
   job: LocalEncodeJob;
-  audioOnly?: boolean;
+  audioOnlyByPiece?: readonly boolean[];
 }) {
   const canvas = useRef<HTMLCanvasElement>(null),
     video = useRef<HTMLVideoElement>(null),
@@ -18,6 +18,9 @@ export default function LocalCompositionPreview({
     [url, setUrl] = useState(""),
     [message, setMessage] = useState("");
   const selectedIndex = Math.min(index, job.pieces.length - 1);
+  // The cover-only All Versions draw function does not need source frames.
+  // Keep the long-proven <video> audio pipeline for sources with NO video track.
+  const audioOnly = Boolean(audioOnlyByPiece?.[selectedIndex]);
   useEffect(() => {
     let live = true;
     void job.pieces[selectedIndex].url().then(
