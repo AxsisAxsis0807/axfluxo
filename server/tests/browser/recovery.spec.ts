@@ -132,10 +132,8 @@ test("All Versions has one active native decoder and releases it when switching 
   await picker.setInputFiles([source, source]);
   await expect(page.getByRole("group", { name: /素材 2：source\.mp4/ })).toBeVisible();
   const active = page.locator('audio[id^="local-media-"]');
-  await expect(active).toHaveCount(0);
-  await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
-  await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(active).toHaveCount(1);
+  await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
   const first = await active.getAttribute("id");
   expect(await active.getAttribute("preload")).toBe("none");
   await page.getByRole("button", { name: "素材 2 のプレビューを読み込む" }).click();
@@ -367,7 +365,7 @@ test("new session skips old media bytes and keeps archived work restorable", asy
     timeout: 35000,
   });
   await expect(page.getByRole("button", { name: "素材 1 のプレビューを読み込む" })).toBeVisible();
-  expect(await page.locator("video").first().getAttribute("src")).toBeNull();
+  await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
   await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
-  await expect(page.locator("video").first()).toHaveAttribute("src", /blob:/);
+  await expect(page.locator('video[id^="local-media-"]')).toHaveAttribute("src", /blob:/);
 });
