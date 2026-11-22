@@ -181,10 +181,9 @@ export default function LocalTimeline({
   );
   useEffect(() => {
     const video = media();
-    if (!video || !initial.current) return;
-    const target = initial.current.currentUs;
+    const target = initial.current?.currentUs ?? cursorSeek.current?.us;
+    if (!video || target === undefined) return;
     const restore = () => {
-      if (!initial.current) return;
       const hasFrame = video.readyState >= 2;
       writeMediaSeek(video, cursorSeek.current?.us ?? target);
       // Safari can discard a seek issued at metadata-only readiness. Reapply
@@ -264,6 +263,10 @@ export default function LocalTimeline({
     if (!navigation) return;
     const video = mediaRef.current();
     if (video) writeMediaSeek(video, navigation.us);
+    else {
+      cursorSeek.current = { us: navigation.us, pending: true };
+      setCurrent(navigation.us);
+    }
   }, [navigation, writeMediaSeek]);
   function seek(us: number) {
     const video = media();
@@ -271,7 +274,11 @@ export default function LocalTimeline({
       ? Math.max(0, Math.min(duration, us / 1e6))
       : clampToTrim(us / 1e6, ranges);
     if (video) writeMediaSeek(video, target * 1e6);
-    setCurrent(target * 1e6);
+    else {
+      // Persist the editor cursor while its decoder is fully detached.
+      cursorSeek.current = { us: target * 1e6, pending: true };
+      setCurrent(target * 1e6);
+    }
   }
   function applyBoundary(us: number) {
     setBoundaryError("");
