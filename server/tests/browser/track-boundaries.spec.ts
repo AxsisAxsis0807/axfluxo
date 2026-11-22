@@ -173,6 +173,8 @@ test("PCM analysis, candidate navigation, candidate addition, audition, deletion
     "この端末に自動保存済み",
   );
   await page.reload();
+  await page.getByRole("button", { name: /前回の作業を再開/ }).click();
+  await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
     timeout: 35000,
   });
@@ -291,6 +293,8 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
     "この端末に自動保存済み",
   );
   await page.reload();
+  await page.getByRole("button", { name: /前回の作業を再開/ }).click();
+  await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
     timeout: 35000,
   });
@@ -478,6 +482,8 @@ test("three direct boundaries persist through move, nearest deletion and reload"
     "この端末に自動保存済み",
   );
   await page.reload();
+  await page.getByRole("button", { name: /前回の作業を再開/ }).click();
+  await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
     timeout: 35000,
   });

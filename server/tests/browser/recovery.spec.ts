@@ -52,6 +52,12 @@ async function open(page: Page) {
     timeout: 35000,
   });
 }
+async function resumeSaved(page: Page) {
+  await page.getByRole("button", { name: /前回の作業を再開/ }).click();
+  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
+    timeout: 35000,
+  });
+}
 async function durable(page: Page) {
   await expect(page.getByTestId("local-save-status")).toContainText(
     "この端末に自動保存済み",
@@ -62,7 +68,7 @@ async function durable(page: Page) {
     ).flushExportRecovery();
   });
 }
-test("editor files, trim, labels and timeline restore automatically and stay separate from All Versions", async ({
+test("editor files, trim, labels and timeline restore after opt-in and stay separate from All Versions", async ({
   page,
 }) => {
   test.setTimeout(90000);
@@ -83,14 +89,15 @@ test("editor files, trim, labels and timeline restore automatically and stay sep
   const zoom = await page.getByLabel("timeline倍率").textContent();
   await durable(page);
   await page.reload();
-  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
-    timeout: 35000,
-  });
+  await resumeSaved(page);
   await expect(page.getByLabel("譜面名", { exact: true })).toHaveValue(
     "RESTORED",
   );
   await expect(page.getByLabel("開始秒", { exact: true })).toHaveValue("0.5");
   await expect(page.getByLabel("timeline倍率")).toHaveText(zoom!);
+  await page.getByRole("button", {
+    name: "素材 1 のプレビューを読み込む",
+  }).click();
   expect(
     await page
       .locator("video")
@@ -152,9 +159,7 @@ test("durable queued jobs restart once; finished videos survive reload until eac
       ),
     ).toBe(0);
     await page.reload();
-    await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
-      timeout: 35000,
-    });
+    await resumeSaved(page);
     await expect(
       page.getByLabel("譜面名", { exact: true }).first(),
     ).toHaveValue("A");
@@ -179,9 +184,7 @@ test("durable queued jobs restart once; finished videos survive reload until eac
   ).toBeVisible();
   await durable(page);
   await page.reload();
-  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
-    timeout: 35000,
-  });
+  await resumeSaved(page);
   await page.getByRole("button", { name: /詳細を開く/ }).click();
   const permit = page.getByRole("button", {
     name: "音声処理を許可・キューを再開",
@@ -244,9 +247,7 @@ test("durable queued jobs restart once; finished videos survive reload until eac
   );
   await durable(page);
   await page.reload();
-  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
-    timeout: 35000,
-  });
+  await resumeSaved(page);
   await page.getByRole("button", { name: /詳細を開く/ }).click();
   await expect(saveA).toBeVisible();
   await expect(saveB).toBeVisible();
@@ -263,4 +264,41 @@ test("durable queued jobs restart once; finished videos survive reload until eac
   await expect(saveB).toBeVisible();
   await durable(page);
   expect(await page.getByRole("dialog").locator("article").count()).toBe(1);
+});
+
+test("new session skips old media bytes and keeps archived work restorable", async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page);
+  await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
+  await page.getByLabel("譜面名", { exact: true }).fill("ARCHIVED");
+  await durable(page);
+  await page.reload();
+  await expect(page.getByRole("button", { name: /新しく作成（古い動画を読み込まない）/ })).toBeVisible({ timeout: 35000 });
+  const loaded = await page.evaluate(() => {
+    const global = window as typeof window & { __loadedAssets?: number };
+    global.__loadedAssets = 0;
+    const native = IDBObjectStore.prototype.get;
+    IDBObjectStore.prototype.get = function (key) {
+      if (this.name === "assets") global.__loadedAssets!++;
+      return native.call(this, key);
+    };
+    return global.__loadedAssets;
+  });
+  expect(loaded).toBe(0);
+  await page.getByRole("button", { name: /新しく作成（古い動画を読み込まない）/ }).click();
+  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled();
+  expect(await page.evaluate(() => (window as typeof window & {
+    __loadedAssets?: number;
+  }).__loadedAssets)).toBe(0);
+  await expect(page.getByRole("group", { name: /^素材 1/ })).toHaveCount(0);
+  await durable(page);
+  await page.reload();
+  await page.getByRole("button", { name: /保存済みの作業を再開：ARCHIVED/ }).click();
+  await expect(page.getByLabel("譜面名", { exact: true })).toHaveValue("ARCHIVED", {
+    timeout: 35000,
+  });
+  await expect(page.getByRole("button", { name: "素材 1 のプレビューを読み込む" })).toBeVisible();
+  expect(await page.locator("video").first().getAttribute("src")).toBeNull();
+  await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
+  await expect(page.locator("video").first()).toHaveAttribute("src", /blob:/);
 });

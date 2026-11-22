@@ -223,7 +223,9 @@ async function readAsset(
     manifest.count !== Math.ceil(manifest.size / CHUNK_BYTES)
   )
     throw Error("保存素材の情報が不正です。データは保持しました。");
-  let blob = new Blob([], { type: manifest.type });
+  // Collect chunk references once. Repeatedly nesting Blob([previousBlob, chunk])
+  // allocates an ever-deeper tree and keeps intermediate wrappers alive.
+  const parts: BlobPart[] = [];
   for (let index = 0; index < manifest.count; index++) {
     const part = (await request(
       db.transaction("assets").objectStore("assets").get(chunkKey(key, index)),
@@ -237,9 +239,13 @@ async function readAsset(
       throw Error(
         "保存素材の一部が欠けるか破損しています。データは保持しました。",
       );
-    blob = new Blob([blob, part.bytes], { type: manifest.type });
+    parts.push(part.bytes);
   }
-  return { blob, name: manifest.name, lastModified: manifest.lastModified };
+  return {
+    blob: new Blob(parts, { type: manifest.type }),
+    name: manifest.name,
+    lastModified: manifest.lastModified,
+  };
 }
 /** Advisory only: actual transaction failures remain authoritative on Safari. */
 async function checkCapacity(assets: readonly (readonly [string, Blob])[]) {
@@ -326,6 +332,58 @@ export function saveLocalProject(project: LocalProjectData) {
   pendingProjects.set(key, entry);
   projectWrites = entry.promise;
   return entry.promise;
+}
+/** Lightweight recovery index. Never touches stored video/audio/output bytes. */
+export type LocalProjectSummary = {
+  id: string;
+  mode: LocalProjectData["mode"];
+  sourceCount: number;
+  label: string;
+  active: boolean;
+};
+export async function listLocalProjects(
+  mode: LocalProjectData["mode"],
+): Promise<LocalProjectSummary[]> {
+  await projectWrites.catch(() => {});
+  return write(async (tx) => {
+    const projects = (await request(
+      tx.objectStore("projects").getAll(),
+    )) as StoredProject[];
+    const active = (await request(
+      tx.objectStore("meta").get(`active:${mode}`),
+    )) as string | undefined;
+    return projects
+      .filter((project) => project.mode === mode)
+      .map((project) => ({
+        id: project.id,
+        mode,
+        sourceCount: project.sources.length,
+        label:
+          project.mode === "all-versions"
+            ? project.names.split("\n")[0] || "All Versions"
+            : project.ranges[0]?.name || "FNF Showcase",
+        active: project.id === active,
+      }))
+      .sort((a, b) => Number(b.active) - Number(a.active));
+  });
+}
+/** Inspect queued job count without hydrating a single source or finished output. */
+export async function countStoredExportEntries(): Promise<number> {
+  const db = await open();
+  return request(db.transaction("jobs").objectStore("jobs").count());
+}
+/** Reopen an archived project by explicit choice, never by eager mount. */
+export async function loadLocalProjectById(
+  mode: LocalProjectData["mode"],
+  id: string,
+): Promise<LocalProjectData> {
+  await projectWrites.catch(() => {});
+  const data = await write(async (tx) =>
+    request(tx.objectStore("projects").get(`${mode}:${id}`)),
+  ) as StoredProject | undefined;
+  if (!data || data.mode !== mode || data.id !== id)
+    throw Error("指定された保存済みプロジェクトが見つかりません。");
+  return hydrate(data);
 }
 export async function loadLocalProject(mode: LocalProjectData["mode"]) {
   await projectWrites.catch(() => {});
@@ -425,7 +483,12 @@ async function collectAssets(tx: IDBTransaction) {
   }
 }
 /** Blob assets and completed results are written once; progress writes only metadata. */
-export async function saveExportEntries(entries: ExportEntry[]) {
+/** In a fresh session, only ids owned by this session may be deleted.
+ * Older saved jobs stay durable until the user explicitly reopens and manages them. */
+export async function saveExportEntries(
+  entries: ExportEntry[],
+  managedIds?: ReadonlySet<string>,
+) {
   const assets = new Map<string, Blob>();
   for (const entry of entries) {
     const recipe = entry.recovery ?? entry.input?.recovery;
@@ -441,7 +504,10 @@ export async function saveExportEntries(entries: ExportEntry[]) {
     const jobs = tx.objectStore("jobs");
     const previous = (await request(jobs.getAll())) as StoredEntry[];
     for (const row of previous)
-      if (!entries.some((e) => e.id === row.id)) {
+      if (
+        !entries.some((e) => e.id === row.id) &&
+        (!managedIds || managedIds.has(row.id))
+      ) {
         jobs.delete(row.id);
         // Deletion follows explicit per-output save confirmation. A newer edit or
         // any remaining job keeps the project and all of its shared materials.
@@ -473,7 +539,10 @@ export async function saveExportEntries(entries: ExportEntry[]) {
       if (recipe) await publishAssets(tx, recipe.project);
       const row: StoredEntry = {
         ...metadata,
-        order: entries.indexOf(entry),
+        order: managedIds
+          ? previous.find((old) => old.id === entry.id)?.order ??
+            previous.length + entries.indexOf(entry)
+          : entries.indexOf(entry),
         recipe: recipe
           ? { project: stored(recipe.project), index: recipe.index }
           : persistedRecipe,

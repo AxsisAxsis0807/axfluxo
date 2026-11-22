@@ -12,7 +12,11 @@ type State = Omit<WaveformResult, "status"> & {
 const cache = new WeakMap<File, WaveformResult>();
 const initial: State = { status: "queued", progress: 0, analyzedUntilUs: 0 };
 
-export function useLocalWaveform(file: File, duration: number) {
+export function useLocalWaveform(
+  file: File,
+  duration: number,
+  enabled = true,
+) {
   const [entry, setEntry] = useState<{ file: File; state: State }>({
     file,
     state: initial,
@@ -20,6 +24,11 @@ export function useLocalWaveform(file: File, duration: number) {
   const [attempt, setAttempt] = useState(0);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => {
+    // Never begin native decoding in a deferred preview.
+    if (!enabled) {
+      controller.current?.abort();
+      return;
+    }
     let active = true;
     let finished = false;
     const abort = new AbortController();
@@ -76,9 +85,12 @@ export function useLocalWaveform(file: File, duration: number) {
       abort.abort();
       document.removeEventListener("visibilitychange", hidden);
     };
-  }, [file, duration, attempt]);
+  }, [file, duration, attempt, enabled]);
   return {
-    ...(entry.file === file ? entry.state : initial),
+    ...(enabled ? (entry.file === file ? entry.state : initial) : {
+      ...initial,
+      status: "paused" as const,
+    }),
     cancel: () => {
       controller.current?.abort();
       setEntry((old) => ({
