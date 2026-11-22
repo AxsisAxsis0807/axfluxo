@@ -4,10 +4,25 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-let bundle: string, source: string;
+let bundle: string, source: string, mp3: string;
 test.beforeAll(async () => {
   const dir = await mkdtemp(join(tmpdir(), "recovery-"));
   source = join(dir, "source.mp4");
+  mp3 = join(dir, "tone.mp3");
+  execFileSync("ffmpeg", [
+    "-v",
+    "error",
+    "-f",
+    "lavfi",
+    "-i",
+    "sine=frequency=440:duration=2",
+    "-c:a",
+    "libmp3lame",
+    "-b:a",
+    "128k",
+    "-y",
+    mp3,
+  ]);
   execFileSync("ffmpeg", [
     "-v",
     "error",
@@ -70,6 +85,42 @@ async function durable(page: Page) {
     ).flushExportRecovery();
   });
 }
+test("All Versions accepts MP3 and has an unrestricted iOS picker fallback; FNF keeps video-only selection", async ({
+  page,
+}) => {
+  test.setTimeout(60000);
+  await open(page);
+  await expect(page.getByLabel("端末の素材", { exact: true })).toHaveAttribute(
+    "accept",
+    "video/*",
+  );
+  await expect(
+    page.getByLabel("形式の制限なしで素材を選択"),
+  ).toHaveCount(0);
+
+  await page.goto("https://recovery.test/all");
+  const picker = page.getByLabel("端末の素材", { exact: true });
+  await expect(picker).toBeEnabled({ timeout: 35000 });
+  const formats = (await picker.getAttribute("accept"))?.split(",") ?? [];
+  for (const ext of [".mp3", ".wav", ".m4a", ".mp4", ".mov"]) {
+    expect(formats).toContain(ext);
+  }
+  expect(formats).not.toContain("audio/*");
+  expect(formats).not.toContain("video/*");
+
+  const fallback = page.getByLabel("形式の制限なしで素材を選択");
+  await expect(fallback).toBeEnabled();
+  expect(await fallback.getAttribute("accept")).toBeNull();
+
+  await picker.setInputFiles(mp3);
+  await expect(
+    page.getByRole("group", { name: /素材 1：tone\.mp3/ }),
+  ).toBeVisible();
+  await fallback.setInputFiles(mp3);
+  await expect(
+    page.getByRole("group", { name: /素材 2：tone\.mp3/ }),
+  ).toBeVisible();
+});
 test("editor files, trim, labels and timeline restore after opt-in and stay separate from All Versions", async ({
   page,
 }) => {
