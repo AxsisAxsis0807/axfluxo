@@ -68,7 +68,7 @@ async function durable(page: Page) {
     ).flushExportRecovery();
   });
 }
-test("editor files, trim, labels and timeline restore automatically and stay separate from All Versions", async ({
+test("editor files, trim, labels and timeline restore after opt-in and stay separate from All Versions", async ({
   page,
 }) => {
   test.setTimeout(90000);
