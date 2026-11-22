@@ -8,8 +8,12 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
-for (const cancelDuringRest of [false, true])
-  it(`pauses recording and playback during rest (cancel=${cancelDuringRest})`, async () => {
+for (const [kind, cancelDuringRest] of [
+  ["video", false],
+  ["video", true],
+  ["audio", false],
+] as const)
+  it(`pauses ${kind} recording and playback during rest (cancel=${cancelDuringRest})`, async () => {
     vi.useFakeTimers();
     const states: string[] = [],
       tracks = [{ stop: vi.fn() }];
@@ -20,7 +24,11 @@ for (const cancelDuringRest of [false, true])
       style: { cssText: "" },
       src: "",
       ended: false,
+      readyState: 0,
+      videoWidth: 320,
+      videoHeight: 180,
       play: async () => {
+        media.readyState = kind === "video" ? 2 : 1;
         playing = true;
         started = Date.now();
       },
@@ -29,7 +37,11 @@ for (const cancelDuringRest of [false, true])
         playing = false;
       },
       load() {
-        setTimeout(() => media.dispatchEvent(new Event("loadeddata")), 0);
+        media.readyState = 0;
+        setTimeout(() => {
+          media.readyState = 1;
+          media.dispatchEvent(new Event("loadedmetadata"));
+        }, 0);
       },
       remove: vi.fn(),
       removeAttribute: vi.fn(),
@@ -83,8 +95,11 @@ for (const cancelDuringRest of [false, true])
     }
     vi.stubGlobal("MediaRecorder", Recorder);
     const audio = {
+      state: "running",
       createMediaStreamDestination: () => ({
-        stream: { getAudioTracks: () => [] },
+        stream: {
+          getAudioTracks: () => [{ readyState: "live", stop: vi.fn() }],
+        },
       }),
       createMediaElementSource: () => ({
         connect: vi.fn(),
@@ -100,7 +115,7 @@ for (const cancelDuringRest of [false, true])
         width: 320,
         height: 180,
         pieces: [
-          { url: async () => "https://source.test", start: 0, end: 601 },
+          { kind, url: async () => "https://source.test", start: 0, end: 601 },
         ],
         draw: vi.fn(),
       },

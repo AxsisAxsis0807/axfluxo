@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { build } from "esbuild";
+import { audioMetadataTimeoutMs } from "../../../src/services/video/local-audio";
 
 const formats = [
   ["mp3", "audio/mpeg", "libmp3lame"],
@@ -148,6 +149,35 @@ async function exportAndDecode(page: Page) {
   return path;
 }
 
+test("corrupt MP3, WAV and M4A leave the picker ready for another file", async ({
+  page,
+}) => {
+  await open(page, "all-versions");
+  const picker = page.getByLabel("音声ファイルを選択", { exact: true });
+  for (const [name, mimeType] of [
+    ["broken.mp3", "audio/mpeg"],
+    ["broken.wav", "audio/wav"],
+    ["broken.m4a", "audio/mp4"],
+  ]) {
+    await picker.setInputFiles({
+      name,
+      mimeType,
+      buffer: Buffer.from("invalid media"),
+    });
+    await expect(page.getByRole("alert")).toContainText(
+      "音声形式を再生できない",
+    );
+    await expect(picker).toBeEnabled();
+    await expect(page.locator("legend").filter({ hasText: name })).toHaveCount(
+      0,
+    );
+  }
+  await picker.setInputFiles(join(dir, "sample.wav"));
+  await expect(
+    page.locator("legend").filter({ hasText: "sample.wav" }),
+  ).toBeVisible();
+});
+
 test("All Versions plays supported audio formats, restores order and exports the selected versions", async ({
   page,
 }) => {
@@ -158,6 +188,7 @@ test("All Versions plays supported audio formats, restores order and exports the
     name: "空.wav", mimeType: "audio/wav", buffer: Buffer.alloc(0),
   });
   await expect(page.getByRole("alert")).toContainText("音声ファイルが空です");
+  await expect(picker).toBeEnabled();
   let supported = 0;
   for (const [extension, mimeType] of formats) {
     const name = `sample.${extension}`;
@@ -166,7 +197,10 @@ test("All Versions plays supported audio formats, restores order and exports the
       mimeType,
       buffer: await readFile(join(dir, name)),
     });
-    await expect(picker).toBeEnabled();
+    // Raw AAC can remain durationless in WebKit until the application's limit.
+    await expect(picker).toBeEnabled(
+      extension === "aac" ? { timeout: audioMetadataTimeoutMs + 1_000 } : {},
+    );
     const item = page
       .locator("fieldset")
       .filter({ has: page.locator("legend").filter({ hasText: name }) });
@@ -181,7 +215,10 @@ test("All Versions plays supported audio formats, restores order and exports the
     } else {
       await expect(
         page.getByRole("alert").filter({
-          hasText: /音声形式を再生できない|音声ファイルの再生時間を取得できません/,
+          hasText:
+            extension === "aac"
+              ? /音声形式を再生できない|音声ファイルの再生時間を取得できません|音声の読み込みがタイムアウトしました/
+              : /音声形式を再生できない|音声ファイルの再生時間を取得できません/,
         }),
       ).toBeVisible();
     }

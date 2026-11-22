@@ -1,5 +1,6 @@
 export const audioFileAccept =
   "audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.oga,.opus";
+export const audioMetadataTimeoutMs = 30_000;
 
 export function isDirectAudioFile(file: File) {
   return (
@@ -12,7 +13,8 @@ export function isDirectAudioFile(file: File) {
 /** Admit playable-duration metadata without waiting for decoded media data on mobile Safari.
  * Actual playback and exported packets are checked by the preview/encoder. */
 export async function localAudioDetails(file: File, url: string) {
-  if (file.size === 0) throw Error("音声ファイルが空です。別のファイルを選択してください。");
+  if (file.size === 0)
+    throw Error("音声ファイルが空です。別のファイルを選択してください。");
   const duration = await new Promise<number>((resolve, reject) => {
     const media = new Audio();
     media.preload = "metadata";
@@ -34,7 +36,7 @@ export async function localAudioDetails(file: File, url: string) {
     };
     const timer = setTimeout(
       () => finish(Error("音声の読み込みがタイムアウトしました。")),
-      30_000,
+      audioMetadataTimeoutMs,
     );
     media.onloadedmetadata = metadataReady;
     media.ondurationchange = metadataReady;

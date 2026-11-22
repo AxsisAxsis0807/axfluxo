@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 let bundle: string, file: string;
@@ -270,13 +270,13 @@ test("running cancellation releases media before next job, failure continues and
       { exact: true },
     ),
   ).toBeVisible();
-  await page.evaluate(() => {
+  await page.evaluate((base64) => {
     const api = window as unknown as {
       localExportQueue: import("../../../src/services/video/export-queue").ExportQueue;
       allowRead?: boolean;
     };
-    const input =
-      document.querySelector<HTMLInputElement>('input[type="file"]')!.files![0];
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const input = new File([bytes], "source.mp4", { type: "video/mp4" });
     const url = URL.createObjectURL(input);
     const base = {
       width: 160,
@@ -308,7 +308,7 @@ test("running cancellation releases media before next job, failure continues and
       ],
       false,
     );
-  });
+  }, (await readFile(file)).toString("base64"));
   await page.getByRole("button", { name: /詳細を開く/ }).click();
   const panel = page.getByRole("dialog", { name: "エクスポート管理" });
   await panel
