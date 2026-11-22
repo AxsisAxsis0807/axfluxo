@@ -7,11 +7,13 @@ export default function LocalMediaPreview({
   id,
   url,
   audioOnly,
+  warmMetadata,
   onError,
 }: {
   id: string;
   url: string;
   audioOnly: boolean;
+  warmMetadata: boolean;
   onError: () => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
@@ -32,7 +34,7 @@ export default function LocalMediaPreview({
       id={`local-media-${id}`}
       src={url}
       controls
-      preload="none"
+      preload={warmMetadata ? "metadata" : "none"}
       onError={onError}
       style={{ width: "100%" }}
       aria-label="素材音声プレビュー"
@@ -44,7 +46,7 @@ export default function LocalMediaPreview({
       src={url}
       controls
       playsInline
-      preload="none"
+      preload={warmMetadata ? "metadata" : "none"}
       onError={onError}
       style={{ width: "100%", maxHeight: 360 }}
       aria-label="素材動画プレビュー"
