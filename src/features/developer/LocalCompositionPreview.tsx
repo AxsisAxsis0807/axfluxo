@@ -105,7 +105,7 @@ export default function LocalCompositionPreview({
         }}
       />
       <video
-        key={`${url}:${job.pieces[selectedIndex].start}:${job.pieces[selectedIndex].end}`}
+        key={`${selectedIndex}:${url}:${job.pieces[selectedIndex].start}:${job.pieces[selectedIndex].end}`}
         ref={video}
         src={url}
         controls
