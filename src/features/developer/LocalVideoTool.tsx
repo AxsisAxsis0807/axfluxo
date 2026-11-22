@@ -31,6 +31,9 @@ import {
   localExportQueue,
 } from "../../services/video/local-export-runtime";
 export { localIntervals } from "../../services/video/local-project";
+// Explicit extensions avoid iOS WebKit treating audio/* like video/* in the Files picker.
+const ALL_VERSIONS_MEDIA_ACCEPT =
+  ".mp3,.wav,.m4a,.aac,.flac,.ogg,.oga,.aif,.aiff,.opus,.mp4,.mov,.m4v,.webm,.mkv";
 function metadata(file: File, url: string): Promise<Source> {
   return new Promise((resolve, reject) => {
     const media = document.createElement("video");
@@ -133,6 +136,11 @@ export default function LocalVideoTool({
     const url = URL.createObjectURL(file);
     urls.current.push(url);
     return url;
+  }
+  function chooseFiles(input: HTMLInputElement) {
+    const files = Array.from(input.files ?? []);
+    input.value = ""; // Let the same file be chosen again after a failed read.
+    void select(files);
   }
   async function select(files: File[]) {
     if (!files.length) return;
@@ -476,12 +484,24 @@ export default function LocalVideoTool({
         <input
           aria-label="端末の素材"
           type="file"
-          accept={fnf ? "video/*" : "audio/*,video/*"}
+          accept={fnf ? "video/*" : ALL_VERSIONS_MEDIA_ACCEPT}
           multiple={!fnf}
           disabled={loading}
-          onChange={(e) => void select(Array.from(e.target.files ?? []))}
+          onChange={(e) => chooseFiles(e.currentTarget)}
         />
       </label>
+      {!fnf && (
+        <label>
+          MP3などが表示されない場合（ファイル形式の制限なし）
+          <input
+            aria-label="形式の制限なしで素材を選択"
+            type="file"
+            multiple
+            disabled={loading}
+            onChange={(e) => chooseFiles(e.currentTarget)}
+          />
+        </label>
+      )}
       {loading && <p role="status">素材を読み込んでいます…</p>}
       {error && <p role="alert">{error}</p>}
       {sources.map((s, i) => (
