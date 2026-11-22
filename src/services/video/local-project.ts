@@ -264,7 +264,8 @@ async function createLocalJobs(
       width: 1920,
       height: 1080,
       pieces: sources.map((s) => ({
-        kind: s.audio ? "audio" : "video",
+        // Older All Versions projects may have audio in the original media slot.
+        kind: s.audio || (s.width === 0 && s.height === 0) ? "audio" : "video",
         name: s.audio?.name,
         file: s.file,
         url: async () => s.url,

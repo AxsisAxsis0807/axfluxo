@@ -358,7 +358,13 @@ async function encodeLocalAttempt(
           media.load();
         },
       );
-      if (Math.abs(media.currentTime - piece.start) > 0.001) {
+      if (audio.state !== "running")
+        throw Error(
+          "録画用の音声処理が停止しています。音声処理を許可してください。",
+        );
+      const needsSeek = Math.abs(media.currentTime - piece.start) > 0.001;
+      await playForEncode(media, signal, status);
+      if (needsSeek) {
         await mediaReady(
           media,
           ["seeked"],
@@ -371,11 +377,6 @@ async function encodeLocalAttempt(
           },
         );
       }
-      if (audio.state !== "running")
-        throw Error(
-          "録画用の音声処理が停止しています。音声処理を許可してください。",
-        );
-      await playForEncode(media, signal, status);
       if (kind === "video") {
         const video = media as HTMLVideoElement;
         await mediaReady(
