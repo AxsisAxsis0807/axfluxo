@@ -113,7 +113,7 @@ export default function ExportDock() {
           <button onClick={() => setOpen(false)}>詳細を閉じる</button>
           <h2>書き出しキュー</h2>
           <p>
-            予約は1件ずつ自動開始します。Safariを前面に保ってください。保存済みの予約と完成動画はツールを開くと自動復元し、中断した動画は先頭から再作成します。
+            予約は1件ずつ自動開始します。Safariを前面に保ってください。保存済みの予約と完成動画は「前回の作業を再開」を選ぶと復元します。新規作成でも以前の保存データは削除されません。中断した動画は再開時に先頭から再作成します。
           </p>
           {(paused || current.message.includes("音声処理")) && (
             <button
