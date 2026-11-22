@@ -139,7 +139,6 @@ export default function LocalVideoTool({
   }
   function chooseFiles(input: HTMLInputElement) {
     const files = Array.from(input.files ?? []);
-    input.value = ""; // Let the same file be chosen again after a failed read.
     void select(files);
   }
   async function select(files: File[]) {
