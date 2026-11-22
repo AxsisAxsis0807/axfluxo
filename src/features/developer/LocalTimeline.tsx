@@ -44,7 +44,7 @@ export default function LocalTimeline({
   file: File;
   duration: number;
   analysisEnabled?: boolean;
-  media: () => HTMLVideoElement | null;
+  media: () => HTMLMediaElement | null;
   items: TimelineItem[];
   markers: number[];
   onMarkerAdd?: (us: number) => void;
@@ -80,7 +80,7 @@ export default function LocalTimeline({
     timeline ? { us: timeline.currentUs, pending: false } : null,
   );
   const writeMediaSeek = useCallback(
-    (video: HTMLVideoElement, us: number) => {
+    (video: HTMLMediaElement, us: number) => {
       const physical = Math.max(0, Math.min(us, duration * 1e6 - 1)) / 1e6;
       const pending = Math.abs(video.currentTime - physical) > 0.0000005;
       cursorSeek.current = { us, pending };
