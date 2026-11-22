@@ -125,6 +125,54 @@ function line(
   ctx.strokeText(text, ctx.canvas.width / 2, y, max);
   ctx.fillText(text, ctx.canvas.width / 2, y, max);
 }
+/** The picture comes from the user's selected cover, never a replacement asset. */
+function drawAllVersionsBackground(
+  context: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+) {
+  context.fillStyle = "black";
+  context.fillRect(0, 0, 1920, 1080);
+  context.save();
+  context.globalAlpha = 0.65;
+  context.filter = "blur(24px)";
+  const scale = Math.max(2080 / image.width, 1200 / image.height);
+  context.drawImage(
+    image,
+    (1920 - image.width * scale) / 2,
+    (1080 - image.height * scale) / 2,
+    image.width * scale,
+    image.height * scale,
+  );
+  context.restore();
+  const crop = Math.min(image.width, image.height);
+  context.drawImage(
+    image,
+    (image.width - crop) / 2,
+    (image.height - crop) / 2,
+    crop,
+    crop,
+    660,
+    130,
+    600,
+    600,
+  );
+}
+
+function preRenderAllVersionsBackground(image: HTMLImageElement) {
+  try {
+    const layer = document.createElement("canvas");
+    layer.width = 1920;
+    layer.height = 1080;
+    const context = layer.getContext("2d");
+    if (!context) return null;
+    drawAllVersionsBackground(context, image);
+    return layer;
+  } catch {
+    // Preserve the legacy renderer if creating an extra canvas fails.
+    return null;
+  }
+}
+
 async function createLocalJobs(
   project: LocalProjectData,
 ): Promise<LocalEncodeJob[]> {
@@ -215,34 +263,17 @@ async function createLocalJobs(
   if (labels.some((label) => !label.trim()))
     throw Error("各バージョン名を入力してください。");
   if (!cover) throw Error("カバー画像を選択してください。");
-  const image = await imageForEncode(cover);
+  // Keep the original image path as a fallback when a second canvas cannot be allocated.
+  // The pre-rendered bitmap is created only when an export actually draws.
+  let fallbackImage: HTMLImageElement | null = await imageForEncode(cover);
+  let staticBackground: HTMLCanvasElement | null | undefined;
   function drawComposition(ctx: CanvasRenderingContext2D, seconds: number) {
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, 1920, 1080);
-    ctx.save();
-    ctx.globalAlpha = 0.65;
-    ctx.filter = "blur(24px)";
-    const scale = Math.max(2080 / image.width, 1200 / image.height);
-    ctx.drawImage(
-      image,
-      (1920 - image.width * scale) / 2,
-      (1080 - image.height * scale) / 2,
-      image.width * scale,
-      image.height * scale,
-    );
-    ctx.restore();
-    const crop = Math.min(image.width, image.height);
-    ctx.drawImage(
-      image,
-      (image.width - crop) / 2,
-      (image.height - crop) / 2,
-      crop,
-      crop,
-      660,
-      130,
-      600,
-      600,
-    );
+    if (staticBackground === undefined) {
+      staticBackground = preRenderAllVersionsBackground(fallbackImage!);
+      if (staticBackground) fallbackImage = null;
+    }
+    if (staticBackground) ctx.drawImage(staticBackground, 0, 0);
+    else drawAllVersionsBackground(ctx, fallbackImage!);
     const i = intervals.findIndex((v) => seconds >= v.start && seconds < v.end);
     if (i >= 0) {
       ctx.save();
