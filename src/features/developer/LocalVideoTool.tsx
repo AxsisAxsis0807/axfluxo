@@ -522,6 +522,9 @@ export default function LocalVideoTool({
       )}
       {loading && <p role="status">素材を読み込んでいます…</p>}
       {error && <p role="alert">{error}</p>}
+      {!fnf && (
+        <p>All Versionsの素材プレビューは音声のみ再生します。元動画の高解像度映像を読み込まず、iPhoneの負荷を抑えます。</p>
+      )}
       {sources.map((s, i) => (
         <fieldset key={s.id}>
           <legend>
@@ -864,6 +867,7 @@ export default function LocalVideoTool({
           <LocalCompositionPreview
             key={Math.min(previewIndex, previewJobs.length - 1)}
             job={previewJobs[Math.min(previewIndex, previewJobs.length - 1)]}
+            audioOnly={!fnf}
           />
         </>
       )}
