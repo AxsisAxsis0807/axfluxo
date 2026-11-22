@@ -540,6 +540,7 @@ export default function LocalVideoTool({
                 id={s.id}
                 url={s.url}
                 audioOnly={!fnf}
+                warmMetadata={s.duration <= 60 && s.file.size <= 64 * 1024 * 1024}
                 onError={() => {
                   setActivePreviewId(null);
                   setError("この端末では素材プレビューを再生できません。元の素材と編集内容は保持されています。");
