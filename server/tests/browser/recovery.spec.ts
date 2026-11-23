@@ -90,6 +90,36 @@ async function durable(page: Page) {
     ).flushExportRecovery();
   });
 }
+test("a Safari IndexedDB open stall shows a safe retry instead of hanging forever", async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.addInitScript(() => {
+    const realOpen = indexedDB.open.bind(indexedDB);
+    let attempts = 0;
+    Object.defineProperty(indexedDB, "open", {
+      configurable: true,
+      value: (name: string, version?: number) => {
+        if (name === "axfluxo.local-video-recovery" && attempts++ === 0)
+          return {} as IDBOpenDBRequest;
+        return version === undefined ? realOpen(name) : realOpen(name, version);
+      },
+    });
+  });
+  await page.route("https://recovery.test/**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script>${bundle.replace(/<\\/script/gi, "<\\\\/script")}</script>`,
+    }),
+  );
+  await page.goto("https://recovery.test/fnf");
+  const retry = page.getByRole("button", { name: "保存データの確認を再試行" });
+  await expect(retry).toBeVisible({ timeout: 25_000 });
+  await expect(page.getByText(/保存データは削除していません/).first()).toBeVisible();
+  await retry.click();
+  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
+    timeout: 30_000,
+  });
+});
+
 test("All Versions accepts MP3 and has an unrestricted iOS picker fallback; FNF keeps video-only selection", async ({
   page,
 }) => {
