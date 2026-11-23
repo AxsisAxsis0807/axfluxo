@@ -92,6 +92,7 @@ export default function LocalVideoTool({
     { kind: "new" } | { kind: "resume"; id?: string }
   >();
   const [startupFailed, setStartupFailed] = useState(false);
+  const [startupAttempt, setStartupAttempt] = useState(0);
   const [savedOverview, setSavedOverview] = useState<{
     projects: LocalProjectSummary[];
     jobs: number;
@@ -271,6 +272,18 @@ export default function LocalVideoTool({
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setInterval> | undefined;
+    // Safari sometimes never settles an IndexedDB transaction. Show a safe
+    // recovery action rather than leaving an unresponsive startup screen.
+    const watchdog = setTimeout(() => {
+      if (disposed) return;
+      disposed = true;
+      setStartupFailed(true);
+      setSaveStatus(
+        startup
+          ? "保存データの復元が応答していません。保存データは削除せず、再試行できます。"
+          : "保存データの確認が応答していません。別のタブを閉じて再試行してください。保存データは削除していません。",
+      );
+    }, startup ? 90_000 : 15_000);
     void (async () => {
       let saved: LocalProjectData | undefined;
       let handedOff = false;
@@ -355,14 +368,16 @@ export default function LocalVideoTool({
           setSaveStatus(recoveryMessage(error));
         }
       } finally {
+        clearTimeout(watchdog);
         if (saved && !handedOff) releaseProjectUrls(saved);
       }
     })();
     return () => {
       disposed = true;
+      clearTimeout(watchdog);
       clearInterval(timer);
     };
-  }, [mode, startup]);
+  }, [mode, startup, startupAttempt]);
   useEffect(() => {
     if (!ready || !projectId) return;
     const snapshot: LocalProjectData = {
@@ -442,7 +457,20 @@ export default function LocalVideoTool({
       <main style={{ maxWidth: 1000, margin: "auto", padding: 16 }}>
         <h1>{fnf ? "FNF Showcase Maker" : "All Versions Video Maker"}</h1>
         <p role="status">{saveStatus}</p>
-        {savedOverview && !startup && (
+        {startupFailed && !startup && (
+          <section aria-label="保存領域の再試行">
+            <p>この操作で保存済みのプロジェクトや完成動画は削除されません。SafariのほかのAxFluxoタブを閉じてからお試しください。</p>
+            <button onClick={() => {
+              setStartupFailed(false);
+              setSavedOverview(undefined);
+              setSaveStatus("保存データを確認中…");
+              setStartupAttempt((attempt) => attempt + 1);
+            }}>
+              保存データの確認を再試行
+            </button>
+          </section>
+        )}
+        {savedOverview && !startup && !startupFailed && (
           <section aria-label="保存済み作業の選択">
             <h2>作業を開始</h2>
             <p>新規作成では前の動画・完成品を読み込みません。保存データは残ります。</p>
