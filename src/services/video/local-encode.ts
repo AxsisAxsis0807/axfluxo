@@ -1,10 +1,18 @@
+import {
+  encodeFailureCategory,
+  setEncodeReport,
+} from "./local-encode-diagnostics";
 import { validateLocalOutput } from "./local-output";
 import type { LocalProjectData } from "./local-project";
 export type LocalEncodeJob = {
   recovery?: { project: LocalProjectData; index: number };
+  /** For compositions that can be rendered without decoding source video. */
+  timestamped?: boolean;
   filename: string;
   width: number;
   height: number;
+  /** Record this much silence between consecutive source files; 0 by default. */
+  gapBetweenPiecesSeconds?: number;
   pieces: {
     file?: File;
     url: () => Promise<string>;
@@ -36,6 +44,15 @@ export function imageForEncode(url: string): Promise<HTMLImageElement> {
     };
     image.src = url;
   });
+}
+export function usesTimedLocalEncoding(job: LocalEncodeJob) {
+  return (
+    !!job.timestamped &&
+    typeof VideoEncoder !== "undefined" &&
+    typeof AudioEncoder !== "undefined" &&
+    typeof AudioDecoder !== "undefined" &&
+    typeof OfflineAudioContext !== "undefined"
+  );
 }
 export function recorderType() {
   if (
@@ -157,18 +174,74 @@ async function playForEncode(
     document.body.append(button);
   });
 }
-/** Real-time, on-device encoding. No render job or video upload is created. */
+/** On-device encoding. No server render job or media upload is created. */
 export async function encodeLocal(
   job: LocalEncodeJob,
-  audio: AudioContext,
+  audio: AudioContext | undefined,
   signal: AbortSignal,
   rest: boolean,
   budget: { processing: number },
   status: (s: string) => void,
   progress: (fraction: number) => void = () => {},
 ) {
+  const timed = usesTimedLocalEncoding(job);
+  if (job.timestamped)
+    setEncodeReport({
+      route: timed ? "WebCodecs" : "MediaRecorder",
+      format: timed ? undefined : (recorderType() ?? undefined),
+      state: "running",
+    });
+  try {
+    let result;
+    if (timed) {
+      const { encodeTimedLocal } = await import("./local-timed-encode");
+      result = await encodeTimedLocal(
+        job,
+        signal,
+        status,
+        progress,
+        (duration) => {
+          budget.processing += duration;
+          if (!rest || budget.processing < 600) return;
+          status("4分休憩中（処理と録画を停止しています）");
+          return wait(240_000, signal).then(() => {
+            budget.processing = 0;
+          });
+        },
+      );
+    } else
+      result = await recordLocal(
+        job,
+        audio,
+        signal,
+        rest,
+        budget,
+        status,
+        progress,
+      );
+    if (job.timestamped) setEncodeReport({ state: "complete" });
+    return result;
+  } catch (error) {
+    if (job.timestamped)
+      setEncodeReport({
+        state: "failed",
+        failure: encodeFailureCategory(error),
+      });
+    throw error;
+  }
+}
+
+async function recordLocal(
+  job: LocalEncodeJob,
+  audio: AudioContext | undefined,
+  signal: AbortSignal,
+  rest: boolean,
+  budget: { processing: number },
+  status: (s: string) => void,
+  progress: (fraction: number) => void,
+) {
   const mimeType = recorderType();
-  if (!mimeType)
+  if (!audio || !mimeType)
     throw Error(
       "このSafariは端末内エンコードに対応していません。対応ブラウザーを使用してください。",
     );
@@ -312,7 +385,16 @@ export async function encodeLocal(
     signal.throwIfAborted();
     if (recordError) throw recordError;
     const blob = new Blob(chunks, { type: mimeType });
-    await validateLocalOutput(blob, signal);
+    await validateLocalOutput(
+      blob,
+      signal,
+      job.timestamped
+        ? {
+            duration: total,
+            legacyRecorder: true,
+          }
+        : undefined,
+    );
     return {
       blob,
       filename:

@@ -1,3 +1,5 @@
+import { ALL_VERSIONS_REFERENCE as REF, type AllVersionsLayout } from "../../domain/video/all-versions-reference";
+import { drawReferenceFrame, loadReferenceFonts, referenceArtwork, referenceCanvasTitle } from "./all-versions-canvas";
 import { imageForEncode, type LocalEncodeJob } from "./local-encode";
 import { fnfFilenames, FNF_HEADING } from "../../domain/video/fnf-showcase";
 export type TimelineState = {
@@ -63,6 +65,7 @@ export function localIntervals(
 }
 export type LocalProjectData = {
   rest?: boolean;
+  layout?: AllVersionsLayout;
   id: string;
   mode: "all-versions" | "fnf-showcase";
   sources: Source[];
@@ -179,9 +182,20 @@ async function createLocalJobs(
     );
   if (!cover) throw Error("カバー画像を選択してください。");
   const image = await imageForEncode(cover);
+  const width = 1920;
+  const height = 1080;
+  const reference = project.layout !== "provisional-v1";
+  const artwork = reference ? referenceArtwork(image, width, height) : null;
+  if (reference) await loadReferenceFonts(labels);
+  const drawTitle = referenceCanvasTitle(labels);
+  const versions = intervals.map(({ start, end }) => ({
+    startFrame: Math.round(start * 60),
+    endFrame: Math.round(end * 60),
+  }));
   return [
     {
       filename: "All Versions.mp4",
+      timestamped: true,
       width: 1920,
       height: 1080,
       pieces: sources.map((s) => ({
@@ -191,6 +205,10 @@ async function createLocalJobs(
         end: s.end,
       })),
       draw: (ctx, _media, seconds) => {
+        if (artwork) {
+          drawReferenceFrame(ctx, artwork, Math.round(seconds * 60), versions, REF, drawTitle);
+          return;
+        }
         ctx.fillStyle = "black";
         ctx.fillRect(0, 0, 1920, 1080);
         ctx.save();

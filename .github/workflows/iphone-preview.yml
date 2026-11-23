@@ -1,0 +1,59 @@
+name: PR 48 iPhone preview
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+permissions:
+  contents: read
+concurrency:
+  group: iphone-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  preview:
+    if: github.event.pull_request.number == 48 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/all-versions-reference-export'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck && npm run lint
+      - run: node scripts/build-iphone-preview.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: axfluxo-pr48-iphone-preview
+          path: work/iphone-preview/
+          retention-days: 7
+          if-no-files-found: error
+  browser-audit:
+    if: github.event.pull_request.number == 48 && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/all-versions-reference-export'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: |
+          if ! command -v ffprobe >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+      - run: npx playwright install --with-deps chrome webkit
+      - run: npm run test:video:browser -- local-timed-encode developer-entry
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: pr48-browser-diagnostics
+          path: test-results/video-browser/
+          retention-days: 7

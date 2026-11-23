@@ -9,7 +9,7 @@ import {
   type AllVersionsProject,
 } from "../../../../src/domain/video/all-versions";
 import { ApiError } from "../../../api/errors";
-import { ALL_VERSIONS_REFERENCE as REF } from "../../../../src/domain/video/all-versions-reference";
+import { ALL_VERSIONS_REFERENCE as REF, referenceTitleSize } from "../../../../src/domain/video/all-versions-reference";
 export const fontPath = () =>
   resolve(
     process.env.VIDEO_ALEO_FONT ??
@@ -29,6 +29,24 @@ async function font() {
     registered = true;
   }
   return bytes;
+}
+let japaneseFont: Buffer | undefined;
+async function referenceFontFamily(bytes: Buffer, text: string) {
+  const missing = [...text].filter((char) => !glyph(bytes, char.codePointAt(0)!));
+  if (!missing.length) return "AxFluxoAleo";
+  if (!japaneseFont) {
+    const fallback = await readFile(resolve(
+      process.env.VIDEO_FNF_FONT ?? "server/worker/templates/fnf-showcase/assets/NotoSansJP.ttf",
+    )).catch(() => { throw new ApiError(503, "FONT_UNAVAILABLE"); });
+    if (createHash("sha256").update(fallback).digest("hex") !==
+        "c2f3b4d463500a2ddcd3849cded1fceeb9fd6d1c32e6cbecd568453ba50fc68f" ||
+        !GlobalFonts.register(fallback, "AxFluxoReferenceJapanese"))
+      throw new ApiError(503, "FONT_UNAVAILABLE");
+    japaneseFont = fallback;
+  }
+  if (missing.some((char) => !glyph(japaneseFont!, char.codePointAt(0)!)))
+    throw new ApiError(422, "FONT_GLYPH_UNSUPPORTED");
+  return "AxFluxoAleo, AxFluxoReferenceJapanese";
 }
 function glyph(bytes: Buffer, cp: number) {
   const tables = bytes.readUInt16BE(4);
@@ -82,26 +100,25 @@ export async function referenceTitleImage(p: AllVersionsProject, index: number) 
   const bytes = await font();
   const text = projectNames(p)[index];
   if (text === undefined || !text.trim()) throw new ApiError(422, "EMPTY_NAME");
-  if ([...text].some((c) => !glyph(bytes, c.codePointAt(0)!)))
-    throw new ApiError(422, "FONT_GLYPH_UNSUPPORTED");
+  const family = await referenceFontFamily(bytes, text);
   const { width, height } = dimensions(p);
   const scale = height / REF.height;
   const measuring = createCanvas(4, 4).getContext("2d");
   const base = REF.titleFontSize * scale;
-  measuring.font = `${base}px AxFluxoAleo`;
+  measuring.font = `${base}px ${family}`;
   const measured = measuring.measureText(text).width;
-  const fontSize = Math.min(base, (base * (width * 0.88)) / Math.max(1, measured));
-  measuring.font = `${fontSize}px AxFluxoAleo`;
-  const barWidth = Math.min(width, Math.ceil(measuring.measureText(text).width + 8 * scale));
+  const fontSize = referenceTitleSize(base, width, measured);
+  measuring.font = `${fontSize}px ${family}`;
+  const barWidth = Math.min(width, Math.ceil(measuring.measureText(text).width + REF.titleBandPadding * scale));
   const barHeight = Math.ceil(REF.titleBandHeight * scale);
   const canvas = createCanvas(barWidth, barHeight), ctx = canvas.getContext("2d");
   ctx.fillStyle = `rgba(0,0,0,${REF.titleBandAlpha})`;
   ctx.fillRect(0, 0, barWidth, barHeight);
-  ctx.font = `${fontSize}px AxFluxoAleo`;
+  ctx.font = `${fontSize}px ${family}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.lineJoin = "round";
-  ctx.lineWidth = Math.max(1, fontSize * 0.03);
+  ctx.lineWidth = Math.max(1, fontSize * REF.titleStrokeRatio);
   ctx.strokeStyle = "black";
   ctx.fillStyle = "white";
   ctx.strokeText(text, barWidth / 2, barHeight / 2);
@@ -166,17 +183,21 @@ export async function backgroundImage(
     ctx = canvas.getContext("2d"),
     cover = await loadImage(coverPath);
   const reference = p.design.layout === "reference-pasa-v1";
-  const scale = Math.max(width / cover.width, height / cover.height) * (reference ? 1.4 : 1.12),
+  const scale = Math.max(width / cover.width, height / cover.height) * (reference ? REF.backgroundZoom : 1.12),
     w = cover.width * scale,
     h = cover.height * scale;
-  ctx.filter = `blur(${height * (reference ? 0.095 : 0.035)}px)`;
+  if (reference) {
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, width, height);
+  }
+  ctx.filter = `blur(${height * (reference ? REF.backgroundBlurRatio : 0.035)}px)`;
   ctx.drawImage(cover, (width - w) / 2, (height - h) / 2, w, h);
   ctx.filter = "none";
-  ctx.fillStyle = reference ? "rgba(0,0,0,.18)" : "rgba(0,0,0,.3)";
+  ctx.fillStyle = reference ? `rgba(0,0,0,${REF.backgroundShade})` : "rgba(0,0,0,.3)";
   ctx.fillRect(0, 0, width, height);
   const side = height * (reference ? REF.coverSize / REF.height : 0.56),
     x = (width - side) / 2,
-    y = reference ? (height - side) / 2 : height * 0.12,
+    y = reference ? height * REF.coverTop / REF.height : height * 0.12,
     s = Math.max(side / cover.width, side / cover.height);
   ctx.save();
   ctx.beginPath();

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { allVersionsDocumentSchema } from "./schema";
 import { mediaVersionRefSchema } from "../cloud-library/schema";
 import { toFrame } from "./time";
-import { referenceOpacity } from "./all-versions-reference";
+import { ALL_VERSIONS_REFERENCE as REF, referenceOpacity } from "./all-versions-reference";
 export const ALEO_HASH =
   "62b6cb49b7b087b341f0307ea3bc871a9690d8947691206ab025d149b8f6ed6f";
 export const AV_RENDERER = "axfluxo-all-versions-v5.1";
@@ -53,15 +53,15 @@ export function newProject(): AllVersionsProject {
     removeNumbers: false,
     design: {
       height: 1080,
-      fadeInFrames: 9,
-      fadeOutFrames: 9,
+      fadeInFrames: REF.fadeInFrames,
+      fadeOutFrames: REF.fadeOutFrames,
       fontHash: ALEO_HASH,
       rendererVersion: AV_RENDERER,
-      layout: "provisional-v1",
+      layout: "reference-pasa-v1",
     },
   };
 }
-export function projectNames(p: AllVersionsProject) {
+export function projectNames(p: Pick<AllVersionsProject, "namesText" | "removeNumbers">) {
   return p.namesText
     .replace(/\r\n?/g, "\n")
     .split("\n")
@@ -98,6 +98,7 @@ export function projectIssues(p: AllVersionsProject) {
   if (versions.some((v) => v.endFrame <= v.startFrame))
     issues.push("VERSION_ZERO_FRAMES");
   if (
+    p.design.layout === "provisional-v1" &&
     versions.some(
       (v) =>
         v.endFrame - v.startFrame <

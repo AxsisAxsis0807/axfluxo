@@ -289,7 +289,9 @@ it("server text PNG pins font/renderer, shrinks long names on one line, supports
     code: "FONT_UNAVAILABLE",
   });
   vi.unstubAllEnvs();
-  p.namesText = "未対応文字";
+  p.namesText = "日本語 Café";
+  await expect(textImage(p, 0)).resolves.toMatchObject({ fontHash: ALEO_HASH });
+  p.design.layout = "provisional-v1";
   await expect(textImage(p, 0)).rejects.toMatchObject({
     code: "FONT_GLYPH_UNSUPPORTED",
   });
@@ -306,6 +308,7 @@ it("text endpoint uses exactly the worker PNG bytes", async () => {
   );
 });
 it("project render uses V4 fencing/publication, audio extraction and immutable cover/original pins", async () => {
+  p.design = { ...p.design, layout: "provisional-v1", fadeInFrames: 9, fadeOutFrames: 9 };
   await request(`/projects/${p.id}`, p);
   const r = await request(`/projects/${p.id}/render`, {}, 1);
   expect(r.status).toBe(202);

@@ -51,7 +51,7 @@ test.beforeAll(async () => {
       platform: "browser",
       format: "iife",
       jsx: "automatic",
-      define: { "process.env.NODE_ENV": '"test"' },
+      define: { "process.env.NODE_ENV": '"test"', "process.env.NEXT_PUBLIC_BASE_PATH": '""' },
     })
   ).outputFiles[0].text;
 });
@@ -62,6 +62,11 @@ async function open(page: Page) {
       body: `<meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script>${bundle.replace(/<\/script/gi, "<\\/script")}</script>`,
     }),
   );
+  for (const font of ["Aleo.ttf", "ReferenceClock.ttf"]) {
+    await page.route("https://recovery.test/fonts/" + font, (route) =>
+      route.fulfill({ path: "public/fonts/" + font, contentType: "font/ttf" }),
+    );
+  }
   await page.goto("https://recovery.test/fnf");
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
     timeout: 35000,

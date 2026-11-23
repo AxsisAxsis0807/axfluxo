@@ -94,6 +94,7 @@ it("clip order, markers and cumulative boundaries determine versions; trim never
 });
 it("detects too-short fade without shortening fade, versions or names; checks boundary frames", () => {
   const p = populated();
+  p.design = { ...p.design, layout: "provisional-v1", fadeInFrames: 9, fadeOutFrames: 9 };
   const v = versionIntervals(p)[0];
   expect(textAlpha(-1, v, p.design)).toBe(0);
   expect(textAlpha(0, v, p.design)).toBe(0);
@@ -106,20 +107,15 @@ it("detects too-short fade without shortening fade, versions or names; checks bo
   expect(p.design.fadeOutFrames).toBe(9);
 });
 
-it("reference profile preserves legacy projects and serializes opt-in layout", () => {
-  const legacy = newProject();
+it("new projects use the reference profile and explicit legacy settings round trip", () => {
+  const project = newProject();
+  const legacy = { ...project, design: { ...project.design, layout: "provisional-v1", fadeInFrames: 9, fadeOutFrames: 9 } };
   expect(legacy.design.layout).toBe("provisional-v1");
   expect(allVersionsProjectSchema.parse(legacy).design.layout).toBe("provisional-v1");
-  const reference = {
-    ...legacy,
-    design: {
-      ...legacy.design,
-      layout: "reference-pasa-v1",
-      fadeInFrames: REF.fadeInFrames,
-      fadeOutFrames: REF.fadeOutFrames,
-    },
-  };
-  expect(allVersionsProjectSchema.parse(reference).design.layout).toBe("reference-pasa-v1");
+  expect(allVersionsProjectSchema.parse(project).design).toMatchObject({
+    layout: "reference-pasa-v1", fadeInFrames: REF.fadeInFrames, fadeOutFrames: REF.fadeOutFrames,
+  });
+  expect(projectIssues(populated())).not.toContain("FADE_TOO_LONG");
 });
 it("reference timer resets per version, advances at 1.1s and survives segment boundaries", () => {
   const first = { startFrame: 0, endFrame: 5816 };

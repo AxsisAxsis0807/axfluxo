@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import {
   recorderType,
+  usesTimedLocalEncoding,
   type LocalEncodeJob,
 } from "../../services/video/local-encode";
 import {
@@ -31,18 +32,24 @@ export function LocalExport({
     setPreparing(true);
     setStatus("入力内容と出力形式を確認しています…");
     try {
-      if (!recorderType())
-        throw Error(
-          "このブラウザーは端末内エンコードに対応していません。Safari／ブラウザーで利用可能なMP4・WebM形式がありません。別の対応ブラウザーでお試しください。",
+      // The legacy recorder needs activation during the tap, before preparation.
+      const supportedRecorder = !!recorderType();
+      if (supportedRecorder)
+        void allowExportAudio().catch(() =>
+          setStatus("下部の詳細から音声処理を許可してください。"),
         );
-      if (typeof HTMLCanvasElement.prototype.captureStream !== "function")
-        throw Error("このブラウザーはCanvasの動画書き出しに対応していません。");
-      // Called during the tap, before cover loading or storage awaits.
-      void allowExportAudio().catch(() =>
-        setStatus("下部の詳細から音声処理を許可してください。"),
-      );
-      const snapshot = prepare();
-      localExportQueue.enqueue(await snapshot, rest);
+      const jobs = await prepare();
+      if (jobs.some((job) => !usesTimedLocalEncoding(job))) {
+        if (!supportedRecorder)
+          throw Error(
+            "このブラウザーは端末内エンコードに対応していません。Safari／ブラウザーで利用可能なMP4・WebM形式がありません。別の対応ブラウザーでお試しください。",
+          );
+        if (typeof HTMLCanvasElement.prototype.captureStream !== "function")
+          throw Error(
+            "このブラウザーはCanvasの動画書き出しに対応していません。",
+          );
+      }
+      localExportQueue.enqueue(jobs, rest);
       setStatus(
         "現在の設定で予約しました。下部の書き出しキューで確認できます。",
       );

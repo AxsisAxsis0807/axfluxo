@@ -115,6 +115,14 @@ for (const scenario of [
             },
       ),
     );
+    for (const font of ["Aleo.ttf", "ReferenceClock.ttf"]) {
+      await page.route("https://entry.test/fonts/" + font, (route) =>
+        route.fulfill({
+          path: "public/fonts/" + font,
+          contentType: "font/ttf",
+        }),
+      );
+    }
     await page.goto(`https://entry.test/developer/${mode}/`);
     await page
       .getByLabel("パスコード", { exact: true })
@@ -134,13 +142,23 @@ for (const scenario of [
         buffer: await readFile(file),
       },
     ];
-    if (mode === "all-versions" && test.info().project.name === "chromium") {
-      for (const [extension, mimeType, options] of [
+    if (mode === "all-versions") {
+      const audioInputs = [
         ["mp3", "audio/mpeg", ["-vn", "-c:a", "libmp3lame"]],
         ["wav", "audio/wav", ["-vn", "-c:a", "pcm_s16le"]],
+      ] as const;
+      const videoInputs = [
         ["m4a", "audio/mp4", ["-vn", "-c:a", "aac"]],
         ["mov", "video/quicktime", ["-c", "copy"]],
-      ] as const) {
+      ] as const;
+      // The mobile workflow selects audio files. Keep the desktop mixed-source
+      // coverage separately without relying on the Linux AAC-in-video demux path.
+      const chromium = test.info().project.name === "chromium";
+      if (!chromium) files.length = 0;
+      for (const [extension, mimeType, options] of [
+        ...audioInputs,
+        ...(chromium ? videoInputs : []),
+      ]) {
         const path = join(dir, `source.${extension}`);
         execFileSync("ffmpeg", [
           "-v",
@@ -177,6 +195,16 @@ for (const scenario of [
       await page
         .getByLabel("version名（1行に1つ）")
         .fill(files.map((_, i) => `local version ${i + 1}`).join("\n"));
+      if (test.info().project.name === "webkit") {
+        // Linux WebKit reports MP3 padding in its full media duration.
+        // Exercise an explicit decodable range in both selected audio files.
+        const ends = page.getByRole("spinbutton", {
+          name: "終了秒",
+          exact: true,
+        });
+        await expect(ends).toHaveCount(files.length);
+        for (const end of await ends.all()) await end.fill("0.9");
+      }
     } else {
       await page.getByLabel("譜面名", { exact: true }).fill("local chart");
       await page
@@ -206,13 +234,19 @@ for (const scenario of [
       page.getByRole("region", { name: "合成プレビュー" }).locator("canvas"),
     ).toBeVisible();
     const available = await page.evaluate(
-      () =>
-        typeof MediaRecorder !== "undefined" &&
-        [
-          "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
-          "video/mp4",
-          "video/webm;codecs=vp8,opus",
-        ].some((t) => MediaRecorder.isTypeSupported(t)),
+      (toolMode) =>
+        (toolMode === "all-versions" &&
+          typeof VideoEncoder !== "undefined" &&
+          typeof AudioEncoder !== "undefined" &&
+          typeof AudioDecoder !== "undefined" &&
+          typeof OfflineAudioContext !== "undefined") ||
+        (typeof MediaRecorder !== "undefined" &&
+          [
+            "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+            "video/mp4",
+            "video/webm;codecs=vp8,opus",
+          ].some((t) => MediaRecorder.isTypeSupported(t))),
+      mode,
     );
     await page.getByRole("button", { name: "端末内で書き出す" }).click();
     if (available) {
