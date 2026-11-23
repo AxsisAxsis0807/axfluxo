@@ -11,8 +11,10 @@ import {
 } from "../../services/developer/local-lock";
 export default function LocalDeveloperGate({
   children,
+  preview = false,
 }: {
   children: ReactNode;
+  preview?: boolean;
 }) {
   const [ready, setReady] = useState(false),
     [open, setOpen] = useState(false),
@@ -64,7 +66,9 @@ export default function LocalDeveloperGate({
       setPasscode("");
       setConfirmation("");
       // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- Static Pages navigation deliberately remounts the gate after session storage is updated.
-      window.location.assign(`${base}/developer/studio/`);
+      window.location.assign(
+        `${base}/developer/${preview ? "all-versions" : "studio"}/`,
+      );
     } catch (e) {
       setError(
         e instanceof Error
@@ -78,21 +82,23 @@ export default function LocalDeveloperGate({
   return (
     <div className="developer-local-gate">
       <style>{`.developer-local-gate{max-width:1100px;margin:auto;padding:12px;overflow-wrap:anywhere}.developer-local-gate input{font-size:16px;max-width:100%;box-sizing:border-box}.developer-local-gate button,.developer-local-gate a,.developer-local-gate input{min-height:44px}.developer-local-gate nav{display:flex;gap:16px;flex-wrap:wrap}.developer-local-gate label{display:block;margin:12px 0}`}</style>
-      <nav>
-        <a
-          href={`${base}/`}
-          onClick={() => sessionStorage.removeItem("axfluxo-view")}
-        >
-          Workflowへ戻る
-        </a>
-        <a
-          href={`${base}/`}
-          onClick={() => sessionStorage.setItem("axfluxo-view", "legacy")}
-        >
-          旧Studioへ戻る
-        </a>
-        <Link href="/developer/studio/">Developer Studioへ戻る</Link>
-      </nav>
+      {!preview && (
+        <nav>
+          <a
+            href={`${base}/`}
+            onClick={() => sessionStorage.removeItem("axfluxo-view")}
+          >
+            Workflowへ戻る
+          </a>
+          <a
+            href={`${base}/`}
+            onClick={() => sessionStorage.setItem("axfluxo-view", "legacy")}
+          >
+            旧Studioへ戻る
+          </a>
+          <Link href="/developer/studio/">Developer Studioへ戻る</Link>
+        </nav>
+      )}
       {!ready ? (
         <p role="status">ロック設定を確認しています…</p>
       ) : open ? (

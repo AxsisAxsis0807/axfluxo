@@ -18,6 +18,7 @@ import {
 } from "mediabunny";
 import type { LocalEncodeJob } from "./local-encode";
 import { localAudioRate, timedAudio } from "./local-timed-audio";
+import { setEncodeReport } from "./local-encode-diagnostics";
 import { validateLocalOutput } from "./local-output";
 
 const fps = 60;
@@ -64,6 +65,7 @@ export async function encodeTimedLocal(
     throw Error(
       "このブラウザーはAll Versionsの同期MP4書き出しに対応していません。",
     );
+  setEncodeReport({ state: "running", format: `MP4 (${codecs.join("/")})` });
   const gap = job.gapBetweenPiecesSeconds ?? 0;
   if (!Number.isFinite(gap) || gap < 0)
     throw Error("音源間の無音秒数が不正です。");

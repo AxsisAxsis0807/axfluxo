@@ -52,20 +52,35 @@ export async function validateLocalOutput(
           "完成動画の音声・映像時間が指定区間に一致しません。負荷を減らして再試行してください。",
         );
 
-      if (timing.legacyRecorder) {
-        const packets = new EncodedPacketSink(audio);
-        let expectedEnd = 0;
-        for await (const packet of packets.packets(undefined, undefined, {
-          metadataOnly: true,
-        })) {
-          signal.throwIfAborted();
-          if (Math.abs(expectedEnd - packet.timestamp) > tolerance)
-            throw Error(
-              "録画中に音声時刻の不連続を検出しました。負荷を減らして再試行してください。",
-            );
-          expectedEnd = packet.timestamp + packet.duration;
-        }
+      let expectedEnd: number | undefined;
+      const packets = new EncodedPacketSink(audio);
+      for await (const packet of packets.packets(undefined, undefined, {
+        metadataOnly: true,
+      })) {
+        signal.throwIfAborted();
+        // Native AAC/Opus may include leading priming before presentation time zero.
+        const offset = packet.timestamp - (expectedEnd ?? 0);
+        const maxLeading =
+          !timing.legacyRecorder && expectedEnd === undefined
+            ? 0.15
+            : tolerance;
+        if (
+          !Number.isFinite(offset) ||
+          !Number.isFinite(packet.duration) ||
+          packet.duration <= 0 ||
+          offset < -maxLeading ||
+          offset > tolerance
+        )
+          throw Error(
+            "音声時刻の不連続を検出しました。書き出しは保存されませんでした。",
+          );
+        expectedEnd = packet.timestamp + packet.duration;
       }
+      if (
+        expectedEnd === undefined ||
+        Math.abs(expectedEnd - timing.duration) > tolerance
+      )
+        throw Error("完成動画の音声時間が指定区間に一致しません。");
     }
     signal.throwIfAborted();
   } finally {

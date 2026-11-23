@@ -115,6 +115,14 @@ for (const scenario of [
             },
       ),
     );
+    for (const font of ["Aleo.ttf", "ReferenceClock.ttf"]) {
+      await page.route("https://entry.test/fonts/" + font, (route) =>
+        route.fulfill({
+          path: "public/fonts/" + font,
+          contentType: "font/ttf",
+        }),
+      );
+    }
     await page.goto(`https://entry.test/developer/${mode}/`);
     await page
       .getByLabel("パスコード", { exact: true })

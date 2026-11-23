@@ -141,6 +141,20 @@ test("All Versions writes source-clock MP4 with trimmed audio and unique frame t
         };
       const video = inspect("v"),
         audio = inspect("a");
+      if (Math.abs(Number(audio.streams[0].duration) - duration) >= 0.00005) {
+        console.log(
+          JSON.stringify({
+            expected: duration,
+            audio: audio.streams[0],
+            first: audio.packets.slice(0, 4),
+            last: audio.packets.slice(-4),
+          }),
+        );
+        await testInfo.attach("audio-timing-mismatch", {
+          path,
+          contentType: "video/mp4",
+        });
+      }
       expect(Number(video.streams[0].duration)).toBeCloseTo(duration, 4);
       expect(Number(audio.streams[0].duration)).toBeCloseTo(duration, 4);
       const frames = video.packets

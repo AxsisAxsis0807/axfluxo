@@ -1,3 +1,7 @@
+import {
+  encodeFailureCategory,
+  setEncodeReport,
+} from "./local-encode-diagnostics";
 import { validateLocalOutput } from "./local-output";
 import type { LocalProjectData } from "./local-project";
 export type LocalEncodeJob = {
@@ -180,17 +184,62 @@ export async function encodeLocal(
   status: (s: string) => void,
   progress: (fraction: number) => void = () => {},
 ) {
-  if (usesTimedLocalEncoding(job)) {
-    const { encodeTimedLocal } = await import("./local-timed-encode");
-    return encodeTimedLocal(job, signal, status, progress, (duration) => {
-      budget.processing += duration;
-      if (!rest || budget.processing < 600) return;
-      status("4分休憩中（処理と録画を停止しています）");
-      return wait(240_000, signal).then(() => {
-        budget.processing = 0;
-      });
+  const timed = usesTimedLocalEncoding(job);
+  if (job.timestamped)
+    setEncodeReport({
+      route: timed ? "WebCodecs" : "MediaRecorder",
+      format: timed ? undefined : (recorderType() ?? undefined),
+      state: "running",
     });
+  try {
+    let result;
+    if (timed) {
+      const { encodeTimedLocal } = await import("./local-timed-encode");
+      result = await encodeTimedLocal(
+        job,
+        signal,
+        status,
+        progress,
+        (duration) => {
+          budget.processing += duration;
+          if (!rest || budget.processing < 600) return;
+          status("4分休憩中（処理と録画を停止しています）");
+          return wait(240_000, signal).then(() => {
+            budget.processing = 0;
+          });
+        },
+      );
+    } else
+      result = await recordLocal(
+        job,
+        audio,
+        signal,
+        rest,
+        budget,
+        status,
+        progress,
+      );
+    if (job.timestamped) setEncodeReport({ state: "complete" });
+    return result;
+  } catch (error) {
+    if (job.timestamped)
+      setEncodeReport({
+        state: "failed",
+        failure: encodeFailureCategory(error),
+      });
+    throw error;
   }
+}
+
+async function recordLocal(
+  job: LocalEncodeJob,
+  audio: AudioContext | undefined,
+  signal: AbortSignal,
+  rest: boolean,
+  budget: { processing: number },
+  status: (s: string) => void,
+  progress: (fraction: number) => void,
+) {
   const mimeType = recorderType();
   if (!audio || !mimeType)
     throw Error(
