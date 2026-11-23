@@ -1,5 +1,5 @@
 import { ExportQueue } from "./export-queue";
-import { encodeLocal } from "./local-encode";
+import { encodeLocal, usesTimedLocalEncoding } from "./local-encode";
 import { isUnlocked } from "../developer/local-lock";
 let audio: AudioContext | undefined;
 const budget = { processing: 0 };
@@ -26,8 +26,9 @@ export const localExportQueue = new ExportQueue(
     signal.throwIfAborted();
     const urls: string[] = [];
     try {
-      audio ??= new AudioContext();
-      if (audio.state !== "running") {
+      const legacyRecorder = !usesTimedLocalEncoding(job);
+      if (legacyRecorder) audio ??= new AudioContext();
+      if (legacyRecorder && audio?.state !== "running") {
         update(0, "音声処理を許可してください");
         // Automatic processing continues once the explicit Safari activation is given.
         await new Promise<void>((resolve, reject) => {

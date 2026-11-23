@@ -441,6 +441,7 @@ export function AllVersionsEditor({
     return [
       {
         filename: "All Versions.mp4",
+        timestamped: true,
         width,
         height,
         pieces: project.document.clips.map((c) => ({

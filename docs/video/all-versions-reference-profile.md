@@ -26,6 +26,23 @@ Each version starts at `00:01`. On 60fps output, local frame 65 still displays `
 
 The **server renderer** uses a dynamic FFmpeg `drawtext` clock (AxFluxo Clock, a regular-weight numeral subset of Noto Sans JP under the SIL OFL) and separately composites the title (Aleo), with independent easing. The editor preview, composition preview and browser export share the Canvas artwork, title and timer drawing. FFmpeg uses the same layout and fade constants. Both load the same timer font. Fallback glyphs and antialiasing can differ across engines.
 
+## On-device MP4 timing
+
+All Versions uses WebCodecs with Mediabunny when the browser provides both
+video and audio encoding and audio decoding. Video timestamps are derived
+from frame numbers at 60 fps. The audio track is built from decoded source
+samples within each selected range. The encoder buffers short PCM blocks,
+uses the existing bitrate targets and saves a regular MP4 with explicit
+track durations. Playback, AudioContext time and wall time do not drive the
+export timeline.
+
+Safari on iOS 26 and later exposes the WebCodecs audio APIs. On earlier
+versions the existing MediaRecorder path remains available, with duration
+and audio timestamp validation before an All Versions result can be saved.
+FNF Showcase continues to use its existing MediaRecorder path. The
+256 MiB limit applies to both paths. An explicit inter-file gap affects
+both tracks. Markers inside a file affect the displayed version only.
+
 ## Scope and limitations
 
 - Does not change cloud storage, subscriptions, billing, original assets, API authorization, audio encoding, or public deployment.

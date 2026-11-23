@@ -195,6 +195,7 @@ async function createLocalJobs(
   return [
     {
       filename: "All Versions.mp4",
+      timestamped: true,
       width: 1920,
       height: 1080,
       pieces: sources.map((s) => ({
