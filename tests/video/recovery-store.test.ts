@@ -58,16 +58,20 @@ it("automatically restores assets and settings and isolates tools and projects",
     a = project("all-versions"),
     b = project(),
     c = project("all-versions");
+  a.layout = "provisional-v1";
   await s.saveLocalProject(a);
   await s.saveLocalProject(b);
   const restored = await s.loadLocalProject(a.mode);
   expect(restored?.id).toBe(a.id);
+  expect(restored?.layout).toBe("provisional-v1");
   expect(await restored?.sources[0].file.text()).toBe("media");
   expect(restored?.sources[0].file.name).toBe("source.mp4");
   expect(restored?.sources[0].url).not.toBe("blob:old");
   expect((await s.loadLocalProject(b.mode))?.id).toBe(b.id);
   await s.saveLocalProject(c);
-  expect((await s.loadLocalProject(a.mode))?.id).toBe(c.id);
+  const older = await s.loadLocalProject(a.mode);
+  expect(older?.id).toBe(c.id);
+  expect(older?.layout).toBeUndefined();
   expect((await records("projects")).length).toBeGreaterThanOrEqual(3);
 });
 it("does not rewrite shared input or output blobs on progress; restores queued work and completed output", async () => {

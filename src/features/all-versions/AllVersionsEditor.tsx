@@ -13,7 +13,6 @@ import {
   projectIssues,
   versionIntervals,
   textAlpha,
-  timerAlpha,
   type AllVersionsProject,
 } from "../../domain/video/all-versions";
 import {
@@ -45,6 +44,7 @@ import {
 } from "../../services/developer-storage/projects";
 import { PlaybackError } from "../../services/video/playback";
 import { ALL_VERSIONS_REFERENCE as REF, referenceTimerText } from "../../domain/video/all-versions-reference";
+import { drawReferenceFrame, loadReferenceFonts, referenceArtwork, referenceCanvasTitle } from "../../services/video/all-versions-canvas";
 const steps = [
   "素材",
   "音声編集",
@@ -104,7 +104,7 @@ export function AllVersionsEditor({
     ),
     [clock, setClock] = useState(0),
     [coverUrl, setCoverUrl] = useState(""),
-    [text, setText] = useState(""),
+    [text, setText] = useState<{ key: string; url: string } | null>(null),
     [batch, setBatch] = useState(""),
     [status, setStatus] = useState(""),
     [output, setOutput] = useState("");
@@ -274,8 +274,14 @@ export function AllVersionsEditor({
       setError(e instanceof Error ? e.message : "PREVIEW_FAILED");
     }
   }
-  const versions = versionIntervals(project),
-    names = projectNames(project),
+  const referencePreview = useRef<HTMLCanvasElement>(null);
+  const [previewArtwork, setPreviewArtwork] = useState<{ url: string; canvas: HTMLCanvasElement } | null>(null);
+  const [fontReadyFor, setFontReadyFor] = useState<string[] | null>(null);
+  const drawPreviewTitle = useRef<ReturnType<typeof referenceCanvasTitle> | null>(null);
+  const reference = project.design.layout === "reference-pasa-v1";
+  const { namesText, removeNumbers } = project;
+  const names = useMemo(() => projectNames({ namesText, removeNumbers }), [namesText, removeNumbers]);
+  const versions = useMemo(() => versionIntervals(project), [project]),
     issues = projectIssues(project),
     frame = toFrame(clock),
     index = Math.max(
@@ -283,17 +289,17 @@ export function AllVersionsEditor({
       versions.findIndex((v) => frame >= v.startFrame && frame < v.endFrame),
     );
   const textKey = JSON.stringify({
+    index,
     name: names[index],
     design: project.design,
   });
   useEffect(() => {
     let live = true;
-    setText("");
-    if (remote && projectNames(docRef.current)[index]?.trim())
+    if (!reference && remote && projectNames(docRef.current)[index]?.trim())
       void remote
         .text(docRef.current, index)
         .then((r) => {
-          if (live) setText(`data:image/png;base64,${r.png}`);
+          if (live) setText({ key: textKey, url: `data:image/png;base64,${r.png}` });
         })
         .catch((e) => {
           if (live) setError(e.message);
@@ -301,7 +307,7 @@ export function AllVersionsEditor({
     return () => {
       live = false;
     };
-  }, [remote, textKey, index]);
+  }, [remote, textKey, index, reference]);
   useEffect(() => {
     let live = true;
     setCoverUrl("");
@@ -313,6 +319,51 @@ export function AllVersionsEditor({
       live = false;
     };
   }, [cloud, project.cover]);
+  const showReference = reference && !!project.document && (step === 1 || step === 4);
+  const previewHeight = project.design.height;
+  const previewFontReady = fontReadyFor === names;
+  useEffect(() => {
+    if (!showReference) return;
+    let live = true;
+    void loadReferenceFonts(names).then(() => {
+      if (live) setFontReadyFor(names);
+    }).catch((error: unknown) => {
+      if (live) setError(error instanceof Error ? error.message : "FONT_UNAVAILABLE");
+    });
+    return () => { live = false; };
+  }, [names, showReference]);
+  useEffect(() => {
+    if (!showReference || !coverUrl) {
+      setPreviewArtwork(null);
+      return;
+    }
+    let live = true;
+    void imageForEncode(coverUrl).then((cover) => {
+      if (live) setPreviewArtwork({
+        url: coverUrl,
+        canvas: referenceArtwork(cover, previewHeight * 16 / 9, previewHeight),
+      });
+    }).catch((e: unknown) => {
+      if (live) setError(e instanceof Error ? e.message : "PREVIEW_FAILED");
+    });
+    return () => { live = false; };
+  }, [coverUrl, previewHeight, showReference]);
+  useEffect(() => {
+    drawPreviewTitle.current = showReference && previewFontReady
+      ? referenceCanvasTitle(names) : null;
+  }, [names, previewFontReady, showReference]);
+  useEffect(() => {
+    const canvas = referencePreview.current;
+    const ctx = canvas?.getContext("2d");
+    if (!canvas || !ctx || !showReference) return;
+    if (previewArtwork?.url !== coverUrl || previewArtwork.canvas.height !== previewHeight) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+    if (drawPreviewTitle.current) {
+      drawReferenceFrame(ctx, previewArtwork.canvas, frame, versions, project.design, drawPreviewTitle.current);
+    } else ctx.drawImage(previewArtwork.canvas, 0, 0);
+  }, [coverUrl, frame, previewArtwork, previewFontReady, previewHeight, project.design, showReference, versions]);
   async function save(sync = true) {
     try {
       const id = docRef.current.id;
@@ -378,12 +429,15 @@ export function AllVersionsEditor({
     if (!coverAccess.ok) throw Error(coverAccess.code);
     const cover = await imageForEncode(coverAccess.data.url);
     const overlays: HTMLImageElement[] = [];
-    for (let i = 0; i < versions.length; i++) {
+    if (reference) await loadReferenceFonts(names);
+    else for (let i = 0; i < versions.length; i++) {
       const r = await remote.text(project, i);
       overlays.push(await imageForEncode(`data:image/png;base64,${r.png}`));
     }
+    const drawTitle = reference ? referenceCanvasTitle(names) : null;
     const height = project.design.height,
       width = (height * 16) / 9;
+    const artwork = reference ? referenceArtwork(cover, width, height) : null;
     return [
       {
         filename: "All Versions.mp4",
@@ -399,40 +453,13 @@ export function AllVersionsEditor({
           },
         })),
         draw: (ctx, _media, seconds) => {
-          ctx.save();
-          ctx.scale(width / 1920, height / 1080);
-          if (project.design.layout === "reference-pasa-v1") {
-            const scale = Math.max(1920 / cover.width, 1080 / cover.height) * 1.4;
-            ctx.fillStyle = "black";
-            ctx.fillRect(0, 0, 1920, 1080);
-            ctx.save();
-            ctx.filter = "blur(102.6px)";
-            ctx.drawImage(cover, (1920 - cover.width * scale) / 2,
-              (1080 - cover.height * scale) / 2,
-              cover.width * scale, cover.height * scale);
-            ctx.restore();
-            ctx.fillStyle = "rgba(0,0,0,.18)";
-            ctx.fillRect(0, 0, 1920, 1080);
-            const side = 1080 * REF.coverSize / REF.height;
-            const crop = Math.min(cover.width, cover.height);
-            ctx.drawImage(cover, (cover.width - crop) / 2, (cover.height - crop) / 2,
-              crop, crop, (1920 - side) / 2, (1080 - side) / 2, side, side);
-            const frame = Math.floor(seconds * 60);
-            const i = versions.findIndex(v => frame >= v.startFrame && frame < v.endFrame);
-            if (i >= 0) {
-              ctx.globalAlpha = textAlpha(frame, versions[i], project.design);
-              ctx.drawImage(overlays[i], 0, 0, 1920, 1080);
-              ctx.globalAlpha = timerAlpha(frame, versions[i], project.design);
-              ctx.fillStyle = "white";
-              ctx.font = `${1080 * REF.timerFontSize / REF.height}px Arial, sans-serif`;
-              ctx.textBaseline = "middle";
-              ctx.textAlign = "center";
-              ctx.fillText(referenceTimerText(frame, versions[i]), 960,
-                1080 * REF.timerCenterY / REF.height);
-            }
-            ctx.restore();
+          if (artwork && drawTitle) {
+            drawReferenceFrame(ctx, artwork, Math.round(seconds * 60), versions,
+              project.design, drawTitle);
             return;
           }
+          ctx.save();
+          ctx.scale(width / 1920, height / 1080);
           ctx.fillStyle = "black";
           ctx.fillRect(0, 0, 1920, 1080);
           ctx.save();
@@ -622,11 +649,20 @@ export function AllVersionsEditor({
           resolve={resolve}
           onTimeChange={setClock}
           overlay={
-            step === 4 ? (
+            step === 4 || showReference ? (
               <div
                 style={{ position: "absolute", inset: 0, background: "black" }}
               >
-                {coverUrl && (
+                {reference && (
+                  <canvas
+                    ref={referencePreview}
+                    width={project.design.height * 16 / 9}
+                    height={project.design.height}
+                    aria-label="参考レイアウト合成プレビュー"
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+                  />
+                )}
+                {coverUrl && !reference && (
                   <>
                     <div
                       style={{
@@ -635,8 +671,8 @@ export function AllVersionsEditor({
                         backgroundImage: `url(${JSON.stringify(coverUrl)})`,
                         backgroundSize: "cover",
                         backgroundPosition: "center",
-                        filter: project.design.layout === "reference-pasa-v1" ? "blur(65px)" : "blur(24px)",
-                        opacity: project.design.layout === "reference-pasa-v1" ? 0.82 : 0.7,
+                        filter: "blur(24px)",
+                        opacity: 0.7,
                       }}
                     />
                     <img
@@ -646,12 +682,12 @@ export function AllVersionsEditor({
                       src={coverUrl}
                       style={{
                         position: "absolute",
-                        height: project.design.layout === "reference-pasa-v1" ? "98.83%" : "56%",
-                        width: project.design.layout === "reference-pasa-v1" ? "55.6%" : "31.5%",
+                        height: "56%",
+                        width: "31.5%",
                         aspectRatio: "1",
                         objectFit: "cover",
                         left: "50%",
-                        top: project.design.layout === "reference-pasa-v1" ? "0.59%" : "12%",
+                        top: "12%",
                         transform: "translateX(-50%)",
                       }}
                     />
@@ -667,34 +703,20 @@ export function AllVersionsEditor({
                     background: "rgba(0,0,0,.48)",
                   }}
                 />}
-                {project.design.layout === "reference-pasa-v1" && versions[index] && (
-                  <svg
-                    role="img"
+                {reference && versions[index] && (
+                  <span
                     aria-label="楽曲の経過時間"
-                    viewBox={`0 0 ${REF.width} ${REF.height}`}
-                    preserveAspectRatio="none"
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+                    style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clipPath: "inset(50%)" }}
                   >
-                    <text
-                      x={REF.width / 2}
-                      y={REF.timerCenterY}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
-                      fontSize={REF.timerFontSize}
-                      fontFamily="Arial, sans-serif"
-                      fill="white"
-                      opacity={timerAlpha(frame, versions[index], project.design)}
-                    >
-                      {referenceTimerText(frame, versions[index])}
-                    </text>
-                  </svg>
+                    {referenceTimerText(frame, versions[index])}
+                  </span>
                 )}
-                {text && (
+                {!reference && text?.key === textKey && (
                   <img
                     width={1920}
                     height={1080}
                     alt="server生成の文字"
-                    src={text}
+                    src={text.url}
                     style={{
                       position: "absolute",
                       inset: 0,

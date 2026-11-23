@@ -84,6 +84,7 @@ export default function LocalVideoTool({
   mode: "all-versions" | "fnf-showcase";
   ownerId: string;
 }) {
+  const [layout, setLayout] = useState<NonNullable<LocalProjectData["layout"]>>("reference-pasa-v1");
   const [rest, setRest] = useState(true);
   const [ready, setReady] = useState(false);
   const [saveStatus, setSaveStatus] = useState("保存データを確認中…");
@@ -213,6 +214,7 @@ export default function LocalVideoTool({
           key,
           JSON.stringify({
             names,
+            ...(fnf ? {} : { layout }),
             username,
             cropTop,
             cropBottom,
@@ -238,6 +240,8 @@ export default function LocalVideoTool({
         )
           throw Error();
         setNames(value.names);
+        if (!fnf && (value.layout === "provisional-v1" || value.layout === "reference-pasa-v1"))
+          setLayout(value.layout);
         setUsername(value.username);
         setCropTop(value.cropTop);
         setCropBottom(value.cropBottom);
@@ -319,6 +323,7 @@ export default function LocalVideoTool({
           setCoverFile(saved.coverFile);
           setCoverId(saved.coverId);
           setNames(saved.names);
+          setLayout(saved.layout ?? "reference-pasa-v1");
           setRest(saved.rest ?? true);
           setRanges(saved.ranges);
           setUsername(saved.username);
@@ -362,6 +367,7 @@ export default function LocalVideoTool({
     if (!ready || !projectId) return;
     const snapshot: LocalProjectData = {
       rest,
+      ...(fnf ? {} : { layout }),
       id: projectId,
       mode,
       sources,
@@ -394,6 +400,8 @@ export default function LocalVideoTool({
     };
   }, [
     ready,
+    fnf,
+    layout,
     rest,
     projectId,
     mode,
@@ -411,6 +419,7 @@ export default function LocalVideoTool({
   function projectData(): LocalProjectData {
     return {
       rest,
+      ...(fnf ? {} : { layout }),
       id: projectId,
       mode,
       sources,
@@ -484,6 +493,18 @@ export default function LocalVideoTool({
       style={{ maxWidth: 1000, margin: "auto", padding: 16 }}
     >
       <h1>{fnf ? "FNF Showcase Maker" : "All Versions Video Maker"}</h1>
+      {!fnf && (
+        <label>
+          レイアウト
+          <select value={layout} onChange={(event) => {
+            setLayout(event.target.value === "provisional-v1" ? "provisional-v1" : "reference-pasa-v1");
+            setPreviewJobs([]);
+          }}>
+            <option value="reference-pasa-v1">参考動画再現（中央文字＋経過時間）</option>
+            <option value="provisional-v1">従来レイアウト</option>
+          </select>
+        </label>
+      )}
       <p>
         端末の素材を選択して制作します。素材・動画のアップロードは行いません。端末内機能はログイン・動画APIなしで利用できます。
       </p>

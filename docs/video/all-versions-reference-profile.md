@@ -1,4 +1,4 @@
-# All Versions: opt-in reference video profile (NORMAL → SLOWED)
+# All Versions: reference video profile (NORMAL → SLOWED)
 
 Implemented on branch `feature/all-versions-reference-fade-20261114`.
 
@@ -8,12 +8,12 @@ One user-supplied MP4: 910×512, 30fps, 6,170 frames, 205.667s. The cut between 
 
 ## Backwards compatibility
 
-The historical `provisional-v1` layout and its 9-frame linear fade settings remain available and remain the default for existing projects. Opt in to `reference-pasa-v1` under **Design → Display template**. Switching to this profile sets the defaults to 54 incoming + 42 outgoing frames at 60fps. Users can still edit durations, subject to `FADE_TOO_LONG`.
+New projects use `reference-pasa-v1`. Saved projects with an explicit `provisional-v1` selection keep that layout and its fade settings. Local projects saved before layout selection was available use the reference profile. The reference defaults are 54 incoming and 42 outgoing frames at 60fps. On shorter versions the reference fade curves overlap within the existing version window.
 
 ## Reference composition (coordinates in 910×512 space)
 
 - Cover image: center x=455, size approximately 506×506, centered vertically.
-- Blurred background: strong blur of the cover, subject to further visual calibration to InShot's strongest preset.
+- Blurred background: strong blur of the enlarged cover, calibrated against the reference stills.
 - Version title: dynamic text (for example `PASA!(NORMAL)`), horizontally centered, vertical center ~y=255.5; dark translucent black band (height ~35) fits text width.
 - Clock: white sans-serif `mm:ss`, horizontally centered, near y=448. No background band.
 - Background and cover remain unchanged between versions. They do not fade.
@@ -24,7 +24,7 @@ The historical `provisional-v1` layout and its 9-frame linear fade settings rema
 
 Each version starts at `00:01`. On 60fps output, local frame 65 still displays `00:01` and local frame 66 displays `00:02`. The next version resets to `00:01`. The timer is based on integer frame offsets, not segment-local real-time clocks, preventing drift when segments are split.
 
-The **server renderer** uses a dynamic FFmpeg `drawtext` clock (Noto Sans JP) and separately composites the title (Aleo), with independent easing. The **local export** and browser preview use the same domain timing functions. Note that they are not yet proven pixel-identical because browser/FFmpeg typography and antialiasing differ.
+The **server renderer** uses a dynamic FFmpeg `drawtext` clock (AxFluxo Clock, a regular-weight numeral subset of Noto Sans JP under the SIL OFL) and separately composites the title (Aleo), with independent easing. The editor preview, composition preview and browser export share the Canvas artwork, title and timer drawing. FFmpeg uses the same layout and fade constants. Both load the same timer font. Fallback glyphs and antialiasing can differ across engines.
 
 ## Scope and limitations
 
