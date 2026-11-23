@@ -207,6 +207,7 @@ test("All Versions writes source-clock MP4 with trimmed audio and unique frame t
         };
       }
       expect(tone(0, 160).rms).toBeGreaterThan(0.035);
+      expect(tone(duration - 0.025, 160).rms).toBeGreaterThan(0.035);
       // This window straddles the version marker in the first source.
       expect(tone(1.9).rms).toBeGreaterThan(0.04);
       expect(Math.abs(tone(1.9).frequency - 440)).toBeLessThanOrEqual(5);

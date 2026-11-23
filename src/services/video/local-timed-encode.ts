@@ -288,6 +288,23 @@ export async function encodeTimedLocal(
     }
     signal.throwIfAborted();
     video.close();
+    if (codecs[1] === "aac") {
+      // Some native AAC encoders retain trailing input on flush. Feed a
+      // bounded drain block and discard access units past the presentation end.
+      // No drain samples extend the MP4 timeline.
+      const drain = new AudioSample({
+        data: new Float32Array(8192 * 2),
+        format: "f32-planar",
+        numberOfChannels: 2,
+        sampleRate: localAudioRate,
+        timestamp: total,
+      });
+      try {
+        await audio.add(drain);
+      } finally {
+        drain.close();
+      }
+    }
     await audioEncoder.finalize();
     await audioPackets;
     if (audioError) throw audioError;

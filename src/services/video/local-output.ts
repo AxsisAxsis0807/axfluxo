@@ -49,7 +49,7 @@ export async function validateLocalOutput(
         )
       )
         throw Error(
-          "完成動画の音声・映像時間が指定区間に一致しません。負荷を減らして再試行してください。",
+          `完成動画の音声・映像時間が指定区間に一致しません（映像 ${durations[0].toFixed(6)}秒、音声 ${durations[1].toFixed(6)}秒、指定 ${timing.duration.toFixed(6)}秒）。`,
         );
 
       let expectedEnd: number | undefined;
