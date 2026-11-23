@@ -33,8 +33,7 @@ let acquired = false;
 let database: Promise<IDBDatabase> | undefined;
 function open() {
   if (database) return database;
-  let pending: Promise<IDBDatabase>;
-  pending = new Promise<IDBDatabase>((resolve, reject) => {
+  const pending = new Promise<IDBDatabase>((resolve, reject) => {
     let opening: IDBOpenDBRequest;
     try {
       opening = indexedDB.open(DB, 1);
@@ -80,6 +79,10 @@ function open() {
       fail(Error("保存領域の更新を別のタブが使用中です。"));
   });
   database = pending;
+  // Includes synchronous SecurityError failures from indexedDB.open().
+  void pending.catch(() => {
+    if (database === pending) database = undefined;
+  });
   return pending;
 }
 const request = <T>(r: IDBRequest<T>) =>
