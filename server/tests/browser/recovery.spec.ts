@@ -107,7 +107,7 @@ test("a Safari IndexedDB open stall shows a safe retry instead of hanging foreve
   await page.route("https://recovery.test/**", (route) =>
     route.fulfill({
       contentType: "text/html",
-      body: `<meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script>${bundle.replace(/<\\/script/gi, "<\\\\/script")}</script>`,
+      body: `<meta name="viewport" content="width=device-width,initial-scale=1"><div id="root"></div><script>${bundle.replace(/<\/script/gi, "<\\/script")}</script>`,
     }),
   );
   await page.goto("https://recovery.test/fnf");
