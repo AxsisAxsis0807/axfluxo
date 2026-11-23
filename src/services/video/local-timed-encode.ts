@@ -163,10 +163,24 @@ export async function encodeTimedLocal(
   // The audio-only target lets Mediabunny manage native priming and backpressure.
   let audioPackets = Promise.resolve();
   let audioError: unknown;
+  let nextAacSample: number | undefined;
   const audio = new AudioSampleSource({
     codec: codecs[1],
     bitrate: audioBitrate,
     onEncodedPacket(packet, metadata) {
+      if (codecs[1] === "aac") {
+        // AAC-LC access units contain 1024 PCM samples. Some WebKit backends
+        // report discontinuous chunk timestamps for consecutive units. Keep
+        // the measured first-packet priming offset and count decoded samples
+        // thereafter, as the audio input already uses a contiguous PCM clock.
+        const first =
+          nextAacSample ?? Math.round(packet.timestamp * localAudioRate);
+        nextAacSample = first + 1024;
+        packet = packet.clone({
+          timestamp: first / localAudioRate,
+          duration: 1024 / localAudioRate,
+        });
+      }
       const duration = Math.min(packet.duration, total - packet.timestamp);
       if (duration <= 0) return;
       audioPackets = audioPackets

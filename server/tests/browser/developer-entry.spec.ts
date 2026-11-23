@@ -214,13 +214,19 @@ for (const scenario of [
       page.getByRole("region", { name: "合成プレビュー" }).locator("canvas"),
     ).toBeVisible();
     const available = await page.evaluate(
-      () =>
-        typeof MediaRecorder !== "undefined" &&
-        [
-          "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
-          "video/mp4",
-          "video/webm;codecs=vp8,opus",
-        ].some((t) => MediaRecorder.isTypeSupported(t)),
+      (toolMode) =>
+        (toolMode === "all-versions" &&
+          typeof VideoEncoder !== "undefined" &&
+          typeof AudioEncoder !== "undefined" &&
+          typeof AudioDecoder !== "undefined" &&
+          typeof OfflineAudioContext !== "undefined") ||
+        (typeof MediaRecorder !== "undefined" &&
+          [
+            "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+            "video/mp4",
+            "video/webm;codecs=vp8,opus",
+          ].some((t) => MediaRecorder.isTypeSupported(t))),
+      mode,
     );
     await page.getByRole("button", { name: "端末内で書き出す" }).click();
     if (available) {
