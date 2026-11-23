@@ -190,19 +190,23 @@ test("All Versions writes source-clock MP4 with trimmed audio and unique frame t
         "f32le",
         "pipe:1",
       ]);
-      function tone(time: number) {
+      function tone(time: number, samples = 1600) {
         const start = Math.round(time * 8000);
         let power = 0,
           crossings = 0,
-          previous = pcm.readFloatLE((start - 1) * 4);
-        for (let i = start; i < start + 1600; i++) {
+          previous = start ? pcm.readFloatLE((start - 1) * 4) : 0;
+        for (let i = start; i < start + samples; i++) {
           const value = pcm.readFloatLE(i * 4);
           power += value ** 2;
           if (previous <= 0 && value > 0) crossings++;
           previous = value;
         }
-        return { rms: Math.sqrt(power / 1600), frequency: crossings * 5 };
+        return {
+          rms: Math.sqrt(power / samples),
+          frequency: (crossings * 8000) / samples,
+        };
       }
+      expect(tone(0, 160).rms).toBeGreaterThan(0.035);
       // This window straddles the version marker in the first source.
       expect(tone(1.9).rms).toBeGreaterThan(0.04);
       expect(Math.abs(tone(1.9).frequency - 440)).toBeLessThanOrEqual(5);

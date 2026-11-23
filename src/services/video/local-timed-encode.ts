@@ -19,12 +19,12 @@ import {
 import type { LocalEncodeJob } from "./local-encode";
 import { localAudioRate, timedAudio } from "./local-timed-audio";
 import { setEncodeReport } from "./local-encode-diagnostics";
+import { aacPacketStartSample, localAudioBitrate } from "./local-timed-aac";
 import { validateLocalOutput } from "./local-output";
 
 const fps = 60;
 const samplesPerFrame = localAudioRate / fps;
 const videoBitrate = 8_000_000;
-const audioBitrate = 320_000;
 const maxBytes = 256 * 1024 * 1024;
 
 export async function encodeTimedLocal(
@@ -45,7 +45,7 @@ export async function encodeTimedLocal(
   const audioOptions = {
     sampleRate: localAudioRate,
     numberOfChannels: 2,
-    bitrate: audioBitrate,
+    bitrate: localAudioBitrate,
   };
   // Prefer the existing Safari-compatible codec pair. Chromium on platforms
   // without an AAC encoder uses the same VP9/Opus MP4 pair as MediaRecorder.
@@ -163,19 +163,19 @@ export async function encodeTimedLocal(
   // The audio-only target lets Mediabunny manage native priming and backpressure.
   let audioPackets = Promise.resolve();
   let audioError: unknown;
-  let nextAacSample: number | undefined;
+  let nextAacSample = codecs[1] === "aac" ? await aacPacketStartSample() : 0;
+  signal.throwIfAborted();
   const audio = new AudioSampleSource({
     codec: codecs[1],
-    bitrate: audioBitrate,
+    bitrate: localAudioBitrate,
     onEncodedPacket(packet, metadata) {
       if (codecs[1] === "aac") {
         // AAC-LC access units contain 1024 PCM samples. Some WebKit backends
         // report discontinuous chunk timestamps for consecutive units. Keep
-        // the measured first-packet priming offset and count decoded samples
+        // the measured stereo priming offset and count decoded samples
         // thereafter, as the audio input already uses a contiguous PCM clock.
-        const first =
-          nextAacSample ?? Math.round(packet.timestamp * localAudioRate);
-        nextAacSample = first + 1024;
+        const first = nextAacSample;
+        nextAacSample += 1024;
         packet = packet.clone({
           timestamp: first / localAudioRate,
           duration: 1024 / localAudioRate,
