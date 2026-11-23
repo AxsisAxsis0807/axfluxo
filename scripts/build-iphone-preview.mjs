@@ -22,6 +22,7 @@ await mkdir(target, { recursive: true });
 for (const path of [
   "_next",
   "fonts",
+  "licenses",
   "workers",
   "build-info.json",
   "developer/all-versions",

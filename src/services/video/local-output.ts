@@ -72,7 +72,7 @@ export async function validateLocalOutput(
           offset > tolerance
         )
           throw Error(
-            "音声時刻の不連続を検出しました。書き出しは保存されませんでした。",
+            `音声時刻の不連続を検出しました。書き出しは保存されませんでした（時刻 ${packet.timestamp.toFixed(6)}秒、予想 ${(expectedEnd ?? 0).toFixed(6)}秒、パケット長 ${packet.duration.toFixed(6)}秒）。`,
           );
         expectedEnd = packet.timestamp + packet.duration;
       }

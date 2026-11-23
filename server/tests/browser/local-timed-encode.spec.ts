@@ -33,6 +33,7 @@ test("All Versions writes source-clock MP4 with trimmed audio and unique frame t
         resolveDir: resolve("."),
         contents: `
           import { buildLocalJobs } from "./src/services/video/local-project";
+          import { getEncodeReport } from "./src/services/video/local-encode-diagnostics";
           import { encodeLocal, usesTimedLocalEncoding } from "./src/services/video/local-encode";
           window.run = async (gap) => {
             const canvas = document.createElement("canvas");
@@ -61,8 +62,13 @@ test("All Versions writes source-clock MP4 with trimmed audio and unique frame t
               }
               draw(ctx, media, time < 4 ? time : time < 4 + gap ? Infinity : time - gap);
             };
-            const result = await encodeLocal(job, undefined, AbortSignal.timeout(60000),
-              false, {processing:0}, () => {});
+            let result;
+            try {
+              result = await encodeLocal(job, undefined, AbortSignal.timeout(60000),
+                false, {processing:0}, () => {});
+            } catch (error) {
+              throw new Error(JSON.stringify(getEncodeReport()) + " " + error.message);
+            }
             document.querySelector("a").href = URL.createObjectURL(result.blob);
             return true;
           };
