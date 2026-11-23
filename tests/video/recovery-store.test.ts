@@ -471,6 +471,20 @@ it("fresh session writes leave older unhydrated jobs and archived projects untou
   expect((await s.loadLocalProjectById("fnf-showcase", old.id)).id).toBe(old.id);
 });
 
+it("lists saved project metadata without taking a write lease", async () => {
+  const s = await store();
+  const p = project("all-versions");
+  await s.saveLocalProject(p);
+  const put = vi.spyOn(IDBObjectStore.prototype, "put");
+  try {
+    const items = await s.listLocalProjects("all-versions");
+    expect(items.some((item) => item.id === p.id)).toBe(true);
+    expect(put).not.toHaveBeenCalled();
+  } finally {
+    put.mockRestore();
+  }
+});
+
 it("fences a stale writer when another tab owns the lease", async () => {
   const s = await store();
   await s.renewRecoveryLease();
