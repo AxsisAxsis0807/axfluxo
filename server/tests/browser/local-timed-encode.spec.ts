@@ -150,7 +150,7 @@ test("All Versions writes source-clock MP4 with trimmed audio and unique frame t
             last: audio.packets.slice(-4),
           }),
         );
-        await testInfo.attach("audio-timing-mismatch", {
+        await test.info().attach("audio-timing-mismatch", {
           path,
           contentType: "video/mp4",
         });
