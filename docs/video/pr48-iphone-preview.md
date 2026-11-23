@@ -39,3 +39,12 @@ Do not place private files or API credentials in the hosting project.
 4. If an export fails, copy **書き出し診断**. It shows browser family, API
    availability, selected encoder and a sanitized failure category. Do not
    share the selected files or passcode in a public issue.
+
+## Linux WebKit boundary
+
+The iPhone preview acceptance fixtures use MP3 and WAV. Linux WebKit can
+report the duration of an AAC-in-video clip even if its audio decoder does
+not deliver every sample in that interval. All Versions stops before save
+in that case and explains that the selected interval could not be decoded.
+For iPhone acceptance, start with MP3 or WAV and test AAC-in-video separately
+if you expect to use it.

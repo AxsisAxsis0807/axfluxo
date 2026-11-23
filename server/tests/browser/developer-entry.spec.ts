@@ -142,13 +142,23 @@ for (const scenario of [
         buffer: await readFile(file),
       },
     ];
-    if (mode === "all-versions" && test.info().project.name === "chromium") {
-      for (const [extension, mimeType, options] of [
+    if (mode === "all-versions") {
+      const audioInputs = [
         ["mp3", "audio/mpeg", ["-vn", "-c:a", "libmp3lame"]],
         ["wav", "audio/wav", ["-vn", "-c:a", "pcm_s16le"]],
+      ] as const;
+      const videoInputs = [
         ["m4a", "audio/mp4", ["-vn", "-c:a", "aac"]],
         ["mov", "video/quicktime", ["-c", "copy"]],
-      ] as const) {
+      ] as const;
+      // The mobile workflow selects audio files. Keep the desktop mixed-source
+      // coverage separately without relying on the Linux AAC-in-video demux path.
+      const chromium = test.info().project.name === "chromium";
+      if (!chromium) files.length = 0;
+      for (const [extension, mimeType, options] of [
+        ...audioInputs,
+        ...(chromium ? videoInputs : []),
+      ]) {
         const path = join(dir, `source.${extension}`);
         execFileSync("ffmpeg", [
           "-v",
