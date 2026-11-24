@@ -27,11 +27,16 @@ export type Source = {
   markers: string;
 };
 export type Range = { id: string; start: number; end: number; name: string };
+/** Fixed silence between distinct input files in All Versions. */
+export const ALL_VERSIONS_FILE_GAP_SECONDS = 1.5;
 export function localIntervals(
   sources: Pick<Source, "start" | "end" | "duration" | "markers">[],
 ) {
   let offset = 0;
-  return sources.flatMap((s) => {
+  return sources.flatMap((s, index) => {
+    // A marker splits one file into versions; it never inserts silence.
+    // Only a new source File receives the 1.5-second inter-file gap.
+    if (index > 0) offset += ALL_VERSIONS_FILE_GAP_SECONDS;
     if (
       ![s.start, s.end, s.duration].every(Number.isFinite) ||
       s.start < 0 ||
@@ -198,6 +203,7 @@ async function createLocalJobs(
       timestamped: true,
       width: 1920,
       height: 1080,
+      gapBetweenPiecesSeconds: ALL_VERSIONS_FILE_GAP_SECONDS,
       pieces: sources.map((s) => ({
         file: s.file,
         url: async () => s.url,

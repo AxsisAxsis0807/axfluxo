@@ -21,6 +21,10 @@ createRoot(document.getElementById("root")!).render(
           filename: "encoded.mp4",
           width: 320,
           height: 180,
+          // The second mode exercises the same recorder with a real 1.5s gap.
+          ...(new URLSearchParams(location.search).has("gap")
+            ? { gapBetweenPiecesSeconds: 1.5 }
+            : {}),
           pieces: [
             {
               url: async () => "https://encode.test/source.mp4",

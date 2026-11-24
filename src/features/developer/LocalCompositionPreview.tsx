@@ -44,9 +44,11 @@ export default function LocalCompositionPreview({
         : video.current;
       if (ctx && drawingMedia && (audioOnly || media.readyState >= 2)) {
         const piece = job.pieces[selectedIndex],
-          offset = job.pieces
-            .slice(0, selectedIndex)
-            .reduce((sum, p) => sum + p.end - p.start, 0);
+          offset =
+            job.pieces
+              .slice(0, selectedIndex)
+              .reduce((sum, p) => sum + p.end - p.start, 0) +
+            selectedIndex * (job.gapBetweenPiecesSeconds ?? 0);
         job.draw(
           ctx,
           drawingMedia,
@@ -146,6 +148,8 @@ export default function LocalCompositionPreview({
       )}
       <p>
         音声・再生操作は上のコントロールを使用します。合成結果はキャンバスに表示されます。{audioOnly && " All Versionsは元動画の映像をデコードせず音声のみ再生します。"}
+        {job.pieces.length > 1 && (job.gapBetweenPiecesSeconds ?? 0) > 0 &&
+          ` 別ファイル間に${job.gapBetweenPiecesSeconds}秒の無音が入ります。`}
       </p>
       <label>
         プレビューする素材
