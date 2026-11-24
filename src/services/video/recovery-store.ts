@@ -32,26 +32,58 @@ const LEASE_MS = 20_000;
 let acquired = false;
 let database: Promise<IDBDatabase> | undefined;
 function open() {
-  return (database ??= new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB, 1);
-    request.onupgradeneeded = () => {
+  if (database) return database;
+  const pending = new Promise<IDBDatabase>((resolve, reject) => {
+    let opening: IDBOpenDBRequest;
+    try {
+      opening = indexedDB.open(DB, 1);
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    let settled = false;
+    const fail = (error: unknown) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (database === pending) database = undefined;
+      reject(error);
+    };
+    // WebKit can leave an IndexedDB open request pending indefinitely.
+    // Never memoize a stuck promise across future user retries.
+    const timer = setTimeout(
+      () => fail(Error("Safariの保存領域が応答していません。ほかのタブを閉じ、もう一度お試しください。保存済みデータは削除していません。")),
+      12_000,
+    );
+    opening.onupgradeneeded = () => {
       for (const name of ["projects", "assets", "jobs", "meta"])
-        request.result.createObjectStore(name);
+        opening.result.createObjectStore(name);
     };
-    request.onsuccess = () => {
-      request.result.onversionchange = () => {
-        request.result.close();
-        database = undefined;
+    opening.onsuccess = () => {
+      if (settled) {
+        // A timed-out request may succeed later. Do not leak its connection.
+        opening.result.close();
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      opening.result.onversionchange = () => {
+        opening.result.close();
+        if (database === pending) database = undefined;
       };
-      resolve(request.result);
+      resolve(opening.result);
     };
-    request.onerror = () => {
-      database = undefined;
-      reject(request.error);
-    };
-    request.onblocked = () =>
-      reject(Error("保存領域の更新を別のタブが使用中です。"));
-  }));
+    opening.onerror = () =>
+      fail(opening.error ?? Error("保存領域を開けませんでした。"));
+    opening.onblocked = () =>
+      fail(Error("保存領域の更新を別のタブが使用中です。"));
+  });
+  database = pending;
+  // Includes synchronous SecurityError failures from indexedDB.open().
+  void pending.catch(() => {
+    if (database === pending) database = undefined;
+  });
+  return pending;
 }
 const request = <T>(r: IDBRequest<T>) =>
   new Promise<T>((resolve, reject) => {
@@ -344,14 +376,15 @@ export async function listLocalProjects(
   mode: LocalProjectData["mode"],
 ): Promise<LocalProjectSummary[]> {
   await projectWrites.catch(() => {});
-  return write(async (tx) => {
-    const projects = (await request(
-      tx.objectStore("projects").getAll(),
-    )) as StoredProject[];
-    const active = (await request(
-      tx.objectStore("meta").get(`active:${mode}`),
-    )) as string | undefined;
-    return projects
+  // Startup discovery is read-only: don't take a write lease or lock every
+  // object store while iPhone Safari enumerates saved project metadata.
+  const db = await open();
+  const tx = db.transaction(["projects", "meta"], "readonly");
+  const [projects, active] = await Promise.all([
+    request(tx.objectStore("projects").getAll()) as Promise<StoredProject[]>,
+    request(tx.objectStore("meta").get(`active:${mode}`)) as Promise<string | undefined>,
+  ]);
+  return projects
       .filter((project) => project.mode === mode)
       .map((project) => ({
         id: project.id,
@@ -363,7 +396,6 @@ export async function listLocalProjects(
         active: project.id === active,
       }))
       .sort((a, b) => Number(b.active) - Number(a.active));
-  });
 }
 export async function countStoredExportEntries(): Promise<number> {
   const db = await open();
