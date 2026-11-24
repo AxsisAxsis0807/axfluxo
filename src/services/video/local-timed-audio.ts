@@ -62,6 +62,7 @@ async function* sampleSpans(
       const position = Math.round(sample.timestamp * rate);
       const stop = Math.min(position + sample.numberOfFrames, limit);
       if (!Number.isSafeInteger(position) || !Number.isSafeInteger(stop) ||
+          !Number.isSafeInteger(sample.numberOfFrames) || sample.numberOfFrames <= 0 ||
           sample.sampleRate !== rate || sample.numberOfChannels !== channels)
         throw Error("素材の音声タイムスタンプまたは形式が不正です。");
       if (stop <= cursor) continue;

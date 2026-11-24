@@ -14,13 +14,14 @@ describe("bounded full-source audio EOF correction", () => {
     expect(() => terminalAudioShortfall("aac", rate, 0, end, end - 2049, end / rate, end / rate)).toThrow();
   });
   it("rejects arbitrary trims, PCM shortages, missing source duration and large losses", () => {
-    for (const args of [
+    const cases: Parameters<typeof terminalAudioShortfall>[] = [
       ["mp3", rate, 0, end, end - 2047, end / rate, (end + rate) / rate],
       ["pcm-s16", rate, 0, end, end - 1, end / rate, end / rate],
       ["mp3", rate, 0, end, end - 2047, end / rate, undefined],
       ["mp3", rate, 0, end, end - 2305, end / rate, end / rate],
       ["mp3", rate, 0, end, end - 2047, (end + rate) / rate, end / rate],
       ["mp3", rate, end - 1, end, end - 1, end / rate, end / rate],
-    ] as const) expect(() => terminalAudioShortfall(...args)).toThrow();
+    ];
+    for (const args of cases) expect(() => terminalAudioShortfall(...args)).toThrow();
   });
 });

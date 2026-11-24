@@ -350,6 +350,9 @@ export async function encodeTimedLocal(
     return {
       blob,
       filename: job.filename.replace(/\.(mp4|webm)$/i, "") + ".mp4",
+      note: tailSeconds > 0
+        ? `音声末尾の時刻差 ${(tailSeconds * 1000).toFixed(2)}ms を無音で補正（指定尺を維持）`
+        : undefined,
     };
   } catch (error) {
     signal.throwIfAborted();

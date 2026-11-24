@@ -1,0 +1,46 @@
+name: All Versions audio EOF audit
+on:
+  pull_request:
+    paths:
+      - 'src/services/video/local-timed-audio.ts'
+      - 'src/services/video/local-timed-encode.ts'
+      - 'src/services/video/local-project.ts'
+      - 'src/services/video/local-encode.ts'
+      - 'src/services/video/export-queue.ts'
+      - 'server/tests/browser/local-audio-eof.spec.ts'
+      - 'server/tests/browser/developer-entry.spec.ts'
+      - 'tests/video/local-timed-audio-eof.test.ts'
+      - '.github/workflows/audio-eof-audit.yml'
+permissions:
+  contents: read
+concurrency:
+  group: audio-eof-audit-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck && npm run lint
+      - run: npx vitest run tests/video/local-timed-audio-eof.test.ts
+      - run: |
+          if ! command -v ffprobe >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+      - run: npx playwright install --with-deps chrome webkit
+      - run: npm run test:video:browser -- local-audio-eof local-timed-encode developer-entry
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: audio-eof-test-results
+          path: test-results/video-browser/
+          if-no-files-found: ignore
