@@ -203,6 +203,7 @@ async function createLocalJobs(
         url: async () => s.url,
         start: s.start,
         end: s.end,
+        sourceDuration: s.duration,
       })),
       draw: (ctx, _media, seconds) => {
         if (artwork) {

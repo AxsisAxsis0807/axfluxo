@@ -1,0 +1,25 @@
+# All Versions source EOF preflight
+
+A real 48 kHz stereo MP3 reported 112.128 s (5,382,144 samples), while
+FFmpeg decoded 5,380,097 samples (112.085354 s), with 1,105 leading and
+942 trailing samples excluded. The uploaded recording is not committed.
+
+The WebCodecs path now scans each selected range before allocating video
+encoders, then checks that the second decode produces the same range.
+Only a small terminal discrepancy on a known MP3/AAC codec at its original
+natural end is compensated with zero PCM. This preserves the requested
+timeline, title/marker clock and output duration. The correction is limited
+to 2,304 MP3 or 2,048 AAC input samples and at most 100 ms, and the packet
+end must be close to the selected end. This is a bounded EOF policy, not
+proof that every missing sample is encoder padding. No interior gap,
+unbounded shortfall, PCM shortfall, or arbitrary trimmed interval is accepted.
+The diagnostic reports the amount of terminal correction. Each source is
+decoded sequentially, with no PCM retained during preflight; encoding still
+uses bounded blocks. The extra decode increases CPU work, not retained
+source PCM memory. The final MP4 timing and continuity checks remain intact.
+
+PR #47's distinct-file 1.5 s gap is not introduced or modified by this fix.
+FNF and legacy MediaRecorder behavior remain unchanged. Existing saved
+projects and queued recipes are re-evaluated by the existing job builder.
+The previous browser smoke-test workaround (manual 0.9 s trim) is removed.
+Real iPhone Safari acceptance is still required.
