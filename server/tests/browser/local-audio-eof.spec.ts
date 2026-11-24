@@ -20,11 +20,20 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
         "-af", `atrim=end_sample=${frames}`, "-ac", "2",
         "-c:a", "libmp3lame", "-b:a", "192k", "-y", join(dir, name + ".mp3"),
       ]);
-      const nominal = Number(execFileSync("ffprobe", [
-        "-v", "error", "-show_entries", "format=duration",
+      // FFmpeg versions disagree on whether format.duration includes gapless
+      // padding. Count physical MPEG-1 Layer III packets (1152 samples each)
+      // instead, and separately verify the decoded PCM sample count.
+      const packets = Number(execFileSync("ffprobe", [
+        "-v", "error", "-select_streams", "a:0", "-count_packets",
+        "-show_entries", "stream=nb_read_packets",
         "-of", "default=nk=1:nw=1", join(dir, name + ".mp3"),
       ], { encoding: "utf8" }));
-      expect(nominal).toBeCloseTo(name === "long" ? 112.128 : 2.304, 6);
+      expect(packets * 1152 / 48000).toBeCloseTo(name === "long" ? 112.128 : 2.304, 6);
+      const pcm = execFileSync("ffmpeg", [
+        "-v", "error", "-i", join(dir, name + ".mp3"),
+        "-f", "s16le", "pipe:1",
+      ], { maxBuffer: 32 * 1024 * 1024 });
+      expect(pcm.byteLength / 4).toBe(frames);
     }
     const bundle = await build({
       stdin: {
