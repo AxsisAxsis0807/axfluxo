@@ -273,7 +273,52 @@ export default function LocalVideoTool({
   useEffect(() => {
     let disposed = false;
     const startupControl = new AbortController();
-    let timer: ReturnType<typeof setInterval> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let heartbeatStarted = false;
+    let heartbeatPending = false;
+    let pageHidden = false;
+    const cancelHeartbeat = () => {
+      clearTimeout(timer);
+      timer = undefined;
+    };
+    const scheduleHeartbeat = () => {
+      if (disposed || pageHidden || !heartbeatStarted || heartbeatPending || timer !== undefined)
+        return;
+      timer = setTimeout(() => {
+        timer = undefined;
+        void heartbeat();
+      }, 5000);
+    };
+    const heartbeat = async () => {
+      if (disposed || pageHidden || !heartbeatStarted || heartbeatPending) return;
+      heartbeatPending = true;
+      try {
+        await renewRecoveryLease();
+      } catch (error) {
+        heartbeatStarted = false;
+        if (!disposed) {
+          localExportQueue.pause(true);
+          setReady(false);
+          setSaveStatus(recoveryMessage(error));
+        }
+      } finally {
+        heartbeatPending = false;
+        scheduleHeartbeat();
+      }
+    };
+    // Do not enqueue more heartbeats during document teardown. A BFCache
+    // restore must recheck its lease; never release ownership on pagehide.
+    const onPageHide = () => {
+      pageHidden = true;
+      cancelHeartbeat();
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted || disposed) return;
+      pageHidden = false;
+      if (heartbeatStarted && !heartbeatPending) void heartbeat();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
     // Safari sometimes never settles an IndexedDB transaction. Show a safe
     // recovery action rather than leaving an unresponsive startup screen.
     const watchdog = setTimeout(() => {
@@ -364,13 +409,8 @@ export default function LocalVideoTool({
             ? "編集内容と書き出しを復元しました。プレビューは個別に読み込めます。"
             : "新しい作業を開始しました。古い保存済みデータは削除していません。",
         );
-        timer = setInterval(() => {
-          void renewRecoveryLease().catch((error) => {
-            localExportQueue.pause(true);
-            setReady(false);
-            setSaveStatus(recoveryMessage(error));
-          });
-        }, 5000);
+        heartbeatStarted = true;
+        scheduleHeartbeat();
       } catch (error) {
         if (!disposed) {
           setStartupFailed(true);
@@ -385,7 +425,9 @@ export default function LocalVideoTool({
       disposed = true;
       startupControl.abort();
       clearTimeout(watchdog);
-      clearInterval(timer);
+      cancelHeartbeat();
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
     };
   }, [mode, startup, startupAttempt]);
   useEffect(() => {

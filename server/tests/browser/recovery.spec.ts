@@ -404,3 +404,57 @@ test("new session skips old media bytes and keeps archived work restorable", asy
   await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(page.locator('video[id^="local-media-"]')).toHaveAttribute("src", /blob:/);
 });
+
+test("reload during lease renewal keeps archived work restorable", async ({ page }) => {
+  test.setTimeout(90_000);
+  // Start a real navigation at the lease put boundary, without waiting for
+  // transaction completion or changing the original recovery regression.
+  await page.addInitScript(() => {
+    const state = window as typeof window & {
+      __reloadAtLease?: boolean;
+      __assetReads?: number;
+    };
+    state.__assetReads = 0;
+    const get = IDBObjectStore.prototype.get;
+    IDBObjectStore.prototype.get = function (key) {
+      if (this.name === "assets") state.__assetReads!++;
+      return get.call(this, key);
+    };
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, key) {
+      const result = put.call(this, value, key);
+      if (state.__reloadAtLease && this.name === "meta" && key === "lease" &&
+          this.transaction.objectStoreNames.length === 1) {
+        state.__reloadAtLease = false;
+        sessionStorage.setItem("lease-reload-observed", "yes");
+        location.reload();
+      }
+      return result;
+    };
+  });
+  await open(page);
+  await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
+  await page.getByLabel("譜面名", { exact: true }).fill("ARCHIVED");
+  await durable(page);
+  await page.reload();
+  await page.getByRole("button", { name: /新しく作成（古い動画を読み込まない）/ }).click();
+  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({ timeout: 35000 });
+  await expect(page.getByRole("group", { name: /^素材 1/ })).toHaveCount(0);
+  await durable(page);
+  const navigation = page.waitForEvent("framenavigated", {
+    predicate: (frame) => frame === page.mainFrame(),
+    timeout: 15000,
+  });
+  await page.evaluate(() => {
+    (window as typeof window & { __reloadAtLease?: boolean }).__reloadAtLease = true;
+  });
+  await navigation;
+  const archived = page.getByRole("button", { name: /保存済みの作業を再開：ARCHIVED/ });
+  await expect(archived).toBeVisible({ timeout: 15000 });
+  expect(await page.evaluate(() => sessionStorage.getItem("lease-reload-observed"))).toBe("yes");
+  expect(await page.evaluate(() => (window as typeof window & { __assetReads?: number }).__assetReads)).toBe(0);
+  await archived.click();
+  await expect(page.getByLabel("譜面名", { exact: true })).toHaveValue("ARCHIVED", { timeout: 35000 });
+  await expect(page.getByRole("button", { name: "素材 1 のプレビューを読み込む" })).toBeVisible();
+  await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
+});

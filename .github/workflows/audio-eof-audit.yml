@@ -42,6 +42,8 @@ jobs:
           fi
       - run: npx playwright install --with-deps chrome webkit
       - run: npm run test:video:browser -- local-audio-eof local-timed-encode developer-entry recovery track-boundaries trim-handles
+      - name: Repeat WebKit lease/reload regression 10 times
+        run: npm run test:video:browser -- recovery --project=webkit --grep "reload during lease renewal keeps archived work restorable" --repeat-each=10 --retries=0
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

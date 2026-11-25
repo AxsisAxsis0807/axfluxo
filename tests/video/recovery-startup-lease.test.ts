@@ -1,4 +1,4 @@
-import { IDBFactory } from "fake-indexeddb";
+import { IDBDatabase, IDBFactory } from "fake-indexeddb";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 beforeEach(() => {
   vi.resetModules();
@@ -42,4 +42,35 @@ it("does not let a previously fenced writer retake ownership", async () => {
   const waited = vi.fn();
   await expect(s.acquireStartupRecoveryLease(new AbortController().signal,waited)).rejects.toBeInstanceOf(s.RecoveryLeaseError);
   expect(waited).not.toHaveBeenCalled();
+});
+
+it("coalesces concurrent lease renewals into one meta-only transaction", async () => {
+  const s = await import("../../src/services/video/recovery-store");
+  const spy = vi.spyOn(IDBDatabase.prototype, "transaction");
+  try {
+    const first = s.renewRecoveryLease();
+    const pending = Array.from({ length: 10 }, () => s.renewRecoveryLease());
+    expect(pending.every((promise) => promise === first)).toBe(true);
+    await Promise.all([first, ...pending]);
+    expect(spy.mock.calls).toEqual([[["meta"], "readwrite"]]);
+    await s.renewRecoveryLease();
+    expect(spy.mock.calls).toEqual([
+      [["meta"], "readwrite"],
+      [["meta"], "readwrite"],
+    ]);
+  } finally {
+    spy.mockRestore();
+  }
+});
+
+it("does not leave a rejected renewal cached or bypass the ownership fence", async () => {
+  const s = await import("../../src/services/video/recovery-store");
+  await setLease(Date.now() + 60_000);
+  const first = s.renewRecoveryLease();
+  expect(s.renewRecoveryLease()).toBe(first);
+  await expect(first).rejects.toBeInstanceOf(s.RecoveryLeaseError);
+  await setLease(Date.now() - 1);
+  await expect(s.renewRecoveryLease()).resolves.toBeUndefined();
+  await setLease(Date.now() - 1);
+  await expect(s.renewRecoveryLease()).rejects.toBeInstanceOf(s.RecoveryLeaseError);
 });
