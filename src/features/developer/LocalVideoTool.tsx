@@ -25,6 +25,7 @@ import {
   releaseProjectUrls,
   recoveryMessage,
   RecoveryLeaseError,
+  acquireStartupRecoveryLease,
 } from "../../services/video/recovery-store";
 import {
   initializeExportRecovery,
@@ -271,12 +272,14 @@ export default function LocalVideoTool({
   }
   useEffect(() => {
     let disposed = false;
+    const startupControl = new AbortController();
     let timer: ReturnType<typeof setInterval> | undefined;
     // Safari sometimes never settles an IndexedDB transaction. Show a safe
     // recovery action rather than leaving an unresponsive startup screen.
     const watchdog = setTimeout(() => {
       if (disposed) return;
       disposed = true;
+      startupControl.abort();
       setStartupFailed(true);
       setSaveStatus(
         startup
@@ -315,6 +318,12 @@ export default function LocalVideoTool({
             }
           }
         }
+        // Discovery is read-only. A previous document may still own the
+        // write lease after reload/navigation, even though discovery succeeded.
+        await acquireStartupRecoveryLease(startupControl.signal, () => {
+          if (!disposed) setSaveStatus("前のタブの保存処理終了を確認中… 最大約25秒。保存データは削除していません。");
+        });
+        if (disposed) return;
         if (startup.kind === "resume") {
           if (startup.id) saved = await loadLocalProjectById(mode, startup.id);
           await initializeExportRecovery();
@@ -374,6 +383,7 @@ export default function LocalVideoTool({
     })();
     return () => {
       disposed = true;
+      startupControl.abort();
       clearTimeout(watchdog);
       clearInterval(timer);
     };
@@ -459,7 +469,7 @@ export default function LocalVideoTool({
         <p role="status">{saveStatus}</p>
         {startupFailed && !startup && (
           <section aria-label="保存領域の再試行">
-            <p>この操作で保存済みのプロジェクトや完成動画は削除されません。SafariのほかのAxFluxoタブを閉じてからお試しください。</p>
+            <p>保存データは削除していません。この操作で保存済みのプロジェクトや完成動画は削除されません。SafariのほかのAxFluxoタブを閉じてからお試しください。</p>
             <button onClick={() => {
               setStartupFailed(false);
               setSavedOverview(undefined);
@@ -507,6 +517,7 @@ export default function LocalVideoTool({
             onClick={() => {
               setStartupFailed(false);
               setStartup(undefined);
+              setSavedOverview(undefined);
               setSaveStatus("保存データを確認中…");
             }}
           >

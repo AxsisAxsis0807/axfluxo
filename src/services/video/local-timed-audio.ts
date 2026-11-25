@@ -55,12 +55,19 @@ async function* sampleSpans(
   signal: AbortSignal,
 ) {
   let cursor = first;
-  const sink = new AudioSampleSink(track);
-  for await (const sample of sink.samples(first / rate, limit / rate)) {
+  // Bound long MP3 decoder sessions. Mediabunny seeks with codec pre-roll,
+  // and every intermediate window must cover its exact sample range.
+  const codec = await track.getCodec();
+  const windowFrames = codec === "mp3" ? rate * 8 : limit - first;
+  for (let windowStart = first; windowStart < limit; windowStart += windowFrames) {
+    const windowEnd = Math.min(limit, windowStart + windowFrames);
+    const sink = new AudioSampleSink(track);
+    let decodedPackets = 0;
+    for await (const sample of sink.samples(windowStart / rate, windowEnd / rate)) {
     try {
       signal.throwIfAborted();
       const position = Math.round(sample.timestamp * rate);
-      const stop = Math.min(position + sample.numberOfFrames, limit);
+      const stop = Math.min(position + sample.numberOfFrames, windowEnd);
       if (!Number.isSafeInteger(position) || !Number.isSafeInteger(stop) ||
           !Number.isSafeInteger(sample.numberOfFrames) || sample.numberOfFrames <= 0 ||
           sample.sampleRate !== rate || sample.numberOfChannels !== channels)
@@ -70,10 +77,17 @@ async function* sampleSpans(
         throw Error("素材の音声タイムスタンプに欠落があります。");
       yield { sample, offset: cursor - position, count: stop - cursor, end: stop };
       cursor = stop;
-      if (cursor === limit) break;
     } finally {
       sample.close();
     }
+    // Yield to native decoder cleanup and browser event processing regularly.
+    if (++decodedPackets % 32 === 0) await new Promise<void>(resolve => setTimeout(resolve, 0));
+    }
+    signal.throwIfAborted();
+    if (windowEnd < limit && cursor !== windowEnd)
+      throw Error("素材の音声タイムスタンプに欠落があります。");
+    // Drain the iterator naturally before creating the next decoder.
+    if (windowEnd < limit) await new Promise<void>(resolve => setTimeout(resolve, 0));
   }
   signal.throwIfAborted();
 }

@@ -3,6 +3,9 @@ on:
   pull_request:
     paths:
       - 'src/services/video/local-timed-audio.ts'
+      - 'src/features/developer/LocalVideoTool.tsx'
+      - 'src/services/video/recovery-store.ts'
+      - 'server/tests/browser/recovery.spec.ts'
       - 'src/services/video/local-timed-encode.ts'
       - 'src/services/video/local-project.ts'
       - 'src/services/video/local-encode.ts'
@@ -19,7 +22,7 @@ concurrency:
 jobs:
   targeted:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,7 +40,7 @@ jobs:
             sudo apt-get install -y ffmpeg
           fi
       - run: npx playwright install --with-deps chrome webkit
-      - run: npm run test:video:browser -- local-audio-eof local-timed-encode developer-entry
+      - run: npm run test:video:browser -- local-audio-eof local-timed-encode developer-entry recovery track-boundaries trim-handles
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

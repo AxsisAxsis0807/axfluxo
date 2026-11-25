@@ -91,7 +91,7 @@ export async function encodeTimedLocal(
   // Files/URLs are opened one at a time; no decoded audio is retained.
   const sourceFor = async (piece: (typeof pieces)[number]) =>
     piece.file
-      ? new BlobSource(piece.file, { maxCacheSize: 2 * 1024 * 1024 })
+      ? new BlobSource(piece.file, { maxCacheSize: 2 * 1024 * 1024, useStreamReader: false })
       : new UrlSource(await piece.url(), { maxCacheSize: 2 * 1024 * 1024 });
   const plans: AudioIntervalPlan[] = [];
   let tailSeconds = 0;

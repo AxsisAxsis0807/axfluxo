@@ -49,7 +49,7 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
           window.runLong = async () => {
             const source = await file("long");
             const signal = AbortSignal.timeout(60000);
-            const make = () => new Input({source:new BlobSource(source), formats:ALL_FORMATS});
+            const make = () => new Input({source:new BlobSource(source, {maxCacheSize: 2*1024*1024,useStreamReader:false}), formats:ALL_FORMATS});
             const inspect = make();
             let plan;
             try {
@@ -57,6 +57,8 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
               if (!track || !(await track.canDecode())) return null;
               plan = await inspectTimedAudio(track, 0, 112.128, 112.128, signal);
             } finally { inspect.dispose(); }
+            console.info('long MP3 preflight complete', plan.decodedEnd);
+            await new Promise(resolve => setTimeout(resolve, 0));
             const input = make();
             let count = 0, last = 0;
             try {
@@ -65,6 +67,9 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
                 if (Math.round(sample.timestamp * 48000) !== count) throw Error("non-contiguous audio");
                 count += sample.numberOfFrames;
                 last = sample.timestamp + sample.numberOfFrames / 48000;
+                const pcm = new Float32Array(sample.numberOfFrames);
+                sample.copyTo(pcm, {planeIndex:0,format:'f32-planar'});
+                if (!pcm.every(Number.isFinite)) throw Error('invalid PCM');
                 sample.close();
               }
             } finally { input.dispose(); }

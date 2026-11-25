@@ -143,6 +143,36 @@ async function write<T>(task: (tx: IDBTransaction) => Promise<T>): Promise<T> {
   }
 }
 export const renewRecoveryLease = () => write(async () => {});
+/** Wait only for a previous document's lease to expire; never steal an active
+ * lease or reset a fenced writer. Abort promptly when startup is superseded. */
+export async function acquireStartupRecoveryLease(signal: AbortSignal, onWait: () => void) {
+  const deadline = Date.now() + LEASE_MS + 5000;
+  for (;;) {
+    signal.throwIfAborted();
+    try {
+      await renewRecoveryLease();
+      signal.throwIfAborted();
+      return;
+    } catch (error) {
+      signal.throwIfAborted();
+      if (!(error instanceof RecoveryLeaseError) || acquired || Date.now() >= deadline) throw error;
+      onWait();
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          clearTimeout(timer);
+          signal.removeEventListener("abort", abort);
+          reject(signal.reason);
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener("abort", abort);
+          resolve();
+        }, Math.min(500, Math.max(1, deadline - Date.now())));
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
+      });
+    }
+  }
+}
 const assetKey = (project: Pick<LocalProjectData, "id" | "mode">, id: string) =>
   `${project.mode}:${project.id}:${id}`;
 function stored(project: LocalProjectData): StoredProject {

@@ -388,7 +388,7 @@ test("new session skips old media bytes and keeps archived work restorable", asy
   });
   expect(loaded).toBe(0);
   await page.getByRole("button", { name: /新しく作成（古い動画を読み込まない）/ }).click();
-  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled();
+  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({ timeout: 35000 });
   expect(await page.evaluate(() => (window as typeof window & {
     __loadedAssets?: number;
   }).__loadedAssets)).toBe(0);
