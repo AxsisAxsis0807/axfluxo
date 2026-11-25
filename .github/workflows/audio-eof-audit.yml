@@ -11,6 +11,7 @@ on:
       - 'src/services/video/local-encode.ts'
       - 'src/services/video/export-queue.ts'
       - 'server/tests/browser/local-audio-eof.spec.ts'
+      - 'server/tests/browser/local-canvas-resilience.spec.ts'
       - 'server/tests/browser/developer-entry.spec.ts'
       - 'tests/video/local-timed-audio-eof.test.ts'
       - 'tests/video/recovery-startup-lease.test.ts'
@@ -23,7 +24,7 @@ concurrency:
 jobs:
   targeted:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,6 +43,10 @@ jobs:
           fi
       - run: npx playwright install --with-deps chrome webkit
       - run: npm run test:video:browser -- local-audio-eof local-timed-encode developer-entry recovery track-boundaries trim-handles
+      - name: Full four-piece MP3 export and injected capture failures
+        run: npm run test:video:browser -- local-canvas-resilience --retries=0
+      - name: Repeat WebKit canvas capture recovery 10 times
+        run: npm run test:video:browser -- local-canvas-resilience --project=webkit --grep 'canvas capture recovery' --repeat-each=10 --retries=0
       - name: Repeat WebKit lease/reload regression 10 times
         run: npm run test:video:browser -- recovery --project=webkit --grep "reload during lease renewal keeps archived work restorable" --repeat-each=10 --retries=0
       - uses: actions/upload-artifact@v4
