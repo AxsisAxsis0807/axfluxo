@@ -52,9 +52,18 @@ it("coalesces concurrent lease renewals into one meta-only transaction", async (
     const pending = Array.from({ length: 10 }, () => s.renewRecoveryLease());
     expect(pending.every((promise) => promise === first)).toBe(true);
     await Promise.all([first, ...pending]);
-    expect(spy.mock.calls).toEqual([[["meta"], "readwrite"]]);
+    // fake-indexeddb exposes the initial schema upgrade through the same spy.
+    // Exclude only versionchange; any unexpected readonly or readwrite call
+    // must still fail the exact transaction-count and scope assertions.
+    const leaseTransactions = () =>
+      spy.mock.calls.filter(([, mode]) => mode !== "versionchange");
+    const upgrades = () =>
+      spy.mock.calls.filter(([, mode]) => mode === "versionchange");
+    expect(upgrades()).toHaveLength(1);
+    expect(leaseTransactions()).toEqual([[["meta"], "readwrite"]]);
     await s.renewRecoveryLease();
-    expect(spy.mock.calls).toEqual([
+    expect(upgrades()).toHaveLength(1);
+    expect(leaseTransactions()).toEqual([
       [["meta"], "readwrite"],
       [["meta"], "readwrite"],
     ]);
