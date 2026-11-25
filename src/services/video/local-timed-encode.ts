@@ -4,7 +4,8 @@ import {
   AudioSample,
   AudioSampleSource,
   BlobSource,
-  CanvasSource,
+  VideoSample,
+  VideoSampleSource,
   EncodedAudioPacketSource,
   Input,
   Mp4OutputFormat,
@@ -124,11 +125,30 @@ export async function encodeTimedLocal(
     status(`音声末尾の時刻差を補正：${(tailSeconds * 1000).toFixed(2)}ms（指定尺は維持）`);
   }
 
-  const canvas = document.createElement("canvas");
-  canvas.width = job.width;
-  canvas.height = job.height;
-  const ctx = canvas.getContext("2d", { alpha: false });
-  if (!ctx) throw Error("Canvasを使用できません。");
+  status("音声エンコーダーの時刻を確認中…");
+  let nextAacSample = codecs[1] === "aac" ? await aacPacketStartSample() : 0;
+  signal.throwIfAborted();
+  const createCanvas = (readback: boolean) => {
+    const element = document.createElement("canvas");
+    element.width = job.width;
+    element.height = job.height;
+    const context = element.getContext("2d", {
+      alpha: false,
+      willReadFrequently: readback,
+    });
+    if (!context) {
+      element.width = element.height = 0;
+      throw Error("Canvasを使用できません。");
+    }
+    return { element, context };
+  };
+  let { element: canvas, context: ctx } = createCanvas(false);
+  let pixelReadback = false;
+  let pieceIndex = 0;
+  let stage = "setup";
+  let frameAddMs = 0;
+  let frameAddMaxMs = 0;
+  const started = performance.now();
   const media = document.createElement("video");
   const chunks: Blob[] = [];
   let bytes = 0;
@@ -175,7 +195,7 @@ export async function encodeTimedLocal(
   const frameCount = Math.ceil(totalSamples / samplesPerFrame);
   const encodedFrames = new Uint8Array(frameCount);
   let videoError = false;
-  const video = new CanvasSource(canvas, {
+  const video = new VideoSampleSource({
     codec: codecs[0],
     bitrate: videoBitrate,
     latencyMode: "quality",
@@ -200,9 +220,6 @@ export async function encodeTimedLocal(
   // The audio-only target lets Mediabunny manage native priming and backpressure.
   let audioPackets = Promise.resolve();
   let audioError: unknown;
-  status("音声エンコーダーの時刻を確認中…");
-  let nextAacSample = codecs[1] === "aac" ? await aacPacketStartSample() : 0;
-  signal.throwIfAborted();
   const audio = new AudioSampleSource({
     codec: codecs[1],
     bitrate: localAudioBitrate,
@@ -242,6 +259,7 @@ export async function encodeTimedLocal(
 
   let frame = 0;
   let audioCursor = 0;
+  let audioWrittenEnd = 0;
   let activeInput: Input | undefined;
   let cancellation: Promise<void> | undefined;
   const abort = () => {
@@ -253,29 +271,78 @@ export async function encodeTimedLocal(
   };
   signal.addEventListener("abort", abort, { once: true });
   const writeAudio = async (sample: AudioSample) => {
+    const end =
+      Math.round(sample.timestamp * localAudioRate) + sample.numberOfFrames;
     try {
+      stage = "audio-add";
       await audio.add(sample);
-      await audioPackets;
-      if (audioError) throw audioError;
-      const end =
-        Math.round(sample.timestamp * localAudioRate) + sample.numberOfFrames;
-      while (frame * samplesPerFrame < end) {
-        signal.throwIfAborted();
-        const seconds = frame / fps;
-        const duration =
-          Math.min(samplesPerFrame, totalSamples - frame * samplesPerFrame) /
-          localAudioRate;
-        job.draw(ctx, media, seconds);
-        await video.add(seconds, duration);
-        frame++;
-        const pause = pauseIfDue(duration);
-        if (pause) await pause;
-      }
-      progress(end / totalSamples);
-      status(`端末内で処理中：${Math.floor(end / localAudioRate)}秒`);
     } finally {
       sample.close();
     }
+    await audioPackets;
+    if (audioError) throw audioError;
+    audioWrittenEnd = end;
+    while (frame * samplesPerFrame < end) {
+      signal.throwIfAborted();
+      const seconds = frame / fps;
+      const duration =
+        Math.min(samplesPerFrame, totalSamples - frame * samplesPerFrame) /
+        localAudioRate;
+      stage = "draw";
+      if (ctx.isContextLost?.()) throw Error("Canvas context lost");
+      job.draw(ctx, media, seconds);
+      stage = "capture";
+      let captured: VideoSample;
+      if (!pixelReadback) {
+        try {
+          captured = new VideoSample(canvas, { timestamp: seconds, duration });
+        } catch (error) {
+          // Recover only before any sample reaches the encoder. Recreate the
+          // backing store and draw the exact same timeline position.
+          if (!(error instanceof Error) || error.name !== "InvalidStateError" ||
+              !/Canvas has no frame/i.test(error.message)) throw error;
+          signal.throwIfAborted();
+          const previous = canvas;
+          const replacement = createCanvas(true);
+          canvas = replacement.element;
+          ctx = replacement.context;
+          previous.width = previous.height = 0;
+          pixelReadback = true;
+          console.info("[AxFluxo] canvas capture switched to pixel readback", {
+            piece: pieceIndex + 1, frame, fps, bytes, chunks: chunks.length,
+          });
+          if (ctx.isContextLost?.()) throw Error("Canvas context lost");
+          job.draw(ctx, media, seconds);
+          captured = new VideoSample(
+            ctx.getImageData(0, 0, job.width, job.height).data,
+            { format: "RGBX", codedWidth: job.width, codedHeight: job.height,
+              timestamp: seconds, duration },
+          );
+        }
+      } else {
+        captured = new VideoSample(
+          ctx.getImageData(0, 0, job.width, job.height).data,
+          { format: "RGBX", codedWidth: job.width, codedHeight: job.height,
+            timestamp: seconds, duration },
+        );
+      }
+      try {
+        signal.throwIfAborted();
+        if (ctx.isContextLost?.()) throw Error("Canvas context lost");
+        stage = "video-add";
+        const startAdd = performance.now();
+        await video.add(captured);
+        frameAddMs = performance.now() - startAdd;
+        frameAddMaxMs = Math.max(frameAddMaxMs, frameAddMs);
+      } finally {
+        captured.close();
+      }
+      frame++;
+      const pause = pauseIfDue(duration);
+      if (pause) await pause;
+    }
+    progress(end / totalSamples);
+    status(`端末内で処理中：${Math.floor(end / localAudioRate)}秒`);
   };
 
   try {
@@ -284,6 +351,8 @@ export async function encodeTimedLocal(
     await output.start();
     await audioEncoder.start();
     for (const [index, piece] of pieces.entries()) {
+      pieceIndex = index;
+      stage = "piece";
       signal.throwIfAborted();
       // Explicit inter-file gaps only. Markers never split audio pieces.
       while (audioCursor < piece.startSample) {
@@ -324,6 +393,7 @@ export async function encodeTimedLocal(
       audioCursor = piece.endSample;
     }
     signal.throwIfAborted();
+    stage = "finalize";
     video.close();
     if (codecs[1] === "aac") {
       // Some native AAC encoders retain trailing input on flush. Feed a
@@ -352,6 +422,9 @@ export async function encodeTimedLocal(
     if (videoError || encodedFrames.includes(0))
       throw Error("完成動画のフレーム時刻に欠落または重複があります。");
     const blob = new Blob(chunks, { type: "video/mp4" });
+    chunks.length = 0;
+    canvas.width = canvas.height = 0;
+    stage = "validate";
     status("完成MP4の音声と映像を検査中…");
     await validateLocalOutput(blob, signal, { duration: total });
     return {
@@ -363,7 +436,19 @@ export async function encodeTimedLocal(
     };
   } catch (error) {
     signal.throwIfAborted();
-    throw error;
+    const details = {
+      stage, piece: pieceIndex + 1, pieces: pieces.length,
+      frame, fps, seconds: frame / fps, audioCursor, audioWrittenEnd, totalSamples,
+      width: canvas.width, height: canvas.height, bytes,
+      chunks: chunks.length, pixelReadback,
+      decoder: plans[pieceIndex]?.decoder ?? "streaming",
+      frameAddMs: Math.round(frameAddMs), frameAddMaxMs: Math.round(frameAddMaxMs),
+      elapsedMs: Math.round(performance.now() - started),
+      visibility: document.visibilityState,
+    };
+    console.error("[AxFluxo] timed export failed", details, error);
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`${reason} [${stage}; piece ${pieceIndex + 1}/${pieces.length}; frame ${frame}; ${fps}fps; ${bytes} bytes; ${pixelReadback ? "pixels" : "canvas"}]`, { cause: error });
   } finally {
     signal.removeEventListener("abort", abort);
     if (output.state !== "finalized") {
