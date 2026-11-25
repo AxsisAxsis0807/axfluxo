@@ -42,10 +42,9 @@ Do not place private files or API credentials in the hosting project.
 
 ## Linux WebKit boundary
 
-The iPhone preview acceptance fixtures use MP3 and WAV. Linux WebKit can
-report MP3 encoder padding, or the full container duration of AAC-in-video,
-even if the audio decoder does not deliver every sample in that interval. All Versions stops before save
-in that case and explains that the selected interval could not be decoded.
-The WebKit editor smoke test explicitly sets a decodable end time for
-both MP3 and WAV. If an iPhone reports a similar error at the default end,
-check the source and set the end to the actual audio interval before retrying.
+Linux WebKit can report MP3 padding in media duration. The subsequent
+EOF-preflight fix is documented in [local-audio-eof.md](local-audio-eof.md).
+The current tests keep the original imported end rather than manually
+shortening it. A bounded natural-EOF discrepancy is reported, while a
+missing interior section or larger discrepancy still stops the export.
+Physical iPhone testing remains required.

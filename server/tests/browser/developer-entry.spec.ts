@@ -195,16 +195,8 @@ for (const scenario of [
       await page
         .getByLabel("version名（1行に1つ）")
         .fill(files.map((_, i) => `local version ${i + 1}`).join("\n"));
-      if (test.info().project.name === "webkit") {
-        // Linux WebKit reports MP3 padding in its full media duration.
-        // Exercise an explicit decodable range in both selected audio files.
-        const ends = page.getByRole("spinbutton", {
-          name: "終了秒",
-          exact: true,
-        });
-        await expect(ends).toHaveCount(files.length);
-        for (const end of await ends.all()) await end.fill("0.9");
-      }
+      // Keep the imported default end on every browser. Full MP3/WAV
+      // decoding must succeed without the old manual 0.9-second trim.
     } else {
       await page.getByLabel("譜面名", { exact: true }).fill("local chart");
       await page

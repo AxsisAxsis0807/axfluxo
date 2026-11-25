@@ -108,12 +108,12 @@ export function recoveryMessage(error: unknown) {
 }
 /** One writer for both tools and the shared queue. Every mutation rechecks the lease
  * in the same transaction; a frozen/expired tab cannot overwrite a new owner. */
-async function write<T>(task: (tx: IDBTransaction) => Promise<T>): Promise<T> {
+async function write<T>(
+  task: (tx: IDBTransaction) => Promise<T>,
+  stores: string[] = ["projects", "assets", "jobs", "meta"],
+): Promise<T> {
   const db = await open();
-  const tx = db.transaction(
-    ["projects", "assets", "jobs", "meta"],
-    "readwrite",
-  );
+  const tx = db.transaction(stores, "readwrite");
   const completion = done(tx);
   try {
     const meta = tx.objectStore("meta");
@@ -142,7 +142,49 @@ async function write<T>(task: (tx: IDBTransaction) => Promise<T>): Promise<T> {
     throw error;
   }
 }
-export const renewRecoveryLease = () => write(async () => {});
+// Heartbeats touch only the lease record. All data mutations still include meta
+// and check ownership atomically in their original readwrite transaction.
+let leaseWrite: Promise<void> | undefined;
+export function renewRecoveryLease(): Promise<void> {
+  if (leaseWrite) return leaseWrite;
+  const pending = write(async () => {}, ["meta"]);
+  leaseWrite = pending;
+  const clear = () => {
+    if (leaseWrite === pending) leaseWrite = undefined;
+  };
+  void pending.then(clear, clear);
+  return pending;
+}
+/** Wait only for a previous document's lease to expire; never steal an active
+ * lease or reset a fenced writer. Abort promptly when startup is superseded. */
+export async function acquireStartupRecoveryLease(signal: AbortSignal, onWait: () => void) {
+  const deadline = Date.now() + LEASE_MS + 5000;
+  for (;;) {
+    signal.throwIfAborted();
+    try {
+      await renewRecoveryLease();
+      signal.throwIfAborted();
+      return;
+    } catch (error) {
+      signal.throwIfAborted();
+      if (!(error instanceof RecoveryLeaseError) || acquired || Date.now() >= deadline) throw error;
+      onWait();
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          clearTimeout(timer);
+          signal.removeEventListener("abort", abort);
+          reject(signal.reason);
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener("abort", abort);
+          resolve();
+        }, Math.min(500, Math.max(1, deadline - Date.now())));
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) abort();
+      });
+    }
+  }
+}
 const assetKey = (project: Pick<LocalProjectData, "id" | "mode">, id: string) =>
   `${project.mode}:${project.id}:${id}`;
 function stored(project: LocalProjectData): StoredProject {
@@ -372,18 +414,41 @@ export type LocalProjectSummary = {
   label: string;
   active: boolean;
 };
+// Finish the readonly transaction, not just its individual requests, before
+// starting the next discovery transaction or admitting a writer.
+async function readDiscovery<T>(
+  stores: string[],
+  task: (tx: IDBTransaction) => Promise<T>,
+): Promise<T> {
+  const db = await open();
+  const tx = db.transaction(stores, "readonly");
+  const completion = done(tx);
+  try {
+    const value = await task(tx);
+    await completion;
+    return value;
+  } catch (error) {
+    try {
+      tx.abort();
+    } catch {
+      /* transaction has already settled */
+    }
+    await completion.catch(() => {});
+    throw error;
+  }
+}
 export async function listLocalProjects(
   mode: LocalProjectData["mode"],
 ): Promise<LocalProjectSummary[]> {
   await projectWrites.catch(() => {});
   // Startup discovery is read-only: don't take a write lease or lock every
   // object store while iPhone Safari enumerates saved project metadata.
-  const db = await open();
-  const tx = db.transaction(["projects", "meta"], "readonly");
-  const [projects, active] = await Promise.all([
-    request(tx.objectStore("projects").getAll()) as Promise<StoredProject[]>,
-    request(tx.objectStore("meta").get(`active:${mode}`)) as Promise<string | undefined>,
-  ]);
+  const [projects, active] = await readDiscovery(["projects", "meta"], (tx) =>
+    Promise.all([
+      request(tx.objectStore("projects").getAll()) as Promise<StoredProject[]>,
+      request(tx.objectStore("meta").get(`active:${mode}`)) as Promise<string | undefined>,
+    ]),
+  );
   return projects
       .filter((project) => project.mode === mode)
       .map((project) => ({
@@ -398,8 +463,9 @@ export async function listLocalProjects(
       .sort((a, b) => Number(b.active) - Number(a.active));
 }
 export async function countStoredExportEntries(): Promise<number> {
-  const db = await open();
-  return request(db.transaction("jobs").objectStore("jobs").count());
+  return readDiscovery(["jobs"], (tx) =>
+    request(tx.objectStore("jobs").count()),
+  );
 }
 export async function loadLocalProjectById(
   mode: LocalProjectData["mode"],

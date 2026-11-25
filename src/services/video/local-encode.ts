@@ -18,6 +18,8 @@ export type LocalEncodeJob = {
     url: () => Promise<string>;
     start: number;
     end: number;
+    /** Original media duration, not a user trim or an inter-file gap. */
+    sourceDuration?: number;
   }[];
   draw: (
     ctx: CanvasRenderingContext2D,

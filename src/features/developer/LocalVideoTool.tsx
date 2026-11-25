@@ -25,6 +25,7 @@ import {
   releaseProjectUrls,
   recoveryMessage,
   RecoveryLeaseError,
+  acquireStartupRecoveryLease,
 } from "../../services/video/recovery-store";
 import {
   initializeExportRecovery,
@@ -271,12 +272,59 @@ export default function LocalVideoTool({
   }
   useEffect(() => {
     let disposed = false;
-    let timer: ReturnType<typeof setInterval> | undefined;
+    const startupControl = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let heartbeatStarted = false;
+    let heartbeatPending = false;
+    let pageHidden = false;
+    const cancelHeartbeat = () => {
+      clearTimeout(timer);
+      timer = undefined;
+    };
+    const scheduleHeartbeat = () => {
+      if (disposed || pageHidden || !heartbeatStarted || heartbeatPending || timer !== undefined)
+        return;
+      timer = setTimeout(() => {
+        timer = undefined;
+        void heartbeat();
+      }, 5000);
+    };
+    const heartbeat = async () => {
+      if (disposed || pageHidden || !heartbeatStarted || heartbeatPending) return;
+      heartbeatPending = true;
+      try {
+        await renewRecoveryLease();
+      } catch (error) {
+        heartbeatStarted = false;
+        if (!disposed) {
+          localExportQueue.pause(true);
+          setReady(false);
+          setSaveStatus(recoveryMessage(error));
+        }
+      } finally {
+        heartbeatPending = false;
+        scheduleHeartbeat();
+      }
+    };
+    // Do not enqueue more heartbeats during document teardown. A BFCache
+    // restore must recheck its lease; never release ownership on pagehide.
+    const onPageHide = () => {
+      pageHidden = true;
+      cancelHeartbeat();
+    };
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted || disposed) return;
+      pageHidden = false;
+      if (heartbeatStarted && !heartbeatPending) void heartbeat();
+    };
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
     // Safari sometimes never settles an IndexedDB transaction. Show a safe
     // recovery action rather than leaving an unresponsive startup screen.
     const watchdog = setTimeout(() => {
       if (disposed) return;
       disposed = true;
+      startupControl.abort();
       setStartupFailed(true);
       setSaveStatus(
         startup
@@ -315,6 +363,12 @@ export default function LocalVideoTool({
             }
           }
         }
+        // Discovery is read-only. A previous document may still own the
+        // write lease after reload/navigation, even though discovery succeeded.
+        await acquireStartupRecoveryLease(startupControl.signal, () => {
+          if (!disposed) setSaveStatus("前のタブの保存処理終了を確認中… 最大約25秒。保存データは削除していません。");
+        });
+        if (disposed) return;
         if (startup.kind === "resume") {
           if (startup.id) saved = await loadLocalProjectById(mode, startup.id);
           await initializeExportRecovery();
@@ -355,13 +409,8 @@ export default function LocalVideoTool({
             ? "編集内容と書き出しを復元しました。プレビューは個別に読み込めます。"
             : "新しい作業を開始しました。古い保存済みデータは削除していません。",
         );
-        timer = setInterval(() => {
-          void renewRecoveryLease().catch((error) => {
-            localExportQueue.pause(true);
-            setReady(false);
-            setSaveStatus(recoveryMessage(error));
-          });
-        }, 5000);
+        heartbeatStarted = true;
+        scheduleHeartbeat();
       } catch (error) {
         if (!disposed) {
           setStartupFailed(true);
@@ -374,8 +423,11 @@ export default function LocalVideoTool({
     })();
     return () => {
       disposed = true;
+      startupControl.abort();
       clearTimeout(watchdog);
-      clearInterval(timer);
+      cancelHeartbeat();
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
     };
   }, [mode, startup, startupAttempt]);
   useEffect(() => {
@@ -459,7 +511,7 @@ export default function LocalVideoTool({
         <p role="status">{saveStatus}</p>
         {startupFailed && !startup && (
           <section aria-label="保存領域の再試行">
-            <p>この操作で保存済みのプロジェクトや完成動画は削除されません。SafariのほかのAxFluxoタブを閉じてからお試しください。</p>
+            <p>保存データは削除していません。この操作で保存済みのプロジェクトや完成動画は削除されません。SafariのほかのAxFluxoタブを閉じてからお試しください。</p>
             <button onClick={() => {
               setStartupFailed(false);
               setSavedOverview(undefined);
@@ -507,6 +559,7 @@ export default function LocalVideoTool({
             onClick={() => {
               setStartupFailed(false);
               setStartup(undefined);
+              setSavedOverview(undefined);
               setSaveStatus("保存データを確認中…");
             }}
           >

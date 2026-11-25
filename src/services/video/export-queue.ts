@@ -16,7 +16,7 @@ export type ExportEntry = {
   input?: LocalEncodeJob;
   recovery?: LocalEncodeJob["recovery"];
   rest: boolean;
-  result?: { blob: Blob; filename: string };
+  result?: { blob: Blob; filename: string; note?: string };
   error?: string;
 };
 export type ExportRunner = (
@@ -24,7 +24,7 @@ export type ExportRunner = (
   signal: AbortSignal,
   rest: boolean,
   update: (progress: number, message: string) => void,
-) => Promise<{ blob: Blob; filename: string }>;
+) => Promise<{ blob: Blob; filename: string; note?: string }>;
 const activeStates = new Set<ExportState>(["preparing", "rendering"]);
 /** One slot is held through cancellation cleanup. Components never own the runner. */
 export class ExportQueue {
@@ -200,7 +200,7 @@ export class ExportQueue {
         result,
         filename: result.filename,
         progress: 1,
-        message: "完了・保存できます",
+        message: result.note ? `完了・保存できます。 ${result.note}` : "完了・保存できます",
         input: undefined,
       });
     } catch (error) {

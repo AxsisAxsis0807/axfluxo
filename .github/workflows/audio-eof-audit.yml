@@ -1,0 +1,52 @@
+name: All Versions audio EOF audit
+on:
+  pull_request:
+    paths:
+      - 'src/services/video/local-timed-audio.ts'
+      - 'src/features/developer/LocalVideoTool.tsx'
+      - 'src/services/video/recovery-store.ts'
+      - 'server/tests/browser/recovery.spec.ts'
+      - 'src/services/video/local-timed-encode.ts'
+      - 'src/services/video/local-project.ts'
+      - 'src/services/video/local-encode.ts'
+      - 'src/services/video/export-queue.ts'
+      - 'server/tests/browser/local-audio-eof.spec.ts'
+      - 'server/tests/browser/developer-entry.spec.ts'
+      - 'tests/video/local-timed-audio-eof.test.ts'
+      - 'tests/video/recovery-startup-lease.test.ts'
+      - '.github/workflows/audio-eof-audit.yml'
+permissions:
+  contents: read
+concurrency:
+  group: audio-eof-audit-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck && npm run lint
+      - run: npx vitest run tests/video/local-timed-audio-eof.test.ts tests/video/recovery-startup-lease.test.ts tests/video/recovery-store.test.ts
+      - run: |
+          if ! command -v ffprobe >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+      - run: npx playwright install --with-deps chrome webkit
+      - run: npm run test:video:browser -- local-audio-eof local-timed-encode developer-entry recovery track-boundaries trim-handles
+      - name: Repeat WebKit lease/reload regression 10 times
+        run: npm run test:video:browser -- recovery --project=webkit --grep "reload during lease renewal keeps archived work restorable" --repeat-each=10 --retries=0
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: audio-eof-test-results
+          path: test-results/video-browser/
+          if-no-files-found: ignore

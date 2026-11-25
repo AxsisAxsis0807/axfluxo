@@ -3,6 +3,8 @@ type Report = {
   format?: string;
   state: "running" | "complete" | "failed";
   failure?: string;
+  /** Bounded decoded EOF clock correction, not an inter-file gap. */
+  sourceTailSilenceSeconds?: number;
 };
 let report: Report | null = null;
 const listeners = new Set<() => void>();
