@@ -1,4 +1,4 @@
-import { AudioSample, AudioSampleSink, type InputAudioTrack } from "mediabunny";
+import { AudioSample, AudioSampleSink, EncodedPacketSink, type InputAudioTrack } from "mediabunny";
 
 export const localAudioRate = 48_000;
 
@@ -10,6 +10,8 @@ export type AudioIntervalPlan = {
   first: number;
   limit: number;
   decodedEnd: number;
+  decoder?: "webaudio";
+  packetEnd?: number;
 };
 
 /** Only permit a tiny, explicitly accounted-for terminal clock discrepancy.
@@ -41,6 +43,77 @@ export function terminalAudioShortfall(
   throw Error(
     `指定区間の音声を最後まで読み込めません（指定 ${(limit / rate).toFixed(6)}秒、取得 ${(decodedEnd / rate).toFixed(6)}秒）。終了時刻と素材を確認してください。`,
   );
+}
+
+/** Long native MP3 decoding through AudioDecoder has crashed Linux WebKit.
+ * Use Web Audio for local, bounded MP3 files on WebKit, without changing
+ * Chromium's streaming route or allocating an unbounded decoded buffer.
+ */
+export const webAudioMp3Budget = 96 * 1024 * 1024;
+export function prefersWebAudioMp3(userAgent: string, duration: number) {
+  const webkit = /AppleWebKit\//.test(userAgent) &&
+    (/iPhone|iPad|iPod/.test(userAgent) || !/Chrome\/|Chromium\/|Edg\//.test(userAgent));
+  return webkit && duration > 8;
+}
+export function fitsWebAudioMp3Budget(duration: number, rate: number, channels: number, fileBytes: number) {
+  const bytes = Math.ceil(duration * rate + 2304) * channels * 4 + fileBytes;
+  return Number.isFinite(bytes) && bytes > 0 && bytes <= webAudioMp3Budget;
+}
+
+/** Independently verify the compressed track clock before Web Audio decode.
+ * This does not claim that a decoder can detect every corrupted MP3 bit.
+ */
+async function inspectMp3Packets(track: InputAudioTrack, rate: number, signal: AbortSignal) {
+  let previous: number | undefined;
+  for await (const packet of new EncodedPacketSink(track).packets(undefined, undefined, { metadataOnly: true })) {
+    signal.throwIfAborted();
+    const first = Math.round(packet.timestamp * rate);
+    const end = Math.round((packet.timestamp + packet.duration) * rate);
+    if (!Number.isSafeInteger(first) || !Number.isSafeInteger(end) || end <= first ||
+        (previous !== undefined && Math.abs(first - previous) > 1))
+      throw Error("素材のMP3パケット時刻に欠落または重複があります。");
+    previous = end;
+  }
+  if (previous === undefined || previous <= 0) throw Error("MP3の音声データがありません。");
+  return previous / rate;
+}
+
+async function decodeWebAudioMp3(file: Blob, rate: number, channels: number, packetEnd: number, signal: AbortSignal) {
+  signal.throwIfAborted();
+  if (!fitsWebAudioMp3Budget(packetEnd, rate, channels, file.size))
+    throw Error("MP3の音声展開が端末の安全なメモリ範囲を超えます。");
+  // Use the source sample rate, not the device's audio output clock.
+  const context = new OfflineAudioContext(channels, 1, rate);
+  const bytes = await file.arrayBuffer();
+  signal.throwIfAborted();
+  const buffer = await context.decodeAudioData(bytes);
+  signal.throwIfAborted();
+  if (buffer.sampleRate !== rate || buffer.numberOfChannels !== channels ||
+      !Number.isSafeInteger(buffer.length) || buffer.length <= 0 ||
+      Math.abs(buffer.length - Math.round(packetEnd * rate)) > 2304 ||
+      !fitsWebAudioMp3Budget(buffer.duration, rate, channels, file.size))
+    throw Error("MP3の音声展開結果が素材の形式または時刻と一致しません。");
+  return buffer;
+}
+
+async function* webAudioSpans(file: Blob, plan: AudioIntervalPlan, signal: AbortSignal) {
+  const { rate, channels, first, limit, decodedEnd, packetEnd } = plan;
+  if (packetEnd === undefined) throw Error("MP3事前検査の時刻がありません。");
+  const buffer = await decodeWebAudioMp3(file, rate, channels, packetEnd, signal);
+  if (Math.min(buffer.length, limit) !== decodedEnd)
+    throw Error("事前検査と書き出し時の音声範囲が一致しません。");
+  for (let position = first; position < decodedEnd;) {
+    signal.throwIfAborted();
+    const count = Math.min(rate, decodedEnd - position);
+    const data = new Float32Array(count * channels);
+    for (let channel = 0; channel < channels; channel++)
+      data.set(buffer.getChannelData(channel).subarray(position, position + count), channel * count);
+    const sample = new AudioSample({ data, format: "f32-planar", sampleRate: rate, numberOfChannels: channels, timestamp: position / rate });
+    try {
+      yield { sample, offset: 0, count, end: position + count };
+    } finally { sample.close(); }
+    position += count;
+  }
 }
 
 /** Shared strict sample traversal for preflight and the actual encoding pass.
@@ -99,6 +172,7 @@ export async function inspectTimedAudio(
   end: number,
   naturalEnd: number | undefined,
   signal: AbortSignal,
+  file?: Blob,
 ): Promise<AudioIntervalPlan> {
   const [rate, channels] = await Promise.all([
     track.getSampleRate(), track.getNumberOfChannels(),
@@ -109,6 +183,19 @@ export async function inspectTimedAudio(
       !Number.isSafeInteger(first) || !Number.isSafeInteger(limit) ||
       first < 0 || limit <= first)
     throw Error("音声区間または音声形式が不正です。");
+  const codec = await track.getCodec();
+  // A long local WebKit MP3 uses a separate decoder implementation.
+  // Above the budget retain the previous bounded streaming path.
+  if (file && codec === "mp3" && typeof OfflineAudioContext !== "undefined" &&
+      typeof navigator !== "undefined" && prefersWebAudioMp3(navigator.userAgent, naturalEnd ?? end)) {
+    const packetEnd = await inspectMp3Packets(track, rate, signal);
+    if (fitsWebAudioMp3Budget(Math.max(packetEnd, naturalEnd ?? end), rate, channels, file.size)) {
+      const buffer = await decodeWebAudioMp3(file, rate, channels, packetEnd, signal);
+      const decodedEnd = Math.min(buffer.length, limit);
+      terminalAudioShortfall(codec, rate, first, limit, decodedEnd, packetEnd, naturalEnd);
+      return { rate, channels, first, limit, decodedEnd, decoder: "webaudio", packetEnd };
+    }
+  }
   let decodedEnd = first;
   for await (const span of sampleSpans(track, first, limit, rate, channels, signal))
     decodedEnd = span.end;
@@ -130,6 +217,7 @@ async function* blocks(
   track: InputAudioTrack,
   plan: AudioIntervalPlan,
   signal: AbortSignal,
+  file?: Blob,
 ) {
   const { first, limit, rate, channels, decodedEnd } = plan;
   let cursor = first;
@@ -138,7 +226,11 @@ async function* blocks(
     frames: 0,
   });
   let block = allocate();
-  for await (const span of sampleSpans(track, first, limit, rate, channels, signal)) {
+  if (plan.decoder === "webaudio" && !file) throw Error("MP3の元ファイルを再選択してください。");
+  const spans = plan.decoder === "webaudio"
+    ? webAudioSpans(file!, plan, signal)
+    : sampleSpans(track, first, limit, rate, channels, signal);
+  for await (const span of spans) {
     if (span.end > decodedEnd)
       throw Error("事前検査と書き出し時の音声範囲が一致しません。");
     let copied = 0;
@@ -260,6 +352,7 @@ export async function* timedAudio(
   outputStart: number,
   outputEnd: number,
   signal: AbortSignal,
+  file?: Blob,
 ) {
   const { rate, channels } = plan;
   if (await track.getSampleRate() !== rate || await track.getNumberOfChannels() !== channels)
@@ -267,7 +360,7 @@ export async function* timedAudio(
   let previous: AudioBlock | undefined;
   let current: AudioBlock | undefined;
   let cursor = outputStart;
-  for await (const next of blocks(track, plan, signal)) {
+  for await (const next of blocks(track, plan, signal, file)) {
     if (current) {
       yield await normalize(
         current,

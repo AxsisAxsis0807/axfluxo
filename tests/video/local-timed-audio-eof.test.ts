@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AudioSample, type InputAudioTrack } from "mediabunny";
-import { inspectTimedAudio, terminalAudioShortfall, timedAudio } from "../../src/services/video/local-timed-audio";
+import { inspectTimedAudio, terminalAudioShortfall, timedAudio, prefersWebAudioMp3, fitsWebAudioMp3Budget } from "../../src/services/video/local-timed-audio";
 
 vi.mock("mediabunny", async (importOriginal) => {
   const actual = await importOriginal<typeof import("mediabunny")>();
@@ -136,5 +136,20 @@ describe("bounded long MP3 decoder sessions", () => {
     const control = new AbortController();
     control.abort();
     await expect(inspectTimedAudio(source(spans,17),0,17,17,control.signal)).rejects.toThrow();
+  });
+});
+
+describe("bounded WebKit MP3 decoder selection", () => {
+  it("selects the long WebKit route but not Chromium or short sources", () => {
+    const safari = "Mozilla/5.0 AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15";
+    expect(prefersWebAudioMp3(safari,112.128)).toBe(true);
+    expect(prefersWebAudioMp3(safari,8)).toBe(false);
+    expect(prefersWebAudioMp3("Mozilla/5.0 AppleWebKit/537.36 Chrome/140.0 Safari/537.36",112.128)).toBe(false);
+    expect(prefersWebAudioMp3("Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 CriOS/140.0",112.128)).toBe(true);
+  });
+  it("budgets source bytes and decoded PCM, including the reported source", () => {
+    expect(fitsWebAudioMp3Budget(112.128,48000,2,2884553)).toBe(true);
+    expect(fitsWebAudioMp3Budget(3600,48000,2,1000000)).toBe(false);
+    expect(fitsWebAudioMp3Budget(Infinity,48000,2,1000000)).toBe(false);
   });
 });

@@ -108,7 +108,7 @@ export async function encodeTimedLocal(
       if (!track || !(await track.canDecode()))
         throw Error("このブラウザーで素材の音声をデコードできません。");
       const plan = await inspectTimedAudio(
-        track, piece.start, piece.end, piece.sourceDuration, signal,
+        track, piece.start, piece.end, piece.sourceDuration, signal, piece.file,
       );
       plans.push(plan);
       tailSeconds += (plan.limit - plan.decodedEnd) / plan.rate;
@@ -310,6 +310,7 @@ export async function encodeTimedLocal(
           piece.startSample,
           piece.endSample,
           signal,
+          piece.file,
         )) {
           await writeAudio(sample);
         }

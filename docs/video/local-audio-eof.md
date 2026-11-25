@@ -46,3 +46,16 @@ library's codec pre-roll, strict intermediate continuity and natural iterator
 drain; the actual EOF allowance is unchanged. File reads explicitly disable
 the stream reader. The long native browser test and exact PCM tests must pass
 before production merge. iPhone validation is still separate.
+
+## Long WebKit MP3 alternative
+
+The eight-second WebCodecs windows passed Chrome but the 112.128 s native
+WebKit test still terminated its page. Use source-rate Web Audio decoding
+for local MP3s longer than eight seconds on WebKit when the estimated PCM
+plus source bytes fit a 96 MiB budget. Preflight checks packet continuity,
+source rate/channel count, decoded length, and the existing EOF bound.
+Only one audio buffer is used at a time; preflight does not retain PCM
+across sources. Re-decode and compare the endpoint during export. Above
+the budget, the prior streaming route is unchanged; its WebKit stability
+is not established. The native Web Audio route still needs CI/iPhone
+verification; this does not guarantee corruption detection by the decoder.

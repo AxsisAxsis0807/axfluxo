@@ -55,7 +55,7 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
             try {
               const track = await inspect.getPrimaryAudioTrack();
               if (!track || !(await track.canDecode())) return null;
-              plan = await inspectTimedAudio(track, 0, 112.128, 112.128, signal);
+              plan = await inspectTimedAudio(track, 0, 112.128, 112.128, signal, source);
             } finally { inspect.dispose(); }
             console.info('long MP3 preflight complete', plan.decodedEnd);
             await new Promise(resolve => setTimeout(resolve, 0));
@@ -63,7 +63,7 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
             let count = 0, last = 0, minBoundaryRms = Infinity;
             try {
               const track = await input.getPrimaryAudioTrack();
-              for await (const sample of timedAudio(track, plan, 0, 5382144, signal)) {
+              for await (const sample of timedAudio(track, plan, 0, 5382144, signal, source)) {
                 if (Math.round(sample.timestamp * 48000) !== count) throw Error("non-contiguous audio");
                 count += sample.numberOfFrames;
                 last = sample.timestamp + sample.numberOfFrames / 48000;
@@ -80,7 +80,7 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
                 sample.close();
               }
             } finally { input.dispose(); }
-            return {count, last, missing:plan.limit-plan.decodedEnd, minBoundaryRms};
+            return {count, last, missing:plan.limit-plan.decodedEnd, minBoundaryRms, decoder:plan.decoder ?? 'streaming'};
           };
           window.runShort = async () => {
             const source = await file("short");
@@ -109,7 +109,7 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
     await page.goto(url);
     await page.addScriptTag({content:bundle.outputFiles[0].text});
     const long = await page.evaluate(() => (window as unknown as {
-      runLong: () => Promise<{count:number;last:number;missing:number;minBoundaryRms:number} | null>;
+      runLong: () => Promise<{count:number;last:number;missing:number;minBoundaryRms:number;decoder:string} | null>;
     }).runLong());
     expect(long, "MP3 decoder must be available in the supported CI browsers").not.toBeNull();
     expect(long?.count).toBe(5382144);
@@ -117,6 +117,7 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
     expect(long?.missing).toBeGreaterThanOrEqual(0);
     expect(long?.missing).toBeLessThanOrEqual(2304);
     expect(long?.minBoundaryRms).toBeGreaterThan(0.025);
+    expect(long?.decoder).toBe(test.info().project.name === "webkit" ? "webaudio" : "streaming");
     const short = await page.evaluate(() => (window as unknown as {
       runShort: () => Promise<{state:string} | false>;
     }).runShort());
