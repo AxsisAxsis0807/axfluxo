@@ -54,7 +54,7 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
             let plan;
             try {
               const track = await inspect.getPrimaryAudioTrack();
-              if (!track || !(await track.canDecode())) return null;
+              if (!track) return null;
               plan = await inspectTimedAudio(track, 0, 112.128, 112.128, signal, source);
             } finally { inspect.dispose(); }
             console.info('long MP3 preflight complete', plan.decodedEnd);
@@ -88,7 +88,7 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
               pieces:[{file:source, url:async()=>URL.createObjectURL(source), start:0,end:2.304,sourceDuration:2.304}],
               draw:(ctx)=>{ctx.fillStyle="#438acb";ctx.fillRect(0,0,160,90);}};
             if (!usesTimedLocalEncoding(job)) return false;
-            const result = await encodeLocal(job, undefined, AbortSignal.timeout(60000), false, {processing:0}, ()=>{});
+            const result = await encodeLocal(job, undefined, AbortSignal.timeout(60000), false, {processing:0}, message=>console.info("short MP4 stage:",message));
             document.querySelector("a").href=URL.createObjectURL(result.blob);
             return getEncodeReport();
           };
@@ -118,6 +118,8 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
     expect(long?.missing).toBeLessThanOrEqual(2304);
     expect(long?.minBoundaryRms).toBeGreaterThan(0.025);
     expect(long?.decoder).toBe(test.info().project.name === "webkit" ? "webaudio" : "streaming");
+    // Keep the same page: the original failure occurred after long decode,
+    // so a clean page or test retry would conceal the reproduction.
     const short = await page.evaluate(() => (window as unknown as {
       runShort: () => Promise<{state:string} | false>;
     }).runShort());
@@ -132,6 +134,17 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
       const track = tracks.streams.find(s=>s.codec_type===type);
       expect(Number(track?.duration)).toBeCloseTo(2.304, 3);
     }
+    // Check real decoded sound, not merely presence of an audio track.
+    const decoded = execFileSync("ffmpeg", ["-v","error","-i",result,
+      "-map","0:a:0","-ac","1","-ar","48000","-f","s16le","pipe:1"]);
+    expect(decoded.length).toBeGreaterThan(2 * 48000 * 2);
+    let energy = 0, samples = 0;
+    for (let byte = 4800 * 2; byte < 48000 * 2 * 2; byte += 2) {
+      const value = decoded.readInt16LE(byte) / 32768;
+      energy += value * value;
+      samples++;
+    }
+    expect(Math.sqrt(energy / samples)).toBeGreaterThan(0.025);
   } finally {
     await rm(dir, {recursive:true,force:true});
   }

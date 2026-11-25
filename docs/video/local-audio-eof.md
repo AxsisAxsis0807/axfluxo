@@ -59,3 +59,16 @@ across sources. Re-decode and compare the endpoint during export. Above
 the budget, the prior streaming route is unchanged; its WebKit stability
 is not established. The native Web Audio route still needs CI/iPhone
 verification; this does not guarantee corruption detection by the decoder.
+
+## Short MP3 following long MP3
+
+Both native CI traces on 3d9909a showed the 112.128 s Web Audio PCM
+verification passing, then the same-page 2.304 s MP4 operation closing
+without a result after about 54 s. The short input previously selected
+WebCodecs because of the eight-second threshold. Remove that threshold for
+budgeted local WebKit MP3s, and only probe WebCodecs input decode support
+when actually using that path. Add phase status diagnostics for the short
+export, preserve the original same-page long-to-short regression, and
+verify non-silent decoded output. The native crash's internal root cause
+remains unconfirmed; this addresses the remaining different MP3 decoder
+route, not a claim that the native memory subsystem is fixed.

@@ -49,6 +49,7 @@ export async function encodeTimedLocal(
   };
   // Prefer the existing Safari-compatible codec pair. Chromium on platforms
   // without an AAC encoder uses the same VP9/Opus MP4 pair as MediaRecorder.
+  status("書き出し形式を確認中…");
   const codecs = await Promise.all([
     canEncodeVideo("avc", videoOptions),
     canEncodeAudio("aac", audioOptions),
@@ -105,12 +106,12 @@ export async function encodeTimedLocal(
     signal.addEventListener("abort", abortInput, { once: true });
     try {
       const track = await input.getPrimaryAudioTrack();
-      if (!track || !(await track.canDecode()))
-        throw Error("このブラウザーで素材の音声をデコードできません。");
+      if (!track) throw Error("素材に音声トラックがありません。");
       const plan = await inspectTimedAudio(
         track, piece.start, piece.end, piece.sourceDuration, signal, piece.file,
       );
       plans.push(plan);
+      status(`音声範囲の事前検査完了：${index + 1}/${pieces.length}（${plan.decoder === "webaudio" ? "Web Audio" : "WebCodecs"}）`);
       tailSeconds += (plan.limit - plan.decodedEnd) / plan.rate;
     } finally {
       signal.removeEventListener("abort", abortInput);
@@ -199,6 +200,7 @@ export async function encodeTimedLocal(
   // The audio-only target lets Mediabunny manage native priming and backpressure.
   let audioPackets = Promise.resolve();
   let audioError: unknown;
+  status("音声エンコーダーの時刻を確認中…");
   let nextAacSample = codecs[1] === "aac" ? await aacPacketStartSample() : 0;
   signal.throwIfAborted();
   const audio = new AudioSampleSource({
@@ -278,6 +280,7 @@ export async function encodeTimedLocal(
 
   try {
     signal.throwIfAborted();
+    status("MP4エンコーダーを準備中…");
     await output.start();
     await audioEncoder.start();
     for (const [index, piece] of pieces.entries()) {
@@ -302,8 +305,8 @@ export async function encodeTimedLocal(
       activeInput = input;
       try {
         const track = await input.getPrimaryAudioTrack();
-        if (!track || !(await track.canDecode()))
-          throw Error("このブラウザーで素材の音声をデコードできません。");
+        if (!track) throw Error("素材に音声トラックがありません。");
+        status(`音声・映像の書き出し開始：${index + 1}/${pieces.length}`);
         for await (const sample of timedAudio(
           track,
           plans[index],
@@ -339,14 +342,17 @@ export async function encodeTimedLocal(
         drain.close();
       }
     }
+    status("音声エンコーダーを終了中…");
     await audioEncoder.finalize();
     await audioPackets;
     if (audioError) throw audioError;
     audioTrack.close();
+    status("MP4を確定中…");
     await output.finalize();
     if (videoError || encodedFrames.includes(0))
       throw Error("完成動画のフレーム時刻に欠落または重複があります。");
     const blob = new Blob(chunks, { type: "video/mp4" });
+    status("完成MP4の音声と映像を検査中…");
     await validateLocalOutput(blob, signal, { duration: total });
     return {
       blob,

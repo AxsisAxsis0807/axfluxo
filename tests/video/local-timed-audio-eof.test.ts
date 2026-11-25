@@ -18,6 +18,7 @@ function source(spans: readonly (readonly [number, number])[], duration = 2.304,
     getSampleRate: async () => 48000,
     getNumberOfChannels: async () => 2,
     getCodec: async () => "mp3",
+    canDecode: async () => true,
     computeDuration: async () => duration,
     async *fixture(start: number, end: number) {
       visits?.push(start);
@@ -140,10 +141,13 @@ describe("bounded long MP3 decoder sessions", () => {
 });
 
 describe("bounded WebKit MP3 decoder selection", () => {
-  it("selects the long WebKit route but not Chromium or short sources", () => {
+  it("selects the same WebKit route for short and long sources, not Chromium", () => {
     const safari = "Mozilla/5.0 AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15";
     expect(prefersWebAudioMp3(safari,112.128)).toBe(true);
-    expect(prefersWebAudioMp3(safari,8)).toBe(false);
+    expect(prefersWebAudioMp3(safari,2.304)).toBe(true);
+    expect(prefersWebAudioMp3(safari,8)).toBe(true);
+    expect(prefersWebAudioMp3(safari,0)).toBe(false);
+    expect(prefersWebAudioMp3(safari,Infinity)).toBe(false);
     expect(prefersWebAudioMp3("Mozilla/5.0 AppleWebKit/537.36 Chrome/140.0 Safari/537.36",112.128)).toBe(false);
     expect(prefersWebAudioMp3("Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 CriOS/140.0",112.128)).toBe(true);
   });

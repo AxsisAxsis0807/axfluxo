@@ -53,7 +53,7 @@ export const webAudioMp3Budget = 96 * 1024 * 1024;
 export function prefersWebAudioMp3(userAgent: string, duration: number) {
   const webkit = /AppleWebKit\//.test(userAgent) &&
     (/iPhone|iPad|iPod/.test(userAgent) || !/Chrome\/|Chromium\/|Edg\//.test(userAgent));
-  return webkit && duration > 8;
+  return webkit && Number.isFinite(duration) && duration > 0;
 }
 export function fitsWebAudioMp3Budget(duration: number, rate: number, channels: number, fileBytes: number) {
   const bytes = Math.ceil(duration * rate + 2304) * channels * 4 + fileBytes;
@@ -184,7 +184,7 @@ export async function inspectTimedAudio(
       first < 0 || limit <= first)
     throw Error("音声区間または音声形式が不正です。");
   const codec = await track.getCodec();
-  // A long local WebKit MP3 uses a separate decoder implementation.
+  // Use the same Web Audio decoder for both short and long local WebKit MP3s.
   // Above the budget retain the previous bounded streaming path.
   if (file && codec === "mp3" && typeof OfflineAudioContext !== "undefined" &&
       typeof navigator !== "undefined" && prefersWebAudioMp3(navigator.userAgent, naturalEnd ?? end)) {
@@ -196,6 +196,8 @@ export async function inspectTimedAudio(
       return { rate, channels, first, limit, decodedEnd, decoder: "webaudio", packetEnd };
     }
   }
+  if (!(await track.canDecode()))
+    throw Error("このブラウザーで素材の音声をデコードできません。");
   let decodedEnd = first;
   for await (const span of sampleSpans(track, first, limit, rate, channels, signal))
     decodedEnd = span.end;
@@ -357,6 +359,8 @@ export async function* timedAudio(
   const { rate, channels } = plan;
   if (await track.getSampleRate() !== rate || await track.getNumberOfChannels() !== channels)
     throw Error("事前検査と書き出し時の音声形式が一致しません。");
+  if (plan.decoder !== "webaudio" && !(await track.canDecode()))
+    throw Error("このブラウザーで素材の音声をデコードできません。");
   let previous: AudioBlock | undefined;
   let current: AudioBlock | undefined;
   let cursor = outputStart;
