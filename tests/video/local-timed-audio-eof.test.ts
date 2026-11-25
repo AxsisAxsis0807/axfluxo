@@ -7,20 +7,22 @@ vi.mock("mediabunny", async (importOriginal) => {
   return {
     ...actual,
     AudioSampleSink: class {
-      constructor(private readonly track: { fixture: () => AsyncGenerator<AudioSample> }) {}
-      samples() { return this.track.fixture(); }
+      constructor(private readonly track: { fixture: (start: number, end: number) => AsyncGenerator<AudioSample> }) {}
+      samples(start: number, end: number) { return this.track.fixture(start, end); }
     },
   };
 });
 
-function source(spans: readonly (readonly [number, number])[]) {
+function source(spans: readonly (readonly [number, number])[], duration = 2.304, visits?: number[]) {
   return {
     getSampleRate: async () => 48000,
     getNumberOfChannels: async () => 2,
     getCodec: async () => "mp3",
-    computeDuration: async () => 2.304,
-    async *fixture() {
+    computeDuration: async () => duration,
+    async *fixture(start: number, end: number) {
+      visits?.push(start);
       for (const [first, frames] of spans) {
+        if (first + frames <= Math.round(start * 48000) || first >= Math.round(end * 48000)) continue;
         yield new AudioSample({
           data: new Float32Array(frames * 2).fill(0.25),
           format: "f32-planar",
@@ -99,5 +101,40 @@ describe("preflight and second-pass PCM invariants", () => {
       )) sample.close();
     };
     await expect(consume()).rejects.toThrow("一致しません");
+  });
+});
+
+describe("bounded long MP3 decoder sessions", () => {
+  const frames = 48000;
+  const spans = Array.from({length: 17}, (_, i) => [i * frames, frames] as const);
+  it("covers all windows exactly and keeps PCM unchanged", async () => {
+    const visits: number[] = [];
+    const plan = await inspectTimedAudio(source(spans, 17, visits), 0, 17, 17, signal());
+    expect(visits).toEqual([0,8,16]);
+    expect(plan.decodedEnd).toBe(17 * frames);
+    let count = 0;
+    for await (const sample of timedAudio(source(spans,17), plan, 0, 17*frames, signal())) {
+      try {
+        expect(Math.round(sample.timestamp*frames)).toBe(count);
+        const pcm = new Float32Array(sample.numberOfFrames);
+        sample.copyTo(pcm, {planeIndex:0,format:"f32-planar"});
+        expect(pcm.every(value => value === 0.25)).toBe(true);
+        count += sample.numberOfFrames;
+      } finally { sample.close(); }
+    }
+    expect(count).toBe(17*frames);
+  });
+  it("rejects a shortage at an intermediate window boundary", async () => {
+    const damaged = spans.map(([first, n],i) => [first, i === 7 ? n-1 : n] as const);
+    await expect(inspectTimedAudio(source(damaged,17),0,17,17,signal())).rejects.toThrow("欠落");
+  });
+  it("rejects a gap immediately after a decoder restart", async () => {
+    const damaged = spans.map(([first,n],i) => [i === 8 ? first+1 : first, i === 8 ? n-1 : n] as const);
+    await expect(inspectTimedAudio(source(damaged,17),0,17,17,signal())).rejects.toThrow("欠落");
+  });
+  it("honors cancellation before decoding", async () => {
+    const control = new AbortController();
+    control.abort();
+    await expect(inspectTimedAudio(source(spans,17),0,17,17,control.signal)).rejects.toThrow();
   });
 });

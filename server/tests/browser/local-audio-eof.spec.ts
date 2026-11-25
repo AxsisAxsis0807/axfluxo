@@ -60,7 +60,7 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
             console.info('long MP3 preflight complete', plan.decodedEnd);
             await new Promise(resolve => setTimeout(resolve, 0));
             const input = make();
-            let count = 0, last = 0;
+            let count = 0, last = 0, minBoundaryRms = Infinity;
             try {
               const track = await input.getPrimaryAudioTrack();
               for await (const sample of timedAudio(track, plan, 0, 5382144, signal)) {
@@ -70,10 +70,17 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
                 const pcm = new Float32Array(sample.numberOfFrames);
                 sample.copyTo(pcm, {planeIndex:0,format:'f32-planar'});
                 if (!pcm.every(Number.isFinite)) throw Error('invalid PCM');
+                // Every 8-second restart must preserve a real audible signal.
+                const sec = count / 48000 - 1;
+                if (sec > 0 && sec % 8 === 0) {
+                  const segment = pcm.subarray(0,480);
+                  const rms = Math.sqrt(segment.reduce((sum,v)=>sum+v*v,0)/segment.length);
+                  minBoundaryRms = Math.min(minBoundaryRms,rms);
+                }
                 sample.close();
               }
             } finally { input.dispose(); }
-            return {count, last, missing:plan.limit-plan.decodedEnd};
+            return {count, last, missing:plan.limit-plan.decodedEnd, minBoundaryRms};
           };
           window.runShort = async () => {
             const source = await file("short");
@@ -102,13 +109,14 @@ test("full MP3 EOF: 112.128 s sample clock and playable short MP4 without manual
     await page.goto(url);
     await page.addScriptTag({content:bundle.outputFiles[0].text});
     const long = await page.evaluate(() => (window as unknown as {
-      runLong: () => Promise<{count:number;last:number;missing:number} | null>;
+      runLong: () => Promise<{count:number;last:number;missing:number;minBoundaryRms:number} | null>;
     }).runLong());
     expect(long, "MP3 decoder must be available in the supported CI browsers").not.toBeNull();
     expect(long?.count).toBe(5382144);
     expect(long?.last).toBeCloseTo(112.128, 6);
     expect(long?.missing).toBeGreaterThanOrEqual(0);
     expect(long?.missing).toBeLessThanOrEqual(2304);
+    expect(long?.minBoundaryRms).toBeGreaterThan(0.025);
     const short = await page.evaluate(() => (window as unknown as {
       runShort: () => Promise<{state:string} | false>;
     }).runShort());

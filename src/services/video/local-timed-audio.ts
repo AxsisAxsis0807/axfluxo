@@ -64,24 +64,24 @@ async function* sampleSpans(
     const sink = new AudioSampleSink(track);
     let decodedPackets = 0;
     for await (const sample of sink.samples(windowStart / rate, windowEnd / rate)) {
-    try {
-      signal.throwIfAborted();
-      const position = Math.round(sample.timestamp * rate);
-      const stop = Math.min(position + sample.numberOfFrames, windowEnd);
-      if (!Number.isSafeInteger(position) || !Number.isSafeInteger(stop) ||
-          !Number.isSafeInteger(sample.numberOfFrames) || sample.numberOfFrames <= 0 ||
-          sample.sampleRate !== rate || sample.numberOfChannels !== channels)
-        throw Error("素材の音声タイムスタンプまたは形式が不正です。");
-      if (stop <= cursor) continue;
-      if (position > cursor)
-        throw Error("素材の音声タイムスタンプに欠落があります。");
-      yield { sample, offset: cursor - position, count: stop - cursor, end: stop };
-      cursor = stop;
-    } finally {
-      sample.close();
-    }
-    // Yield to native decoder cleanup and browser event processing regularly.
-    if (++decodedPackets % 32 === 0) await new Promise<void>(resolve => setTimeout(resolve, 0));
+      try {
+        signal.throwIfAborted();
+        const position = Math.round(sample.timestamp * rate);
+        const stop = Math.min(position + sample.numberOfFrames, windowEnd);
+        if (!Number.isSafeInteger(position) || !Number.isSafeInteger(stop) ||
+            !Number.isSafeInteger(sample.numberOfFrames) || sample.numberOfFrames <= 0 ||
+            sample.sampleRate !== rate || sample.numberOfChannels !== channels)
+          throw Error("素材の音声タイムスタンプまたは形式が不正です。");
+        if (stop <= cursor) continue;
+        if (position > cursor)
+          throw Error("素材の音声タイムスタンプに欠落があります。");
+        yield { sample, offset: cursor - position, count: stop - cursor, end: stop };
+        cursor = stop;
+      } finally {
+        sample.close();
+      }
+      // Yield to native decoder cleanup and browser event processing regularly.
+      if (++decodedPackets % 32 === 0) await new Promise<void>(resolve => setTimeout(resolve, 0));
     }
     signal.throwIfAborted();
     if (windowEnd < limit && cursor !== windowEnd)

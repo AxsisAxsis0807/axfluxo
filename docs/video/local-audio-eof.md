@@ -33,3 +33,16 @@ checks the full long decoded/output sample clock and short MP4 track
 durations with ffprobe. Unit fixtures additionally check all retained
 PCM values, the precise zero tail, a nonzero output offset, interior
 holes, and a changed second-pass EOF. No actual music is committed.
+
+## Follow-up recovery and decoder audit
+
+PR #49 made project discovery read-only, but actual editing/resume still
+required a write lease. After reload or cross-tool navigation, the previous
+document's lease can remain live for 20 seconds. Acquire it with bounded,
+abortable startup retry before hydrating or creating a session; never bypass
+an active lease or a fenced writer. The recovery message states that data has
+not been deleted. Long MP3 decoding uses eight-second windows with the
+library's codec pre-roll, strict intermediate continuity and natural iterator
+drain; the actual EOF allowance is unchanged. File reads explicitly disable
+the stream reader. The long native browser test and exact PCM tests must pass
+before production merge. iPhone validation is still separate.
