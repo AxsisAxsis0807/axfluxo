@@ -242,6 +242,9 @@ async function recordLocal(
   status: (s: string) => void,
   progress: (fraction: number) => void,
 ) {
+  const gap = job.gapBetweenPiecesSeconds ?? 0;
+  if (!Number.isFinite(gap) || gap < 0)
+    throw Error("音源間の無音秒数が不正です。");
   const mimeType = recorderType();
   if (!audio || !mimeType)
     throw Error(
@@ -306,9 +309,6 @@ async function recordLocal(
   recorder.onerror = () => {
     recordError = Error("端末内エンコードに失敗しました。");
   };
-  const gap = job.gapBetweenPiecesSeconds ?? 0;
-  if (!Number.isFinite(gap) || gap < 0)
-    throw Error("音源間の無音秒数が不正です。");
   const total = job.pieces.reduce((n, p) => n + p.end - p.start, 0) +
     Math.max(0, job.pieces.length - 1) * gap;
   let recordingStarted = false;
