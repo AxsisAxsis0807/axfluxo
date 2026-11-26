@@ -63,24 +63,24 @@ it("detects MIME support through the actual API and never calls WebM MP4", () =>
   expect(recorderType()).toBeNull();
 });
 
-it("adds fixed gaps only between trimmed source files, not internal version boundaries", () => {
+it("joins trimmed source files and internal version boundaries without gaps", () => {
   const first = { start: 1, end: 5, duration: 6, markers: "3" };
   const second = { start: 2, end: 5, duration: 7, markers: "" };
   const third = { start: 0, end: 2, duration: 2, markers: "" };
   const fourth = { start: 1, end: 3, duration: 3, markers: "" };
   const gap = ALL_VERSIONS_FILE_GAP_SECONDS;
-  expect(gap).toBe(1);
+  expect(gap).toBe(0);
   expect(localIntervals([first], gap)).toEqual([
     { start: 0, end: 2 }, { start: 2, end: 4 },
   ]);
   expect(localIntervals([first, second, third, fourth], gap)).toEqual([
     { start: 0, end: 2 }, { start: 2, end: 4 },
-    { start: 5, end: 8 }, { start: 9, end: 11 },
-    { start: 12, end: 14 },
+    { start: 4, end: 7 }, { start: 7, end: 9 },
+    { start: 9, end: 11 },
   ]);
   expect(localIntervals([second, first], gap)).toEqual([
-    { start: 0, end: 3 }, { start: 4, end: 6 },
-    { start: 6, end: 8 },
+    { start: 0, end: 3 }, { start: 3, end: 5 },
+    { start: 5, end: 7 },
   ]);
   expect(localIntervals([first, second]).at(-1)?.end).toBe(7);
 });
