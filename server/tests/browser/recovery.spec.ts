@@ -273,6 +273,10 @@ test("durable queued jobs restart once; finished videos survive reload until eac
   await page.getByRole("button", { name: "rangeを追加", exact: true }).click();
   await page.getByLabel("譜面名", { exact: true }).nth(1).fill("B");
   await page.getByLabel("終了秒", { exact: true }).nth(1).fill("1.5");
+  await expect(page.getByLabel("譜面名", { exact: true }).first()).toHaveValue("A");
+  await expect(page.getByLabel("譜面名", { exact: true }).nth(1)).toHaveValue("B");
+  await expect(page.getByLabel("終了秒", { exact: true }).first()).toHaveValue("1.2");
+  await expect(page.getByLabel("終了秒", { exact: true }).nth(1)).toHaveValue("1.5");
   await durable(page);
   const canEncode = await page.evaluate(
     () =>
@@ -290,10 +294,8 @@ test("durable queued jobs restart once; finished videos survive reload until eac
       .getByRole("button", { name: "端末内で書き出す", exact: true })
       .click();
     await expect(
-      page.getByText(
-        /このブラウザーは端末内エンコードに対応していません|Canvasの動画書き出しに対応していません/,
-      ),
-    ).toBeVisible();
+      page.getByRole("region", { name: "端末内書き出し" }).getByRole("status"),
+    ).toContainText(/このブラウザーは端末内エンコードに対応していません|Canvasの動画書き出しに対応していません/);
     expect(
       await page.evaluate(
         () =>
@@ -535,9 +537,19 @@ test("All Versions mobile cards keep names and trim attached to each reordered f
 
 test("a blocked reservation never reports success before storage commits", async ({ page }) => {
   await open(page);
-  await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
-  const title = page.getByLabel("譜面名", { exact: true });
+  await page.goto("https://recovery.test/all");
+  await page.getByLabel("端末の素材", { exact: true }).setInputFiles(mp3);
+  await page.getByLabel("カバー画像").setInputFiles({
+    name: "cover.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/Yp8AAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  const title = page.getByLabel("曲名", { exact: true });
   await title.fill("NO SPACE");
+  await page.getByLabel("バージョン名（改行区切り）").fill("Original");
   await page.evaluate(() => {
     const state = window as typeof window & { denyReservation?: () => void };
     Object.defineProperty(navigator.storage, "estimate", {
@@ -548,15 +560,16 @@ test("a blocked reservation never reports success before storage commits", async
     });
   });
   await page.getByRole("button", { name: "端末内で書き出す", exact: true }).click();
-  await expect.poll(() => page.evaluate(() =>
-    typeof (window as typeof window & { denyReservation?: () => void }).denyReservation,
-  )).toBe("function");
+  const exports = page.getByRole("region", { name: "端末内書き出し" });
+  await expect.poll(async () => ({
+    hook: await page.evaluate(() => typeof (window as typeof window & { denyReservation?: () => void }).denyReservation),
+    status: await exports.getByRole("status").textContent(),
+  })).toMatchObject({ hook: "function" });
   await expect(page.getByText("現在の設定で予約しました。", { exact: false })).toHaveCount(0);
   await title.fill("EDITABLE");
   await page.evaluate(() =>
     (window as typeof window & { denyReservation?: () => void }).denyReservation?.(),
   );
-  const exports = page.getByRole("region", { name: "端末内書き出し" });
   await expect(exports.getByRole("status")).toContainText("保存容量が不足");
   await expect(title).toHaveValue("EDITABLE");
   expect(await inventory(page)).toEqual([[], [], []]);

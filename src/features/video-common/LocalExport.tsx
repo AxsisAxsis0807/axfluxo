@@ -29,15 +29,17 @@ export function LocalExport({
   async function add() {
     if (adding.current) return;
     adding.current = true;
+    let preparingReservation = true;
     setPreparing(true);
     setStatus("入力内容と出力形式を確認しています…");
     try {
       // The legacy recorder needs activation during the tap, before preparation.
       const supportedRecorder = !!recorderType();
       if (supportedRecorder)
-        void allowExportAudio().catch(() =>
-          setStatus("下部の詳細から音声処理を許可してください。"),
-        );
+        void allowExportAudio().catch(() => {
+          if (preparingReservation)
+            setStatus("下部の詳細から音声処理を許可してください。");
+        });
       const jobs = await prepare();
       if (jobs.some((job) => !usesTimedLocalEncoding(job))) {
         if (!supportedRecorder)
@@ -58,6 +60,7 @@ export function LocalExport({
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "予約できません。");
     } finally {
+      preparingReservation = false;
       adding.current = false;
       setPreparing(false);
       releaseIdleExportAudio();
