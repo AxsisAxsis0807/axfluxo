@@ -1,3 +1,4 @@
+import { ALL_VERSIONS_FILE_GAP_SECONDS } from "../../services/video/local-project";
 import { AudioLines, ChevronDown, ChevronUp, Scissors } from "lucide-react";
 import type { ReactNode } from "react";
 import { versionRows, type AudioEdit } from "./all-versions-edit";
@@ -109,7 +110,7 @@ export default function AllVersionsAudioCards({
         <footer>
           <div className="av-between">
             <span>曲間</span>
-            <strong>1.5秒（固定）</strong>
+            <strong>{ALL_VERSIONS_FILE_GAP_SECONDS}秒（固定）</strong>
           </div>
           <p className="av-gap-note">別ファイルの間にのみ入ります。素材内のVersion境界には入りません。</p>
         </footer>
