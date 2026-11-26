@@ -551,20 +551,29 @@ test("a blocked reservation never reports success before storage commits", async
   await title.fill("NO SPACE");
   await page.getByLabel("バージョン名（改行区切り）").fill("Original");
   await page.evaluate(() => {
-    const state = window as typeof window & { denyReservation?: () => void };
-    Object.defineProperty(navigator.storage, "estimate", {
+    const state = window as unknown as {
+      denyReservation?: () => void;
+      localExportQueue: { pause: () => void };
+    };
+    state.localExportQueue.pause();
+    // Install the controlled StorageManager on the navigator itself so its
+    // estimator survives WebKit's native-wrapper lifetime.
+    Object.defineProperty(navigator, "storage", {
       configurable: true,
-      value: () => new Promise<StorageEstimate>((resolve) => {
-        state.denyReservation = () => resolve({ quota: 1, usage: 1 });
-      }),
+      value: {
+        estimate: () => new Promise<StorageEstimate>((resolve) => {
+          state.denyReservation = () => resolve({ quota: 1, usage: 1 });
+        }),
+      },
     });
   });
   await page.getByRole("button", { name: "端末内で書き出す", exact: true }).click();
   const exports = page.getByRole("region", { name: "端末内書き出し" });
-  await expect.poll(async () => ({
-    hook: await page.evaluate(() => typeof (window as typeof window & { denyReservation?: () => void }).denyReservation),
-    status: await exports.getByRole("status").textContent(),
-  })).toMatchObject({ hook: "function" });
+  await expect.poll(async () => {
+    const hook = await page.evaluate(() => typeof (window as typeof window & { denyReservation?: () => void }).denyReservation);
+    const message = await exports.getByRole("status").textContent();
+    return `${hook}: ${message}`;
+  }).toMatch(/^function:/);
   await expect(page.getByText("現在の設定で予約しました。", { exact: false })).toHaveCount(0);
   await title.fill("EDITABLE");
   await page.evaluate(() =>
