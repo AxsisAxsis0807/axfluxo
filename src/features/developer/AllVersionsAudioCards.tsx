@@ -111,7 +111,7 @@ export default function AllVersionsAudioCards({
             <span>曲間</span>
             <strong>1.5秒（固定）</strong>
           </div>
-          <p className="av-gap-note">通常の書き出しでは曲間0秒です。</p>
+          <p className="av-gap-note">別ファイルの間にのみ入ります。素材内のVersion境界には入りません。</p>
         </footer>
       </div>
       <style>{cardStyles}</style>
