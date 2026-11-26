@@ -136,7 +136,7 @@ const cardStyles = `.av-panel {
   line-height: 1.4;
 }
 
-.av-panel.av-panel > label {
+.local-video-tool .av-panel > label {
   display: grid;
   gap: 12px;
   color: var(--editor-muted);
@@ -151,6 +151,7 @@ const cardStyles = `.av-panel {
   border: 1px solid #555;
   background: transparent;
   color: #f5f5f5;
+  font-family: inherit;
   line-height: 1.25;
 }
 
@@ -217,6 +218,7 @@ const cardStyles = `.av-panel {
 .av-version {
   color: var(--editor-muted);
   margin-top: 4px;
+  font-size: 1rem;
   white-space: pre-wrap;
 }
 

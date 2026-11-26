@@ -464,6 +464,8 @@ test("All Versions mobile cards keep names and trim attached to each reordered f
   await page.setViewportSize({ width: 390, height: 844 });
   await open(page);
   await page.goto("https://recovery.test/all");
+  const css = await readFile("src/app/globals.css", "utf8");
+  await page.addStyleTag({ content: css.replace(/^@import[^;]+;/, "") });
 
   const picker = page.getByLabel("端末の素材", { exact: true });
   await expect(picker).toBeEnabled({ timeout: 35_000 });
@@ -488,6 +490,7 @@ test("All Versions mobile cards keep names and trim attached to each reordered f
   await expect(move(4, "下")).toBeDisabled();
   await expect(page.getByLabel("開始秒", { exact: true })).toHaveCount(0);
   await expect(page.locator('audio[id^="local-media-"]')).toHaveCount(0);
+  await names.blur();
   await page.getByRole("region", { name: "基本情報" }).screenshot({
     path: info.outputPath("all-versions-mobile.png"),
   });
@@ -520,4 +523,8 @@ test("All Versions mobile cards keep names and trim attached to each reordered f
   await card(3).getByRole("button", { name: "素材を外す" }).click();
   await expect(page.getByRole("region", { name: "音源管理・並べ替え" })).toContainText("3曲");
   await expect(card(3)).toContainText(`${song} - Over Slowed.mp3`);
+  const longFile = `${"longFilename".repeat(16)}.mp3`;
+  await picker.setInputFiles({ name: longFile, mimeType: "audio/mpeg", buffer });
+  await expect(card(4)).toContainText(longFile);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
