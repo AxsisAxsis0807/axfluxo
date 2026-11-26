@@ -1,4 +1,4 @@
-import { ExportQueue } from "./export-queue";
+import { ExportQueue, type ExportEntry } from "./export-queue";
 import { encodeLocal, usesTimedLocalEncoding, type LocalEncodeJob } from "./local-encode";
 import { isUnlocked } from "../developer/local-lock";
 let audio: AudioContext | undefined;
@@ -120,6 +120,7 @@ let initialized: Promise<void> | undefined;
 let restored = false;
 let persistenceTail = Promise.resolve();
 let persistenceEnabled = false;
+let lastPublishedEntries: ExportEntry[] = [];
 let recoveryFailure = "";
 const recoveryListeners = new Set<() => void>();
 export const subscribeRecovery = (listener: () => void) => {
@@ -159,6 +160,9 @@ function initializeExportRecovery() {
         signal.throwIfAborted();
         const wasPaused = localExportQueue.getSnapshot().paused;
         localExportQueue.restore(entries);
+        // Restoring existing rows is a read of the queue. A pause/resume that
+        // leaves all rows intact does not need an IDB write or asset collection.
+        lastPublishedEntries = [...entries];
         restored = true;
         persistenceEnabled = true;
         setRecoveryError("");
@@ -200,12 +204,14 @@ export async function reserveLocalExports(jobs: LocalEncodeJob[], rest: boolean)
   }
 }
 
-let previousCount = 0;
 localExportQueue.subscribe(() => {
   if (!persistenceEnabled) return;
   const { entries } = localExportQueue.getSnapshot();
-  if (!entries.length && !previousCount) return;
-  previousCount = entries.length;
+  if (
+    entries.length === lastPublishedEntries.length &&
+    entries.every((entry, index) => entry === lastPublishedEntries[index])
+  ) return;
+  lastPublishedEntries = entries;
   const save = persistenceTail.then(() => saveExportEntries(entries));
   persistenceTail = save;
   void save.catch(stopPersistence);
@@ -260,13 +266,13 @@ export function retryRecoveryPersistence() {
     const before = localExportQueue.getSnapshot();
     await saveExportEntries(before.entries);
     persistenceTail = Promise.resolve();
-    previousCount = before.entries.length;
+    lastPublishedEntries = before.entries;
     persistenceEnabled = true;
     setRecoveryError("");
     // Replay any queue changes made while the retry was writing its snapshot.
     const current = localExportQueue.getSnapshot();
     if (before !== current) {
-      previousCount = current.entries.length;
+      lastPublishedEntries = current.entries;
       persistenceTail = saveExportEntries(current.entries);
       void persistenceTail.catch(stopPersistence);
       await persistenceTail;

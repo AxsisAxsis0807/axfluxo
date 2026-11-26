@@ -403,8 +403,9 @@ test("new session does not read or delete archived media", async ({ page }) => {
 test("reload during lease renewal keeps archived work restorable", async ({ page }) => {
   test.setTimeout(90_000);
   await page.addInitScript(() => {
-    const state = window as typeof window & { reloadAtLease?: boolean; assetReads?: string[] };
+    const state = window as typeof window & { reloadAtLease?: boolean; assetReads?: string[]; jobWrites?: number };
     state.assetReads = [];
+    state.jobWrites = 0;
     const get = IDBObjectStore.prototype.get;
     IDBObjectStore.prototype.get = function (key) {
       if (this.name === "assets") state.assetReads!.push(String(key));
@@ -413,6 +414,7 @@ test("reload during lease renewal keeps archived work restorable", async ({ page
     const put = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function (value, key) {
       const result = put.call(this, value, key);
+      if (this.name === "jobs") state.jobWrites!++;
       if (state.reloadAtLease && this.name === "meta" && key === "lease" &&
           this.transaction.objectStoreNames.length === 1) {
         state.reloadAtLease = false;
@@ -451,6 +453,8 @@ test("reload during lease renewal keeps archived work restorable", async ({ page
   const reads = await page.evaluate(() => (window as typeof window & { assetReads?: string[] }).assetReads);
   expect(reads?.some((key) => key.includes("output:legacy-output"))).toBe(true);
   expect(reads?.some((key) => key.includes("legacy-fixture"))).toBe(false);
+  await durable(page);
+  expect(await page.evaluate(() => (window as typeof window & { jobWrites?: number }).jobWrites)).toBe(0);
 });
 
 test("All Versions mobile cards keep names and trim attached to each reordered file", async ({ page }, info) => {
