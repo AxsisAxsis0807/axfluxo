@@ -4,7 +4,8 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-test("device encoder joins trimmed audio/video or reports an unavailable encoder", async ({
+for (const gap of [0, 1.5]) {
+  test(`device encoder joins trimmed audio/video with ${gap}s gap or reports an unavailable encoder`, async ({
   page,
 }) => {
   const dir = await mkdtemp(join(tmpdir(), "local-encode-")),
@@ -68,7 +69,7 @@ test("device encoder joins trimmed audio/video or reports an unavailable encoder
       return original.call(this);
     };
   });
-  await page.goto("https://encode.test/");
+  await page.goto("https://encode.test/" + (gap ? "#gap" : ""));
   await expect(page.getByRole("checkbox")).toBeChecked();
   const available = await page.evaluate(
     () =>
@@ -129,6 +130,21 @@ test("device encoder joins trimmed audio/video or reports an unavailable encoder
   for (let i = 0; i + 4 <= pcm.length; i += 4)
     energy += pcm.readFloatLE(i) ** 2;
   expect(Math.sqrt(energy / (pcm.length / 4))).toBeGreaterThan(0.005);
-  expect(Number(info.format.duration)).toBeGreaterThan(0.8);
-  expect(Number(info.format.duration)).toBeLessThan(2);
+  expect(Number(info.format.duration)).toBeGreaterThan(0.8 + gap);
+  expect(Number(info.format.duration)).toBeLessThan(2 + gap);
+  if (gap) {
+    const rms = (start: number, end: number) => {
+      let sum = 0, count = 0;
+      for (let i = Math.round(start * 8000) * 4; i < Math.min(pcm.length, Math.round(end * 8000) * 4); i += 4) {
+        sum += pcm.readFloatLE(i) ** 2;
+        count++;
+      }
+      expect(count).toBeGreaterThan(0);
+      return Math.sqrt(sum / count);
+    };
+    expect(rms(0.1, 0.4)).toBeGreaterThan(0.005);
+    expect(rms(0.85, 1.65)).toBeLessThan(0.003);
+    expect(rms(2.05, 2.35)).toBeGreaterThan(0.005);
+  }
 });
+}
