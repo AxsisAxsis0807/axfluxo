@@ -1,5 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
+  ALL_VERSIONS_FILE_GAP_SECONDS,
+  localIntervals,
   localProjectIssue,
   type LocalProjectData,
 } from "../../src/services/video/local-project";
@@ -59,4 +61,26 @@ it("detects MIME support through the actual API and never calls WebM MP4", () =>
   expect(recorderType()).toBe("video/webm;codecs=vp8,opus");
   vi.stubGlobal("MediaRecorder", { isTypeSupported: () => false });
   expect(recorderType()).toBeNull();
+});
+
+it("adds fixed gaps only between trimmed source files, not internal version boundaries", () => {
+  const first = { start: 1, end: 5, duration: 6, markers: "3" };
+  const second = { start: 2, end: 5, duration: 7, markers: "" };
+  const third = { start: 0, end: 2, duration: 2, markers: "" };
+  const fourth = { start: 1, end: 3, duration: 3, markers: "" };
+  const gap = ALL_VERSIONS_FILE_GAP_SECONDS;
+  expect(gap).toBe(1);
+  expect(localIntervals([first], gap)).toEqual([
+    { start: 0, end: 2 }, { start: 2, end: 4 },
+  ]);
+  expect(localIntervals([first, second, third, fourth], gap)).toEqual([
+    { start: 0, end: 2 }, { start: 2, end: 4 },
+    { start: 5, end: 8 }, { start: 9, end: 11 },
+    { start: 12, end: 14 },
+  ]);
+  expect(localIntervals([second, first], gap)).toEqual([
+    { start: 0, end: 3 }, { start: 4, end: 6 },
+    { start: 6, end: 8 },
+  ]);
+  expect(localIntervals([first, second]).at(-1)?.end).toBe(7);
 });

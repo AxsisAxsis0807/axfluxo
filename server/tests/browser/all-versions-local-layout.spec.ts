@@ -10,7 +10,7 @@ test("All Versions local jobs draw the cover, centered title band and version ti
       resolveDir: resolve("."),
       contents: `
         import { buildLocalJobs } from './src/services/video/local-project';
-        window.inspectLayout = async (layout) => {
+        window.inspectLayout = async (layout, multiple = false) => {
           const canvas = document.createElement('canvas');
           canvas.width = canvas.height = 32;
           const cover = canvas.getContext('2d');
@@ -20,7 +20,10 @@ test("All Versions local jobs draw the cover, centered title band and version ti
           const [job] = await buildLocalJobs({
             mode: 'all-versions', layout, cover: canvas.toDataURL(),
             names: 'PASA!(NORMAL)\\n日本語 Café',
-            sources: [{ file, url: 'unused', start: 1, end: 5, duration: 6, markers: '3' }],
+            sources: multiple ? [
+              { file, url: 'unused', start: 1, end: 3, duration: 6, markers: '' },
+              { file, url: 'unused', start: 3, end: 5, duration: 6, markers: '' },
+            ] : [{ file, url: 'unused', start: 1, end: 5, duration: 6, markers: '3' }],
             ranges: [],
           });
           canvas.width = job.width;
@@ -46,7 +49,8 @@ test("All Versions local jobs draw the cover, centered title band and version ti
               legacyTitle: sample(660, 872, 600, 98).white,
             };
           }
-          return [0, 1, 2, 3, 4, 1].map(draw);
+          if (multiple && job.gapBetweenPiecesSeconds !== 1) throw Error('Missing production gap');
+          return (multiple ? [0, 1, 2, 2.5, 4, 5] : [0, 1, 2, 3, 4, 1]).map(draw);
         };
       `,
     },
@@ -72,15 +76,15 @@ test("All Versions local jobs draw the cover, centered title band and version ti
     clock: { white: number };
     legacyTitle: number;
   };
-  const draw = (layout?: string) =>
+  const draw = (layout?: string, multiple = false) =>
     page.evaluate(
-      (value) =>
+      ({ layout: value, multiple }) =>
         (
           window as unknown as {
-            inspectLayout: (layout?: string) => Promise<Sample[]>;
+            inspectLayout: (layout?: string, multiple?: boolean) => Promise<Sample[]>;
           }
-        ).inspectLayout(value),
-      layout,
+        ).inspectLayout(value, multiple),
+      { layout, multiple },
     );
   const [start, normal, boundary, slowed, end, seek] = await draw();
   expect(normal.cover).toBe(176);
@@ -99,4 +103,17 @@ test("All Versions local jobs draw the cover, centered title band and version ti
   expect(legacy.cover).toBeLessThan(normal.cover);
   expect(legacy.title.white).toBe(0);
   expect(legacy.legacyTitle).toBeGreaterThan(100);
+  const [, before, gapStart, gapMiddle, after, final] = await draw(undefined, true);
+  for (const frame of [gapStart, gapMiddle, final]) {
+    expect(frame.cover).toBe(before.cover);
+    expect(frame.title.white).toBe(0);
+    expect(frame.clock.white).toBe(0);
+  }
+  expect(after.title.white).toBeGreaterThan(100);
+  expect(after.clock).toEqual(before.clock);
+  const [, legacyBefore, legacyGapStart, legacyGapMiddle, legacyAfter, legacyFinal] = await draw("provisional-v1", true);
+  for (const frame of [legacyGapStart, legacyGapMiddle, legacyFinal])
+    expect(frame.legacyTitle).toBe(0);
+  expect(legacyBefore.legacyTitle).toBeGreaterThan(100);
+  expect(legacyAfter.legacyTitle).toBeGreaterThan(100);
 });

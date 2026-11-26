@@ -27,11 +27,15 @@ export type Source = {
   markers: string;
 };
 export type Range = { id: string; start: number; end: number; name: string };
+export const ALL_VERSIONS_FILE_GAP_SECONDS = 1;
+
 export function localIntervals(
   sources: Pick<Source, "start" | "end" | "duration" | "markers">[],
+  gapBetweenFiles = 0,
 ) {
   let offset = 0;
-  return sources.flatMap((s) => {
+  return sources.flatMap((s, index) => {
+    if (index) offset += gapBetweenFiles;
     if (
       ![s.start, s.end, s.duration].every(Number.isFinite) ||
       s.start < 0 ||
@@ -174,7 +178,7 @@ async function createLocalJobs(
       },
     }));
   }
-  const intervals = localIntervals(sources),
+  const intervals = localIntervals(sources, ALL_VERSIONS_FILE_GAP_SECONDS),
     labels = names.replace(/\r\n?/g, "\n").split("\n");
   if (labels.length !== intervals.length || labels.some((v) => !v.trim()))
     throw Error(
@@ -195,6 +199,7 @@ async function createLocalJobs(
   return [
     {
       filename: "All Versions.mp4",
+      gapBetweenPiecesSeconds: ALL_VERSIONS_FILE_GAP_SECONDS,
       timestamped: true,
       width: 1920,
       height: 1080,

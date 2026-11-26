@@ -46,7 +46,8 @@ export default function LocalCompositionPreview({
         const piece = job.pieces[selectedIndex],
           offset = job.pieces
             .slice(0, selectedIndex)
-            .reduce((sum, p) => sum + p.end - p.start, 0);
+            .reduce((sum, p) => sum + p.end - p.start, 0) +
+          selectedIndex * (job.gapBetweenPiecesSeconds ?? 0);
         job.draw(
           ctx,
           drawingMedia,

@@ -51,7 +51,11 @@ test("All Versions writes source-clock MP4 with trimmed audio and unique frame t
               mode:"all-versions", cover:canvas.toDataURL(), names:"First\\nSecond\\nThird",
               ranges:[], sources,
             });
-            const job = { ...composition, width:320, height:180, gapBetweenPiecesSeconds:gap };
+            if (composition.gapBetweenPiecesSeconds !== 1) throw Error("Production job missing fixed gap");
+            const job = { ...composition, width:320, height:180 };
+            // Keep the original zero-gap encoder control case; the 1s case
+            // uses the real production recipe without injecting a gap.
+            if (gap === 0) job.gapBetweenPiecesSeconds = 0;
             if (!usesTimedLocalEncoding(job)) return false;
             // Force a scheduling stall at the in-file marker.
             const draw = job.draw;
@@ -60,7 +64,7 @@ test("All Versions writes source-clock MP4 with trimmed audio and unique frame t
                 const until = performance.now() + 180;
                 while (performance.now() < until) {}
               }
-              draw(ctx, media, time < 4 ? time : time < 4 + gap ? Infinity : time - gap);
+              draw(ctx, media, gap === 0 && time >= 4 ? time + 1 : time);
             };
             let result;
             try {
@@ -103,7 +107,7 @@ test("All Versions writes source-clock MP4 with trimmed audio and unique frame t
     await page.goto(url);
     await page.addScriptTag({ content: bundle.outputFiles[0].text });
 
-    for (const gap of [0, 1.5]) {
+    for (const gap of [0, 1]) {
       const supported = await page.evaluate(
         (seconds) =>
           (window as unknown as { run: (n: number) => Promise<boolean> }).run(
