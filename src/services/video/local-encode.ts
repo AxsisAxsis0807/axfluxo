@@ -306,7 +306,11 @@ async function recordLocal(
   recorder.onerror = () => {
     recordError = Error("端末内エンコードに失敗しました。");
   };
-  const total = job.pieces.reduce((n, p) => n + p.end - p.start, 0);
+  const gap = job.gapBetweenPiecesSeconds ?? 0;
+  if (!Number.isFinite(gap) || gap < 0)
+    throw Error("音源間の無音秒数が不正です。");
+  const total = job.pieces.reduce((n, p) => n + p.end - p.start, 0) +
+    Math.max(0, job.pieces.length - 1) * gap;
   let recordingStarted = false;
   let elapsed = 0;
   let outputBytes = 0;
@@ -321,8 +325,26 @@ async function recordLocal(
     } else collect?.call(recorder, event);
   };
   try {
-    for (const piece of job.pieces) {
+    for (const [index, piece] of job.pieces.entries()) {
       signal.throwIfAborted();
+      // Keep the existing recorder and audio graph running during the explicit
+      // inter-file silence. Do not include source loading time in the gap.
+      if (index && gap) {
+        recorder.resume();
+        const started = performance.now();
+        for (;;) {
+          signal.throwIfAborted();
+          if (recordError) throw recordError;
+          const seconds = Math.min(gap, (performance.now() - started) / 1000);
+          drawFrame(elapsed + seconds);
+          progress((elapsed + seconds) / total);
+          if (seconds >= gap) break;
+          await wait(Math.min(16, (gap - seconds) * 1000), signal);
+        }
+        recorder.pause();
+        elapsed += gap;
+        budget.processing += gap;
+      }
       const url = await piece.url();
       signal.throwIfAborted();
       const ready = mediaReady(media, "loadeddata", signal);
