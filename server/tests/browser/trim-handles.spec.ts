@@ -59,6 +59,7 @@ async function open(page: Page, mode: string) {
   await page.goto(`https://trim.test/${mode}`);
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled();
   await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
+  if (mode === "all") await page.getByRole("button", { name: "切り取り", exact: true }).click();
   await expect(page.getByTestId("video-timeline")).toBeVisible();
 }
 async function visibleHandle(handle: Locator) {
@@ -291,6 +292,7 @@ for (const mode of ["all", "fnf"]) {
     );
     await page.reload();
     await page.getByRole("button", { name: /前回の作業を再開/ }).click({ timeout: 35000 });
+    if (mode === "all") await page.getByRole("button", { name: "切り取り", exact: true }).click({ timeout: 35000 });
     await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
     // Recovery deliberately waits for the previous tab's ~20s writer lease.
     await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({

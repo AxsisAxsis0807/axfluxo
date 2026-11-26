@@ -193,7 +193,7 @@ for (const scenario of [
         buffer: await readFile(cover),
       });
       await page
-        .getByLabel("version名（1行に1つ）")
+        .getByLabel("バージョン名（改行区切り）")
         .fill(files.map((_, i) => `local version ${i + 1}`).join("\n"));
       // Keep the imported default end on every browser. Full MP3/WAV
       // decoding must succeed without the old manual 0.9-second trim.
@@ -213,6 +213,8 @@ for (const scenario of [
     await page
       .getByRole("button", { name: "端末のテンプレートを読み込む" })
       .click();
+    if (mode === "all-versions")
+      await page.getByRole("article", { name: "音源 1", exact: true }).getByRole("button", { name: "切り取り", exact: true }).click();
     if (scenario === "failed-waveform")
       await expect(
         page.getByText(/この素材の音声形式を端末で解析できません/),
