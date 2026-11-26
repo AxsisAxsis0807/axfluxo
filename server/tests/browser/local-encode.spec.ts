@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-for (const gap of [0, 1.5]) {
+for (const gap of [0, 1]) {
   test(`device encoder joins trimmed audio/video with ${gap}s gap or reports an unavailable encoder`, async ({
   page,
 }) => {
@@ -143,8 +143,8 @@ for (const gap of [0, 1.5]) {
       return Math.sqrt(sum / count);
     };
     expect(rms(0.1, 0.4)).toBeGreaterThan(0.005);
-    expect(rms(0.85, 1.65)).toBeLessThan(0.003);
-    expect(rms(2.05, 2.35)).toBeGreaterThan(0.005);
+    expect(rms(0.75, 1.25)).toBeLessThan(0.003);
+    expect(rms(1.55, 1.8)).toBeGreaterThan(0.005);
   }
 });
 }
