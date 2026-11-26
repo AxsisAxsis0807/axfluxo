@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 let bundle: string, source: string, mp3: string;
@@ -148,13 +148,9 @@ test("All Versions accepts MP3 and has an unrestricted iOS picker fallback; FNF 
   expect(await fallback.getAttribute("accept")).toBeNull();
 
   await picker.setInputFiles(mp3);
-  await expect(
-    page.getByRole("group", { name: /素材 1：tone\.mp3/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("article", { name: "音源 1", exact: true })).toContainText("tone.mp3");
   await fallback.setInputFiles(mp3);
-  await expect(
-    page.getByRole("group", { name: /素材 2：tone\.mp3/ }),
-  ).toBeVisible();
+  await expect(page.getByRole("article", { name: "音源 2", exact: true })).toContainText("tone.mp3");
 });
 test("All Versions has one active native decoder and releases it when switching or closing previews", async ({
   page,
@@ -165,19 +161,23 @@ test("All Versions has one active native decoder and releases it when switching 
   const picker = page.getByLabel("端末の素材", { exact: true });
   await expect(picker).toBeEnabled({ timeout: 35000 });
   await picker.setInputFiles([source, source]);
-  await expect(page.getByRole("group", { name: /素材 2：source\.mp4/ })).toBeVisible();
+  await expect(page.getByRole("article", { name: "音源 2", exact: true })).toContainText("source.mp4");
+  const trim = (index: number) => page.getByRole("article", { name: `音源 ${index}` })
+    .getByRole("button", { name: "切り取り", exact: true });
+  await trim(1).click();
   const active = page.locator('audio[id^="local-media-"]');
   await expect(active).toHaveCount(1);
   await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
   const first = await active.getAttribute("id");
   expect(await active.getAttribute("preload")).toBe("metadata");
+  await trim(2).click();
   await page.getByRole("button", { name: "素材 2 のプレビューを読み込む" }).click();
   await expect(active).toHaveCount(1);
   expect(await active.getAttribute("id")).not.toBe(first);
   await page.getByRole("button", { name: "素材 2 のプレビューを閉じる" }).click();
   await expect(active).toHaveCount(0);
-  await expect(page.getByRole("group", { name: /素材 1：source\.mp4/ })).toBeVisible();
-  await expect(page.getByRole("group", { name: /素材 2：source\.mp4/ })).toBeVisible();
+  await expect(page.getByRole("article", { name: "音源 1", exact: true })).toContainText("source.mp4");
+  await expect(page.getByRole("article", { name: "音源 2", exact: true })).toContainText("source.mp4");
 });
 test("All Versions composition uses audio-only playback and a cover canvas", async ({
   page,
@@ -186,7 +186,7 @@ test("All Versions composition uses audio-only playback and a cover canvas", asy
   await open(page);
   await page.goto("https://recovery.test/all");
   await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
-  await page.getByLabel("version名（1行に1つ）").fill("ONE");
+  await page.getByLabel("バージョン名（改行区切り）").fill("ONE");
   await page.getByLabel("カバー画像").setInputFiles({
     name: "cover.png",
     mimeType: "image/png",
@@ -457,4 +457,76 @@ test("reload during lease renewal keeps archived work restorable", async ({ page
   await expect(page.getByLabel("譜面名", { exact: true })).toHaveValue("ARCHIVED", { timeout: 35000 });
   await expect(page.getByRole("button", { name: "素材 1 のプレビューを読み込む" })).toBeVisible();
   await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
+});
+
+test("All Versions mobile cards keep names and trim attached to each reordered file", async ({ page }, info) => {
+  test.setTimeout(90_000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(page);
+  await page.goto("https://recovery.test/all");
+  const css = await readFile("src/app/globals.css", "utf8");
+  await page.addStyleTag({ content: css.replace(/^@import[^;]+;/, "") });
+
+  const picker = page.getByLabel("端末の素材", { exact: true });
+  await expect(picker).toBeEnabled({ timeout: 35_000 });
+  const title = page.getByLabel("曲名", { exact: true });
+  const names = page.getByLabel("バージョン名（改行区切り）");
+  const card = (index: number) => page.getByRole("article", { name: `音源 ${index}`, exact: true });
+  const trim = (index: number) => card(index).getByRole("button", { name: "切り取り", exact: true });
+  const move = (index: number, direction: "上" | "下") =>
+    card(index).getByRole("button", { name: `音源 ${index} を${direction}へ移動` });
+  const song = "BROS SUCH A DIGGER FUNK";
+  const versions = ["Original", "Slowed", "Super Slowed", "Over Slowed"];
+  const buffer = await readFile(mp3);
+  await picker.setInputFiles(versions.map((version, index) => ({
+    name: `${song}${index ? ` - ${version}` : ""}.mp3`,
+    mimeType: "audio/mpeg",
+    buffer,
+  })));
+  await title.fill(song);
+  await names.fill(versions.join("\n"));
+  await expect(card(4)).toContainText("Over Slowed");
+  await expect(move(1, "上")).toBeDisabled();
+  await expect(move(4, "下")).toBeDisabled();
+  await expect(page.getByLabel("開始秒", { exact: true })).toHaveCount(0);
+  await expect(page.locator('audio[id^="local-media-"]')).toHaveCount(0);
+  await expect(page.getByText("1.5秒（固定）", { exact: true })).toBeVisible();
+  await expect(page.getByText("通常の書き出しでは曲間0秒です。", { exact: true })).toBeVisible();
+  await names.blur();
+  await page.getByRole("region", { name: "基本情報" }).screenshot({
+    path: info.outputPath("all-versions-mobile.png"),
+  });
+  await title.fill(song.repeat(8));
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await title.fill(song);
+
+  await trim(2).click();
+  await expect(trim(2)).toHaveAttribute("aria-expanded", "true");
+  await card(2).getByLabel("開始秒", { exact: true }).fill("0.25");
+  await trim(2).click();
+  await names.fill(versions.slice(0, 2).join("\n"));
+  await move(2, "上").click();
+  await move(1, "下").click();
+  await move(2, "下").click();
+  await expect(names).toHaveValue("Original\n\nSlowed");
+  await expect(card(3)).toContainText(`${song} - Slowed.mp3`);
+  await expect(trim(3)).toHaveAttribute("aria-expanded", "false");
+  await trim(3).click();
+  await expect(card(3).getByLabel("開始秒", { exact: true })).toHaveValue("0.25");
+
+  await durable(page);
+  await page.reload();
+  await resumeSaved(page);
+  await expect(title).toHaveValue(song);
+  await expect(names).toHaveValue("Original\n\nSlowed");
+  await expect(trim(3)).toHaveAttribute("aria-expanded", "false");
+  await trim(3).click();
+  await expect(card(3).getByLabel("開始秒", { exact: true })).toHaveValue("0.25");
+  await card(3).getByRole("button", { name: "素材を外す" }).click();
+  await expect(page.getByRole("region", { name: "音源管理・並べ替え" })).toContainText("3曲");
+  await expect(card(3)).toContainText(`${song} - Over Slowed.mp3`);
+  const longFile = `${"longFilename".repeat(16)}.mp3`;
+  await picker.setInputFiles({ name: longFile, mimeType: "audio/mpeg", buffer });
+  await expect(card(4)).toContainText(longFile);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });

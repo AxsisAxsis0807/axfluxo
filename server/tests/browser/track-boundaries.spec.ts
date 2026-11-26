@@ -73,6 +73,7 @@ async function open(page: Page) {
     mimeType: "audio/wav",
     buffer: wav(),
   });
+  await page.getByRole("button", { name: "切り取り", exact: true }).click();
   await expect(page.getByTestId("video-timeline")).toBeVisible();
 }
 async function pinch(page: Page, factor: number) {
@@ -174,6 +175,7 @@ test("PCM analysis, candidate navigation, candidate addition, audition, deletion
   );
   await page.reload();
   await page.getByRole("button", { name: /前回の作業を再開/ }).click({timeout:35000});
+  await page.getByRole("button", { name: "切り取り", exact: true }).click({ timeout: 35000 });
   await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
     timeout: 35000,
@@ -294,6 +296,7 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
   );
   await page.reload();
   await page.getByRole("button", { name: /前回の作業を再開/ }).click({timeout:35000});
+  await page.getByRole("button", { name: "切り取り", exact: true }).click({ timeout: 35000 });
   await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
     timeout: 35000,
@@ -442,7 +445,7 @@ test("three direct boundaries persist through move, nearest deletion and reload"
     );
   }
   await page
-    .getByRole("textbox", { name: "version名（1行に1つ）", exact: true })
+    .getByRole("textbox", { name: "バージョン名（改行区切り）", exact: true })
     .fill("one\ntwo\nthree\nfour");
   for (const endpoint of [0, 42]) {
     await seek(endpoint);
@@ -483,13 +486,14 @@ test("three direct boundaries persist through move, nearest deletion and reload"
   );
   await page.reload();
   await page.getByRole("button", { name: /前回の作業を再開/ }).click({timeout:35000});
+  await page.getByRole("button", { name: "切り取り", exact: true }).click({ timeout: 35000 });
   await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
     timeout: 35000,
   });
   await expect(field).toHaveValue("10,21.05,30");
   await expect(
-    page.getByRole("textbox", { name: "version名（1行に1つ）", exact: true }),
+    page.getByRole("textbox", { name: "バージョン名（改行区切り）", exact: true }),
   ).toHaveValue("one\ntwo\nthree\nfour");
   await expect(
     page.getByRole("button", { name: "Version境界を削除", exact: true }),

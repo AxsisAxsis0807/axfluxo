@@ -4,6 +4,15 @@ import { isInteriorBoundary } from "../../services/video/timeline-math";
 import LocalCompositionPreview from "./LocalCompositionPreview";
 import LocalMediaPreview from "./LocalMediaPreview";
 import LocalTimeline from "./LocalTimeline";
+import AllVersionsAudioCards from "./AllVersionsAudioCards";
+import {
+  exportNames,
+  reorderAudio,
+  updateAudio,
+  withAudioOrder,
+  type AudioEdit,
+  type LocalEditorProject,
+} from "./all-versions-edit";
 import { LocalExport } from "../video-common/LocalExport";
 import { type LocalEncodeJob } from "../../services/video/local-encode";
 import { isUnlocked } from "../../services/developer/local-lock";
@@ -107,9 +116,20 @@ export default function LocalVideoTool({
   const [coverId, setCoverId] = useState("");
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewJobs, setPreviewJobs] = useState<LocalEncodeJob[]>([]);
-  const [sources, setSources] = useState<Source[]>([]),
-    [cover, setCover] = useState(""),
-    [names, setNames] = useState("");
+  const [audio, setAudio] = useState<AudioEdit>({ sources: [], names: "" });
+  const { sources, names } = audio;
+  const [cover, setCover] = useState("");
+  const [songTitle, setSongTitle] = useState("");
+  const [openTrimId, setOpenTrimId] = useState<string | null>(null);
+  const [previewKey, setPreviewKey] = useState("");
+  const key = JSON.stringify([songTitle, names, layout, cover, sources.map(
+    ({ id, start, end, markers }) => [id, start, end, markers],
+  )]);
+  const currentPreviewKey = useRef(key);
+  currentPreviewKey.current = key;
+  function setNames(value: string) {
+    setAudio((old) => ({ ...old, names: value }));
+  }
   const [ranges, setRanges] = useState<Range[]>([]),
     [username, setUsername] = useState("@username");
   const [scaleFactor, setScaleFactor] = useState(1);
@@ -188,7 +208,9 @@ export default function LocalVideoTool({
         ...(fnf ? [] : old),
         ...lightweight,
       ]);
-      setSources((old) => (fnf ? selected : [...old, ...selected]));
+      setAudio((old) => fnf
+        ? { ...old, sources: selected }
+        : withAudioOrder(old, [...old.sources, ...selected]));
       setRanges(
         fnf
           ? [
@@ -216,7 +238,7 @@ export default function LocalVideoTool({
           key,
           JSON.stringify({
             names,
-            ...(fnf ? {} : { layout }),
+            ...(fnf ? {} : { layout, songTitle }),
             username,
             cropTop,
             cropBottom,
@@ -242,6 +264,7 @@ export default function LocalVideoTool({
         )
           throw Error();
         setNames(value.names);
+        if (!fnf) setSongTitle(typeof value.songTitle === "string" ? value.songTitle : "");
         if (!fnf && (value.layout === "provisional-v1" || value.layout === "reference-pasa-v1"))
           setLayout(value.layout);
         setUsername(value.username);
@@ -333,7 +356,7 @@ export default function LocalVideoTool({
       );
     }, startup ? 90_000 : 15_000);
     void (async () => {
-      let saved: LocalProjectData | undefined;
+      let saved: LocalEditorProject | undefined;
       let handedOff = false;
       try {
         if (!startup) {
@@ -383,13 +406,13 @@ export default function LocalVideoTool({
             ...(saved.cover ? [saved.cover] : []),
           );
           setProjectId(saved.id);
-          setSources(saved.sources);
+          setAudio({ sources: saved.sources, names: saved.names });
+          setSongTitle(typeof saved.songTitle === "string" ? saved.songTitle : "");
           setActivePreviewId(null);
           setAnalysisEnabledIds([]);
           setCover(saved.cover);
           setCoverFile(saved.coverFile);
           setCoverId(saved.coverId);
-          setNames(saved.names);
           setLayout(saved.layout ?? "reference-pasa-v1");
           setRest(saved.rest ?? true);
           setRanges(saved.ranges);
@@ -432,9 +455,9 @@ export default function LocalVideoTool({
   }, [mode, startup, startupAttempt]);
   useEffect(() => {
     if (!ready || !projectId) return;
-    const snapshot: LocalProjectData = {
+    const snapshot: LocalEditorProject = {
       rest,
-      ...(fnf ? {} : { layout }),
+      ...(fnf ? {} : { layout, songTitle }),
       id: projectId,
       mode,
       sources,
@@ -477,6 +500,7 @@ export default function LocalVideoTool({
     coverFile,
     coverId,
     names,
+    songTitle,
     ranges,
     username,
     scaleFactor,
@@ -493,7 +517,7 @@ export default function LocalVideoTool({
       cover,
       coverFile,
       coverId,
-      names,
+      names: fnf ? names : exportNames(songTitle, names),
       ranges,
       username,
       scaleFactor,
@@ -502,137 +526,18 @@ export default function LocalVideoTool({
     };
   }
   function patch(id: string, value: Partial<Source>) {
-    setSources((old) => old.map((s) => (s.id === id ? { ...s, ...value } : s)));
+    setAudio((old) => fnf
+      ? { ...old, sources: old.sources.map((s) => s.id === id ? { ...s, ...value } : s) }
+      : updateAudio(old, id, value));
   }
-  if (!ready)
+  function toggleTrim(id: string) {
+    const closing = openTrimId === id;
+    if (closing || activePreviewId !== id) setActivePreviewId(null);
+    setOpenTrimId(closing ? null : id);
+  }
+  function renderTrim(s: Source, i: number) {
     return (
-      <main style={{ maxWidth: 1000, margin: "auto", padding: 16 }}>
-        <h1>{fnf ? "FNF Showcase Maker" : "All Versions Video Maker"}</h1>
-        <p role="status">{saveStatus}</p>
-        {startupFailed && !startup && (
-          <section aria-label="保存領域の再試行">
-            <p>保存データは削除していません。この操作で保存済みのプロジェクトや完成動画は削除されません。SafariのほかのAxFluxoタブを閉じてからお試しください。</p>
-            <button onClick={() => {
-              setStartupFailed(false);
-              setSavedOverview(undefined);
-              setSaveStatus("保存データを確認中…");
-              setStartupAttempt((attempt) => attempt + 1);
-            }}>
-              保存データの確認を再試行
-            </button>
-          </section>
-        )}
-        {savedOverview && !startup && !startupFailed && (
-          <section aria-label="保存済み作業の選択">
-            <h2>作業を開始</h2>
-            <p>新規作成では前の動画・完成品を読み込みません。保存データは残ります。</p>
-            <button onClick={() => setStartup({ kind: "new" })}>
-              新しく作成（古い動画を読み込まない）
-            </button>
-            {savedOverview.projects.map((project) => (
-              <button
-                key={project.id}
-                onClick={() => setStartup({ kind: "resume", id: project.id })}
-              >
-                {project.active ? "前回の作業を再開" : "保存済みの作業を再開"}
-                ：{project.label}（素材{project.sourceCount}件）
-              </button>
-            ))}
-            {savedOverview.jobs > 0 && (
-              <>
-                <p>保存済みの書き出しジョブ：{savedOverview.jobs}件</p>
-                {!savedOverview.projects.length && (
-                  <button onClick={() => setStartup({ kind: "resume" })}>
-                    保存済みの書き出しキューを復元
-                  </button>
-                )}
-              </>
-            )}
-            <p>
-              大きな保存素材を復元するとメモリ不足になる場合があります。
-              その場合は新しく作成してください。
-            </p>
-          </section>
-        )}
-        {startup && startupFailed && (
-          <button
-            onClick={() => {
-              setStartupFailed(false);
-              setStartup(undefined);
-              setSavedOverview(undefined);
-              setSaveStatus("保存データを確認中…");
-            }}
-          >
-            作業の選択に戻る
-          </button>
-        )}
-      </main>
-    );
-  return (
-    <main
-      className="local-video-tool"
-      style={{ maxWidth: 1000, margin: "auto", padding: 16 }}
-    >
-      <h1>{fnf ? "FNF Showcase Maker" : "All Versions Video Maker"}</h1>
-      {!fnf && (
-        <label>
-          レイアウト
-          <select value={layout} onChange={(event) => {
-            setLayout(event.target.value === "provisional-v1" ? "provisional-v1" : "reference-pasa-v1");
-            setPreviewJobs([]);
-          }}>
-            <option value="reference-pasa-v1">参考動画再現（中央文字＋経過時間）</option>
-            <option value="provisional-v1">従来レイアウト</option>
-          </select>
-        </label>
-      )}
-      <p>
-        端末の素材を選択して制作します。素材・動画のアップロードは行いません。端末内機能はログイン・動画APIなしで利用できます。
-      </p>
-      <p
-        role="status"
-        data-testid="local-save-status"
-        style={{ minHeight: "5.7em" }}
-      >
-        {saveStatus}
-      </p>
-      <button onClick={() => template(true)}>テンプレートを端末に保存</button>
-      <button onClick={() => template(false)}>
-        端末のテンプレートを読み込む
-      </button>
-      <label>
-        端末の素材
-        <input
-          aria-label="端末の素材"
-          type="file"
-          accept={fnf ? "video/*" : ALL_VERSIONS_MEDIA_ACCEPT}
-          multiple={!fnf}
-          disabled={loading}
-          onChange={(e) => chooseFiles(e.currentTarget)}
-        />
-      </label>
-      {!fnf && (
-        <label>
-          MP3などが表示されない場合（ファイル形式の制限なし）
-          <input
-            aria-label="形式の制限なしで素材を選択"
-            type="file"
-            multiple
-            disabled={loading}
-            onChange={(e) => chooseFiles(e.currentTarget)}
-          />
-        </label>
-      )}
-      {loading && <p role="status">素材を読み込んでいます…</p>}
-      {error && <p role="alert">{error}</p>}
-      {!fnf && (
-        <p>All Versionsの素材プレビューは音声のみ再生します。元動画の高解像度映像を読み込まず、iPhoneの負荷を抑えます。</p>
-      )}
-      {sources.map((s, i) => (
-        <fieldset key={s.id}>
-          <legend>
-            素材 {i + 1}：{s.file.name}（{s.duration.toFixed(2)}秒）
-          </legend>
+      <>
           {activePreviewId === s.id ? (
             <>
               <button onClick={() => setActivePreviewId(null)}>
@@ -793,28 +698,163 @@ export default function LocalVideoTool({
                 />
               </label>
               <button
-                disabled={i === 0}
-                onClick={() =>
-                  setSources((old) => {
-                    const next = [...old];
-                    [next[i - 1], next[i]] = [next[i], next[i - 1]];
-                    return next;
-                  })
-                }
-              >
-                素材を前へ
-              </button>
-              <button
-                onClick={() =>
-                  setSources((old) => old.filter((v) => v.id !== s.id))
-                }
+                onClick={() => {
+                  setActivePreviewId(null);
+                  setOpenTrimId(null);
+                  setAnalysisEnabledIds((ids) => ids.filter((id) => id !== s.id));
+                  setAudio((old) => withAudioOrder(old, old.sources.filter((item) => item.id !== s.id)));
+                }}
               >
                 素材を外す
               </button>
             </>
           )}
+      </>
+    );
+  }
+  if (!ready)
+    return (
+      <main style={{ maxWidth: 1000, margin: "auto", padding: 16 }}>
+        <h1>{fnf ? "FNF Showcase Maker" : "All Versions Video Maker"}</h1>
+        <p role="status">{saveStatus}</p>
+        {startupFailed && !startup && (
+          <section aria-label="保存領域の再試行">
+            <p>保存データは削除していません。この操作で保存済みのプロジェクトや完成動画は削除されません。SafariのほかのAxFluxoタブを閉じてからお試しください。</p>
+            <button onClick={() => {
+              setStartupFailed(false);
+              setSavedOverview(undefined);
+              setSaveStatus("保存データを確認中…");
+              setStartupAttempt((attempt) => attempt + 1);
+            }}>
+              保存データの確認を再試行
+            </button>
+          </section>
+        )}
+        {savedOverview && !startup && !startupFailed && (
+          <section aria-label="保存済み作業の選択">
+            <h2>作業を開始</h2>
+            <p>新規作成では前の動画・完成品を読み込みません。保存データは残ります。</p>
+            <button onClick={() => setStartup({ kind: "new" })}>
+              新しく作成（古い動画を読み込まない）
+            </button>
+            {savedOverview.projects.map((project) => (
+              <button
+                key={project.id}
+                onClick={() => setStartup({ kind: "resume", id: project.id })}
+              >
+                {project.active ? "前回の作業を再開" : "保存済みの作業を再開"}
+                ：{project.label}（素材{project.sourceCount}件）
+              </button>
+            ))}
+            {savedOverview.jobs > 0 && (
+              <>
+                <p>保存済みの書き出しジョブ：{savedOverview.jobs}件</p>
+                {!savedOverview.projects.length && (
+                  <button onClick={() => setStartup({ kind: "resume" })}>
+                    保存済みの書き出しキューを復元
+                  </button>
+                )}
+              </>
+            )}
+            <p>
+              大きな保存素材を復元するとメモリ不足になる場合があります。
+              その場合は新しく作成してください。
+            </p>
+          </section>
+        )}
+        {startup && startupFailed && (
+          <button
+            onClick={() => {
+              setStartupFailed(false);
+              setStartup(undefined);
+              setSavedOverview(undefined);
+              setSaveStatus("保存データを確認中…");
+            }}
+          >
+            作業の選択に戻る
+          </button>
+        )}
+      </main>
+    );
+  return (
+    <main
+      className="local-video-tool"
+      style={{ maxWidth: 1000, margin: "auto", padding: 16 }}
+    >
+      <h1>{fnf ? "FNF Showcase Maker" : "All Versions Video Maker"}</h1>
+      {!fnf && (
+        <label>
+          レイアウト
+          <select value={layout} onChange={(event) => {
+            setLayout(event.target.value === "provisional-v1" ? "provisional-v1" : "reference-pasa-v1");
+            setPreviewJobs([]);
+          }}>
+            <option value="reference-pasa-v1">参考動画再現（中央文字＋経過時間）</option>
+            <option value="provisional-v1">従来レイアウト</option>
+          </select>
+        </label>
+      )}
+      <p>
+        端末の素材を選択して制作します。素材・動画のアップロードは行いません。端末内機能はログイン・動画APIなしで利用できます。
+      </p>
+      <p
+        role="status"
+        data-testid="local-save-status"
+        style={{ minHeight: "5.7em" }}
+      >
+        {saveStatus}
+      </p>
+      <button onClick={() => template(true)}>テンプレートを端末に保存</button>
+      <button onClick={() => template(false)}>
+        端末のテンプレートを読み込む
+      </button>
+      <label>
+        端末の素材
+        <input
+          aria-label="端末の素材"
+          type="file"
+          accept={fnf ? "video/*" : ALL_VERSIONS_MEDIA_ACCEPT}
+          multiple={!fnf}
+          disabled={loading}
+          onChange={(e) => chooseFiles(e.currentTarget)}
+        />
+      </label>
+      {!fnf && (
+        <label>
+          MP3などが表示されない場合（ファイル形式の制限なし）
+          <input
+            aria-label="形式の制限なしで素材を選択"
+            type="file"
+            multiple
+            disabled={loading}
+            onChange={(e) => chooseFiles(e.currentTarget)}
+          />
+        </label>
+      )}
+      {loading && <p role="status">素材を読み込んでいます…</p>}
+      {error && <p role="alert">{error}</p>}
+      {!fnf && (
+        <p>All Versionsの素材プレビューは音声のみ再生します。元動画の高解像度映像を読み込まず、iPhoneの負荷を抑えます。</p>
+      )}
+      {fnf ? sources.map((s, i) => (
+        <fieldset key={s.id}>
+          <legend>
+            素材 {i + 1}：{s.file.name}（{s.duration.toFixed(2)}秒）
+          </legend>
+          {renderTrim(s, i)}
         </fieldset>
-      ))}
+      )) : (
+        <AllVersionsAudioCards
+          edit={audio}
+          songTitle={songTitle}
+          onTitle={setSongTitle}
+          onNames={setNames}
+          openId={openTrimId}
+          onToggle={toggleTrim}
+          onMove={(id, direction) => setAudio((old) => reorderAudio(old, id, direction))}
+          renderTrim={(index) => renderTrim(sources[index], index)}
+        />
+      )}
       {fnf ? (
         <>
           <label>
@@ -928,14 +968,6 @@ export default function LocalVideoTool({
               }}
             />
           </label>
-          <label>
-            version名（1行に1つ）
-            <textarea
-              rows={6}
-              value={names}
-              onChange={(e) => setNames(e.target.value)}
-            />
-          </label>
         </>
       )}
       <button
@@ -943,7 +975,11 @@ export default function LocalVideoTool({
         onClick={() => {
           setActivePreviewId(null);
           void prepare(false)
-            .then(setPreviewJobs)
+            .then((jobs) => {
+              if (!fnf && currentPreviewKey.current !== key) return;
+              setPreviewKey(key);
+              setPreviewJobs(jobs);
+            })
             .catch((e) =>
               setError(
                 e instanceof Error ? e.message : "プレビューを準備できません。",
@@ -953,7 +989,7 @@ export default function LocalVideoTool({
       >
         合成プレビューを更新
       </button>
-      {previewJobs.length > 0 && (
+      {previewJobs.length > 0 && (fnf || previewKey === key) && (
         <>
           <label>
             プレビューする出力
