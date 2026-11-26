@@ -49,8 +49,8 @@ test("All Versions local jobs draw the cover, centered title band and version ti
               legacyTitle: sample(660, 872, 600, 98).white,
             };
           }
-          if (multiple && job.gapBetweenPiecesSeconds !== 1) throw Error('Missing production gap');
-          return (multiple ? [0, 1, 2, 2.5, 4, 5] : [0, 1, 2, 3, 4, 1]).map(draw);
+          if (multiple && job.gapBetweenPiecesSeconds !== 0) throw Error('Unexpected production gap');
+          return (multiple ? [0, 1, 2, 2, 3, 4] : [0, 1, 2, 3, 4, 1]).map(draw);
         };
       `,
     },
