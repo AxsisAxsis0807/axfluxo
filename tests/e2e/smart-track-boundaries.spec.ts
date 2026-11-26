@@ -45,6 +45,7 @@ test("published worker detects local PCM and creates a Version boundary without 
     mimeType: "audio/wav",
     buffer: pcm,
   });
+  await page.getByRole("button", { name: "切り取り", exact: true }).click();
   await page
     .getByRole("button", { name: "曲間を自動検出", exact: true })
     .click();
