@@ -19,7 +19,7 @@ createRoot(document.getElementById("root")!).render(
       prepare={async () => [
         {
           filename: "encoded.mp4",
-          gapBetweenPiecesSeconds: location.hash === "#gap" ? 1.5 : 0,
+          gapBetweenPiecesSeconds: location.hash === "#gap" ? 1 : 0,
           width: 320,
           height: 180,
           pieces: [
