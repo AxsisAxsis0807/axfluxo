@@ -490,7 +490,7 @@ test("All Versions mobile cards keep names and trim attached to each reordered f
   await expect(move(4, "下")).toBeDisabled();
   await expect(page.getByLabel("開始秒", { exact: true })).toHaveCount(0);
   await expect(page.locator('audio[id^="local-media-"]')).toHaveCount(0);
-  await expect(page.getByText("1.5秒（固定）", { exact: true })).toBeVisible();
+  await expect(page.getByText("1秒（固定）", { exact: true })).toBeVisible();
   await expect(page.getByText("別ファイルの間にのみ入ります。素材内のVersion境界には入りません。", { exact: true })).toBeVisible();
   await names.blur();
   await page.getByRole("region", { name: "基本情報" }).screenshot({
