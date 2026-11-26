@@ -69,18 +69,18 @@ it("adds fixed gaps only between trimmed source files, not internal version boun
   const third = { start: 0, end: 2, duration: 2, markers: "" };
   const fourth = { start: 1, end: 3, duration: 3, markers: "" };
   const gap = ALL_VERSIONS_FILE_GAP_SECONDS;
-  expect(gap).toBe(1.5);
+  expect(gap).toBe(1);
   expect(localIntervals([first], gap)).toEqual([
     { start: 0, end: 2 }, { start: 2, end: 4 },
   ]);
   expect(localIntervals([first, second, third, fourth], gap)).toEqual([
     { start: 0, end: 2 }, { start: 2, end: 4 },
-    { start: 5.5, end: 8.5 }, { start: 10, end: 12 },
-    { start: 13.5, end: 15.5 },
+    { start: 5, end: 8 }, { start: 9, end: 11 },
+    { start: 12, end: 14 },
   ]);
   expect(localIntervals([second, first], gap)).toEqual([
-    { start: 0, end: 3 }, { start: 4.5, end: 6.5 },
-    { start: 6.5, end: 8.5 },
+    { start: 0, end: 3 }, { start: 4, end: 6 },
+    { start: 6, end: 8 },
   ]);
   expect(localIntervals([first, second]).at(-1)?.end).toBe(7);
 });
