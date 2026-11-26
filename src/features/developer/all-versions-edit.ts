@@ -1,7 +1,4 @@
-import type {
-  LocalProjectData,
-  Source,
-} from "../../services/video/local-project";
+import type { Source } from "../../services/video/local-project";
 
 export type AudioEdit = { sources: Source[]; names: string };
 

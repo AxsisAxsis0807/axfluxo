@@ -145,10 +145,14 @@ export function flushExportRecovery() {
 
 function initializeExportRecovery() {
   return (initialized ??= (async () => {
-    const signal = AbortSignal.timeout(90_000);
+    const controller = new AbortController();
+    const { signal } = controller;
     await new Promise<void>((resolve, reject) => {
-      const timeout = () => reject(Error("書き出しデータの復旧が応答していません。保存済みデータは削除していません。"));
-      signal.addEventListener("abort", timeout, { once: true });
+      const timer = setTimeout(() => {
+        const error = Error("書き出しデータの復旧が応答していません。保存済みデータは削除していません。");
+        controller.abort(error);
+        reject(error);
+      }, 90_000);
       void (async () => {
         await acquireStartupRecoveryLease(signal, () => {});
         const entries = await loadExportEntries();
@@ -159,7 +163,7 @@ function initializeExportRecovery() {
         persistenceEnabled = true;
         setRecoveryError("");
         if (!wasPaused) localExportQueue.resume();
-      })().then(resolve, reject).finally(() => signal.removeEventListener("abort", timeout));
+      })().then(resolve, reject).finally(() => clearTimeout(timer));
     });
   })().catch((error) => {
     initialized = undefined;
@@ -179,7 +183,7 @@ export async function discoverExportRecovery(signal: AbortSignal) {
     if (count) await initializeExportRecovery();
     else if (!initialized) setRecoveryError("");
   } catch (error) {
-    if (!signal.aborted) setRecoveryError(recoveryMessage(error));
+    if (!signal.aborted && !restored) setRecoveryError(recoveryMessage(error));
   }
 }
 

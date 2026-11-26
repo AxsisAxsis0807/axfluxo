@@ -454,16 +454,14 @@ export async function listLocalProjects(
       .sort((a, b) => Number(b.active) - Number(a.active));
 }
 export async function countStoredExportEntries(): Promise<number> {
-  const db = await open();
-  const transaction = db.transaction("jobs", "readonly");
-  const count = request(transaction.objectStore("jobs").count());
-  const signal = AbortSignal.timeout(15_000);
+  const count = readDiscovery(["jobs"], (tx) =>
+    request(tx.objectStore("jobs").count()),
+  );
   return new Promise<number>((resolve, reject) => {
-    const timeout = () => {
+    const timer = setTimeout(() => {
       reject(Error("書き出しデータの確認が応答していません。保存済みデータは削除していません。"));
-    };
-    signal.addEventListener("abort", timeout, { once: true });
-    void count.then(resolve, reject).finally(() => signal.removeEventListener("abort", timeout));
+    }, 15_000);
+    void count.then(resolve, reject).finally(() => clearTimeout(timer));
   });
 }
 export async function loadLocalProjectById(
