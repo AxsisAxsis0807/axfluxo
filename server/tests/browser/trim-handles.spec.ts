@@ -226,7 +226,7 @@ async function dragTouch(
   }
 }
 for (const mode of ["all", "fnf"]) {
-  test(`${mode}: touch edits endpoints, snaps, preserves order and restores autosaved trim`, async ({
+  test(`${mode}: touch edits endpoints, snaps, preserves order and retains trim during editing`, async ({
     page,
   }) => {
     test.setTimeout(90000);
@@ -287,17 +287,12 @@ for (const mode of ["all", "fnf"]) {
       b = Number(await endField.inputValue());
     expect(a).toBeLessThan(b);
     expect(b - a).toBeCloseTo(0.016667, 5);
-    await expect(page.getByTestId("local-save-status")).toContainText(
-      "この端末に自動保存済み",
-    );
-    await page.reload();
-    await page.getByRole("button", { name: /前回の作業を再開/ }).click({ timeout: 35000 });
-    if (mode === "all") await page.getByRole("button", { name: "切り取り", exact: true }).click({ timeout: 35000 });
-    await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
-    // Recovery deliberately waits for the previous tab's ~20s writer lease.
-    await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
-      timeout: 35000,
-    });
+    if (mode === "all") {
+      const trim = page.getByRole("button", { name: "切り取り", exact: true });
+      await trim.click();
+      await trim.click();
+      await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
+    }
     await expect(startField).toHaveValue(String(a));
     await expect(endField).toHaveValue(String(b));
     await visibleHandle(start);

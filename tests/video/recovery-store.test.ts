@@ -151,7 +151,7 @@ it("keeps unsaved siblings and other projects, deleting only confirmed output an
   expect((await s.loadLocalProject(p.mode))?.id).toBe(p.id);
   expect((await s.loadExportEntries()).map((e) => e.id)).toEqual(["B"]);
   await s.saveExportEntries([]);
-  expect(await s.loadLocalProject(p.mode)).toBeUndefined();
+  expect((await s.loadLocalProject(p.mode))?.id).toBe(p.id);
   expect((await s.loadLocalProject(other.mode))?.id).toBe(other.id);
   expect(
     (await records("assets", true)).some((key) =>

@@ -16,15 +16,6 @@ type StoredEntry = Omit<
   order: number;
   recipe?: { project: StoredProject; index: number };
 };
-function fingerprint(value: unknown) {
-  return JSON.stringify(value, (_key, item) =>
-    item && typeof item === "object" && !Array.isArray(item)
-      ? Object.fromEntries(
-          Object.entries(item).sort(([a], [b]) => a.localeCompare(b)),
-        )
-      : item,
-  );
-}
 export class RecoveryLeaseError extends Error {}
 const DB = "axfluxo.local-video-recovery";
 const OWNER = crypto.randomUUID();
@@ -104,7 +95,7 @@ function done(tx: IDBTransaction) {
 export function recoveryMessage(error: unknown) {
   return error instanceof DOMException && error.name === "QuotaExceededError"
     ? "端末の保存容量が不足しています。自動復旧用の保存に失敗しました。元の素材と完成動画を保持してください。"
-    : `自動保存・復旧を利用できません。元の素材を保持してください。${error instanceof Error ? error.message : "保存領域を確認してください。"}`;
+    : `書き出しデータを保存・復旧できません。元の素材を保持してください。${error instanceof Error ? error.message : "保存領域を確認してください。"}`;
 }
 /** One writer for both tools and the shared queue. Every mutation rechecks the lease
  * in the same transaction; a frozen/expired tab cannot overwrite a new owner. */
@@ -463,9 +454,17 @@ export async function listLocalProjects(
       .sort((a, b) => Number(b.active) - Number(a.active));
 }
 export async function countStoredExportEntries(): Promise<number> {
-  return readDiscovery(["jobs"], (tx) =>
-    request(tx.objectStore("jobs").count()),
-  );
+  const db = await open();
+  const transaction = db.transaction("jobs", "readonly");
+  const count = request(transaction.objectStore("jobs").count());
+  const signal = AbortSignal.timeout(15_000);
+  return new Promise<number>((resolve, reject) => {
+    const timeout = () => {
+      reject(Error("書き出しデータの確認が応答していません。保存済みデータは削除していません。"));
+    };
+    signal.addEventListener("abort", timeout, { once: true });
+    void count.then(resolve, reject).finally(() => signal.removeEventListener("abort", timeout));
+  });
 }
 export async function loadLocalProjectById(
   mode: LocalProjectData["mode"],
@@ -598,29 +597,7 @@ export async function saveExportEntries(
         (!managedIds || managedIds.has(row.id))
       ) {
         jobs.delete(row.id);
-        // Deletion follows explicit per-output save confirmation. A newer edit or
-        // any remaining job keeps the project and all of its shared materials.
-        const project = row.recipe?.project;
-        if (
-          row.state === "completed" &&
-          project &&
-          !entries.some((e) => {
-            const other = e.recovery?.project ?? e.persistedRecipe?.project;
-            return other?.id === project.id && other.mode === project.mode;
-          })
-        ) {
-          const projects = tx.objectStore("projects");
-          const key = `${project.mode}:${project.id}`;
-          const current = await request(projects.get(key));
-          if (fingerprint(current) === fingerprint(project)) {
-            projects.delete(key);
-            const meta = tx.objectStore("meta");
-            if (
-              (await request(meta.get(`active:${project.mode}`))) === project.id
-            )
-              meta.delete(`active:${project.mode}`);
-          }
-        }
+        // Archived edit records remain roots even after their last output is saved.
       }
     for (const entry of entries) {
       const { input, result, recovery, persistedRecipe, ...metadata } = entry;
@@ -707,7 +684,15 @@ export async function loadExportEntries(): Promise<ExportEntry[]> {
       } finally {
         if (project) releaseProjectUrls(project);
       }
-    } else entries.push(entry);
+    } else {
+      // Older cloud-backed local jobs have no reloadable recipe. Keep the row
+      // visible without leaving a queued job that blocks the rest of the queue.
+      entries.push(
+        ["queued", "preparing", "rendering"].includes(entry.state)
+          ? { ...entry, state: "failed", error: "この端末内ジョブの素材を復旧できません。クラウド素材から再度書き出してください。" }
+          : entry,
+      );
+    }
   }
   return entries;
 }

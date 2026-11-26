@@ -1,5 +1,5 @@
 import { ExportQueue } from "./export-queue";
-import { encodeLocal, usesTimedLocalEncoding } from "./local-encode";
+import { encodeLocal, usesTimedLocalEncoding, type LocalEncodeJob } from "./local-encode";
 import { isUnlocked } from "../developer/local-lock";
 let audio: AudioContext | undefined;
 const budget = { processing: 0 };
@@ -115,12 +115,11 @@ export function releaseIdleExportAudio() {
 }
 localExportQueue.subscribe(releaseIdleExportAudio);
 
-// Start only from a mounted, unlocked tool. Hydration must finish before admission.
+// The queue owns storage initialization and the lease independently of editor mounts.
 let initialized: Promise<void> | undefined;
+let restored = false;
 let persistenceTail = Promise.resolve();
 let persistenceEnabled = false;
-// A new session may manage only its new jobs, never previous saved output.
-let managedEntries: Set<string> | undefined;
 let recoveryFailure = "";
 const recoveryListeners = new Set<() => void>();
 export const subscribeRecovery = (listener: () => void) => {
@@ -130,74 +129,143 @@ export const subscribeRecovery = (listener: () => void) => {
   };
 };
 export const getRecoveryError = () => recoveryFailure;
-function reportRecoveryFailure(error: unknown) {
-  recoveryFailure = recoveryMessage(error);
+function setRecoveryError(message: string) {
+  recoveryFailure = message;
   recoveryListeners.forEach((listener) => listener());
+}
+function stopPersistence(error: unknown) {
+  if (!persistenceEnabled) return;
+  persistenceEnabled = false;
+  setRecoveryError(recoveryMessage(error));
+  localExportQueue.pause(true);
 }
 export function flushExportRecovery() {
   return persistenceTail;
 }
-export function initializeExportRecovery() {
+
+function initializeExportRecovery() {
   return (initialized ??= (async () => {
-    localExportQueue.pause();
-    const entries = await loadExportEntries();
-    localExportQueue.restore(entries);
-    managedEntries = undefined;
-    persistenceEnabled = true;
-    localExportQueue.resume();
+    const signal = AbortSignal.timeout(90_000);
+    await new Promise<void>((resolve, reject) => {
+      const timeout = () => reject(Error("書き出しデータの復旧が応答していません。保存済みデータは削除していません。"));
+      signal.addEventListener("abort", timeout, { once: true });
+      void (async () => {
+        await acquireStartupRecoveryLease(signal, () => {});
+        const entries = await loadExportEntries();
+        signal.throwIfAborted();
+        const wasPaused = localExportQueue.getSnapshot().paused;
+        localExportQueue.restore(entries);
+        restored = true;
+        persistenceEnabled = true;
+        setRecoveryError("");
+        if (!wasPaused) localExportQueue.resume();
+      })().then(resolve, reject).finally(() => signal.removeEventListener("abort", timeout));
+    });
   })().catch((error) => {
     initialized = undefined;
-    reportRecoveryFailure(error);
+    setRecoveryError(recoveryMessage(error));
     throw error;
   }));
 }
-/** Admit a fresh editing session without restoring legacy media into RAM. */
-export function initializeNewExportSession() {
-  return (initialized ??= (async () => {
-    localExportQueue.pause();
-    await renewRecoveryLease();
-    localExportQueue.restore([]);
-    managedEntries = new Set<string>();
-    persistenceEnabled = true;
-    localExportQueue.resume();
-  })().catch((error) => {
-    initialized = undefined;
-    reportRecoveryFailure(error);
-    throw error;
-  }));
+
+export async function discoverExportRecovery(signal: AbortSignal) {
+  try {
+    if (initialized) {
+      await initialized;
+      return;
+    }
+    const count = await countStoredExportEntries();
+    signal.throwIfAborted();
+    if (count) await initializeExportRecovery();
+    else if (!initialized) setRecoveryError("");
+  } catch (error) {
+    if (!signal.aborted) setRecoveryError(recoveryMessage(error));
+  }
 }
+
+export async function reserveLocalExports(jobs: LocalEncodeJob[], rest: boolean) {
+  try {
+    await initializeExportRecovery();
+    if (!persistenceEnabled) throw Error(recoveryFailure);
+    localExportQueue.enqueue(jobs, rest);
+    // The runner also waits for persistence before it opens a decoder.
+    await flushExportRecovery();
+  } catch (error) {
+    if (recoveryFailure) throw Error(recoveryFailure, { cause: error });
+    throw error;
+  }
+}
+
+let previousCount = 0;
 localExportQueue.subscribe(() => {
   if (!persistenceEnabled) return;
-  const entries = localExportQueue.getSnapshot().entries;
-  if (managedEntries) entries.forEach((entry) => managedEntries!.add(entry.id));
-  const managed = managedEntries ? new Set(managedEntries) : undefined;
-  persistenceTail = persistenceTail
-    .catch(() => {})
-    .then(() => saveExportEntries(entries, managed));
-  void persistenceTail.catch((error) => {
-    // Do not recursively publish more failed writes.
-    persistenceEnabled = false;
-    reportRecoveryFailure(error);
-    localExportQueue.pause(true);
-  });
+  const { entries } = localExportQueue.getSnapshot();
+  if (!entries.length && !previousCount) return;
+  previousCount = entries.length;
+  const save = persistenceTail.then(() => saveExportEntries(entries));
+  persistenceTail = save;
+  void save.catch(stopPersistence);
 });
+
+let heartbeat: ReturnType<typeof setTimeout> | undefined;
+let renewing = false;
+let pageHidden = false;
+function scheduleHeartbeat() {
+  if (
+    pageHidden || renewing || heartbeat !== undefined ||
+    !persistenceEnabled || !localExportQueue.isRunning()
+  ) return;
+  heartbeat = setTimeout(() => {
+    heartbeat = undefined;
+    if (!persistenceEnabled || !localExportQueue.isRunning()) return;
+    renewing = true;
+    void renewRecoveryLease().catch(stopPersistence).finally(() => {
+      renewing = false;
+      scheduleHeartbeat();
+    });
+  }, 5000);
+}
+localExportQueue.subscribe(scheduleHeartbeat);
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => {
+    pageHidden = true;
+    clearTimeout(heartbeat);
+    heartbeat = undefined;
+  });
+  window.addEventListener("pageshow", () => {
+    pageHidden = false;
+    scheduleHeartbeat();
+  });
+}
 import {
+  acquireStartupRecoveryLease,
+  countStoredExportEntries,
   loadExportEntries,
   saveExportEntries,
   recoveryMessage,
   renewRecoveryLease,
 } from "./recovery-store";
 
-export async function retryRecoveryPersistence() {
-  if (!recoveryFailure) return;
-  await persistenceTail.catch(() => {});
-  await renewRecoveryLease();
-  await saveExportEntries(
-    localExportQueue.getSnapshot().entries,
-    managedEntries ? new Set(managedEntries) : undefined,
-  );
-  persistenceTail = Promise.resolve();
-  persistenceEnabled = true;
-  recoveryFailure = "";
-  recoveryListeners.forEach((listener) => listener());
+let retrying: Promise<void> | undefined;
+export function retryRecoveryPersistence() {
+  if (!restored) return initializeExportRecovery();
+  if (!recoveryFailure) return Promise.resolve();
+  return (retrying ??= (async () => {
+    await persistenceTail.catch(() => {});
+    await renewRecoveryLease();
+    const before = localExportQueue.getSnapshot();
+    await saveExportEntries(before.entries);
+    persistenceTail = Promise.resolve();
+    previousCount = before.entries.length;
+    persistenceEnabled = true;
+    setRecoveryError("");
+    // Replay any queue changes made while the retry was writing its snapshot.
+    const current = localExportQueue.getSnapshot();
+    if (before !== current) {
+      previousCount = current.entries.length;
+      persistenceTail = saveExportEntries(current.entries);
+      void persistenceTail.catch(stopPersistence);
+      await persistenceTail;
+    }
+  })().finally(() => { retrying = undefined; }));
 }

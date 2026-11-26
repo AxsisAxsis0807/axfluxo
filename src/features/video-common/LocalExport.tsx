@@ -7,7 +7,7 @@ import {
 } from "../../services/video/local-encode";
 import {
   allowExportAudio,
-  localExportQueue,
+  reserveLocalExports,
   releaseIdleExportAudio,
 } from "../../services/video/local-export-runtime";
 export function LocalExport({
@@ -49,9 +49,11 @@ export function LocalExport({
             "このブラウザーはCanvasの動画書き出しに対応していません。",
           );
       }
-      localExportQueue.enqueue(jobs, rest);
+      await reserveLocalExports(jobs, rest);
       setStatus(
-        "現在の設定で予約しました。下部の書き出しキューで確認できます。",
+        jobs.every((job) => job.recovery)
+          ? "現在の設定で予約しました。下部の書き出しキューで確認できます。"
+          : "このページでの書き出しを予約しました。中断時にジョブを復旧するにはサーバー書き出しを利用してください。",
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "予約できません。");
