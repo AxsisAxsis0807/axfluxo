@@ -106,9 +106,12 @@ export default function AllVersionsAudioCards({
             </article>
           );
         })}
-        <footer className="av-between">
-          <span>曲間</span>
-          <strong>0秒（固定）</strong>
+        <footer>
+          <div className="av-between">
+            <span>曲間</span>
+            <strong>1.5秒（固定）</strong>
+          </div>
+          <p className="av-gap-note">通常の書き出しでは曲間0秒です。</p>
         </footer>
       </div>
       <style>{cardStyles}</style>
@@ -179,9 +182,14 @@ const cardStyles = `.av-panel {
 }
 
 .av-between span,
+.av-gap-note,
 .av-file {
   color: var(--editor-muted);
   font-size: 0.875rem;
+}
+
+.av-gap-note {
+  margin: 4px 0 0;
 }
 
 .av-card {
