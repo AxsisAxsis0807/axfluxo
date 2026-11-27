@@ -221,13 +221,36 @@ test("All Versions composition uses audio-only playback and a cover canvas", asy
   await expect(composition.locator("video")).toHaveCount(0);
   await expect(composition.locator("canvas")).toBeVisible();
 });
-test("FNF edits stay in the page and its explicit template survives reload", async ({
+for (const method of ["fill", "keys"] as const) {
+test(`FNF edits stay in the page and its explicit template survives reload (${method})`, async ({
   page,
-}) => {
+}, info) => {
   test.setTimeout(90000);
+  const events: unknown[] = [];
+  const stages: unknown[] = [];
+  await page.exposeFunction("recordFNFInputEvent", (event: unknown) => { events.push(event); });
+  await page.addInitScript(() => {
+    for (const type of ["beforeinput", "input", "change", "focusin", "focusout", "keydown", "keyup"]) {
+      document.addEventListener(type, e => {
+        const el = e.target;
+        if (!(el instanceof HTMLInputElement) || el.type === "file") return;
+        void (window as unknown as { recordFNFInputEvent: (event: unknown) => Promise<void> }).recordFNFInputEvent({ type, time: performance.now(), trusted: e.isTrusted, value: el.value, attribute: el.getAttribute("value"), inputType: (e as InputEvent).inputType, label: el.closest("label")?.textContent });
+      }, true);
+    }
+  });
+  const chartName = page.getByLabel("譜面名", { exact: true });
+  async function checkpoint(stage: string) {
+    stages.push({ stage, ...await chartName.evaluate(el => ({ time: performance.now(), value: (el as HTMLInputElement).value, attribute: el.getAttribute("value") })) });
+    await expect(chartName, stage).toHaveValue("RESTORED");
+    // React renders the controlled value attribute from state as well as the live DOM value.
+    await expect(chartName, stage + " controlled value").toHaveAttribute("value", "RESTORED");
+  }
+  try {
   await open(page);
   await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
-  await page.getByLabel("譜面名", { exact: true }).fill("RESTORED");
+  if (method === "fill") await chartName.fill("RESTORED");
+  else await chartName.pressSequentially("RESTORED");
+  await checkpoint("after name input");
   await page
     .getByRole("button", { name: "中央に手動マーカー追加", exact: true })
     .click();
@@ -236,11 +259,16 @@ test("FNF edits stay in the page and its explicit template survives reload", asy
       .getByRole("region", { name: "Smart Track Boundary Detection" })
       .locator("li"),
   ).toContainText("manual");
+  await checkpoint("after marker");
   await page.getByLabel("開始秒", { exact: true }).fill("0.5");
+  await checkpoint("after start");
   await page.getByLabel("終了秒", { exact: true }).fill("2");
+  await checkpoint("after end");
   await page.getByRole("button", { name: "拡大", exact: true }).click();
-  await expect(page.getByLabel("譜面名", { exact: true })).toHaveValue("RESTORED");
+  await checkpoint("after zoom");
   await page.getByRole("button", { name: "テンプレートを端末に保存" }).click();
+  const savedName = await page.evaluate(() => JSON.parse(localStorage.getItem("axfluxo.local-video-template.fnf-showcase") ?? "null")?.ranges?.[0]?.name);
+  expect(savedName).toBe("RESTORED");
   expect(await inventory(page)).toEqual([[], [], []]);
   await page.reload();
   await assertBlankEditor(page);
@@ -261,7 +289,11 @@ test("FNF edits stay in the page and its explicit template survives reload", asy
   await expect(
     page.getByText("素材を選択してください。", { exact: true }).last(),
   ).toBeVisible();
+  } finally {
+    await info.attach("fnf-input-diagnostics", { body: JSON.stringify({ method, project: info.project.name, stages, events }, null, 2), contentType: "application/json" });
+  }
 });
+}
 test("durable queued jobs restart once; finished videos survive reload until each save is confirmed", async ({
   page,
 }, info) => {

@@ -6,6 +6,8 @@ on:
       - 'src/features/developer/LocalVideoTool.tsx'
       - 'src/services/video/recovery-store.ts'
       - 'server/tests/browser/recovery.spec.ts'
+      - 'server/tests/browser/local-encode.spec.ts'
+      - 'server/tests/browser/local-encode-fixture.tsx'
       - 'src/services/video/local-timed-encode.ts'
       - 'src/services/video/local-project.ts'
       - 'src/services/video/local-encode.ts'
@@ -46,7 +48,7 @@ jobs:
             sudo apt-get install -y ffmpeg
           fi
       - run: npx playwright install --with-deps chrome webkit
-      - run: npm run test:video:browser -- local-audio-eof local-timed-encode developer-entry recovery track-boundaries trim-handles cloud-local-recovery
+      - run: npm run test:video:browser -- local-audio-eof local-timed-encode local-encode developer-entry recovery track-boundaries trim-handles cloud-local-recovery
       - name: Full four-piece MP3 export and injected capture failures
         run: npm run test:video:browser -- local-canvas-resilience --retries=0
       - name: Repeat WebKit canvas capture recovery 10 times
@@ -59,3 +61,37 @@ jobs:
           name: audio-eof-test-results
           path: test-results/video-browser/
           if-no-files-found: ignore
+  fnf-input-comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: |
+          if ! command -v ffprobe >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+      - run: npx playwright install --with-deps chrome webkit
+      - name: Compare fill and sequential key input, 20 times each
+        run: npm run test:video:browser -- recovery --project=${{ matrix.browser }} --grep "FNF edits stay in the page" --repeat-each=20 --retries=0 --reporter=list,json
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: fnf-input-results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fnf-input-${{ matrix.browser }}
+          path: |
+            fnf-input-results.json
+            test-results/video-browser/
+          if-no-files-found: error
