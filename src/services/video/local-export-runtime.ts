@@ -26,12 +26,9 @@ export const localExportQueue = new ExportQueue(
     await flushExportRecovery();
     signal.throwIfAborted();
     if (job.needsCloudRebuild) {
-      if (!job.cloudRecovery) throw Error("復旧するジョブが不正です。");
-      const { buildCloudLocalJobs } = await import("./cloud-local-job");
-      const rebuilt = await buildCloudLocalJobs(job.cloudRecovery);
-      const next = rebuilt[job.cloudRecovery.index];
-      if (!next) throw Error("復旧するジョブが不正です。");
-      job = next;
+      update(0, "クラウド素材の設定を復旧しています…");
+      const { rebuildCloudLocalJob } = await import("./cloud-local-job");
+      job = await rebuildCloudLocalJob(job);
       signal.throwIfAborted();
     }
     const urls: string[] = [];

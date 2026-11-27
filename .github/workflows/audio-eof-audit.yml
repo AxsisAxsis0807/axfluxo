@@ -10,6 +10,10 @@ on:
       - 'src/services/video/local-project.ts'
       - 'src/services/video/local-encode.ts'
       - 'src/services/video/export-queue.ts'
+      - 'src/services/video/cloud-local-job.ts'
+      - 'tests/video/cloud-local-job.test.ts'
+      - 'server/tests/browser/cloud-local-recovery.spec.ts'
+      - 'server/tests/browser/cloud-local-recovery-fixture.ts'
       - 'server/tests/browser/local-audio-eof.spec.ts'
       - 'server/tests/browser/local-canvas-resilience.spec.ts'
       - 'server/tests/browser/developer-entry.spec.ts'
@@ -35,14 +39,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck && npm run lint
-      - run: npx vitest run tests/video/local-timed-audio-eof.test.ts tests/video/recovery-startup-lease.test.ts tests/video/recovery-store.test.ts
+      - run: npx vitest run tests/video/local-timed-audio-eof.test.ts tests/video/recovery-startup-lease.test.ts tests/video/recovery-store.test.ts tests/video/cloud-local-job.test.ts
       - run: |
           if ! command -v ffprobe >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y ffmpeg
           fi
       - run: npx playwright install --with-deps chrome webkit
-      - run: npm run test:video:browser -- local-audio-eof local-timed-encode developer-entry recovery track-boundaries trim-handles
+      - run: npm run test:video:browser -- local-audio-eof local-timed-encode developer-entry recovery track-boundaries trim-handles cloud-local-recovery
       - name: Full four-piece MP3 export and injected capture failures
         run: npm run test:video:browser -- local-canvas-resilience --retries=0
       - name: Repeat WebKit canvas capture recovery 10 times

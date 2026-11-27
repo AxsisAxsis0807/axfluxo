@@ -195,3 +195,13 @@ export async function buildCloudLocalJobs(value: CloudLocalRecipe, injected?: Au
     }));
   }
 }
+
+/** Shared by the queue runner and the reload regression. */
+export async function rebuildCloudLocalJob(job: RecoverableLocalJob, api?: AuthenticatedApi): Promise<RecoverableLocalJob> {
+  if (!job.needsCloudRebuild) return job;
+  if (!job.cloudRecovery) throw Error("復旧するジョブが不正です。");
+  const jobs = await buildCloudLocalJobs(job.cloudRecovery, api);
+  const next = jobs[job.cloudRecovery.index];
+  if (!next) throw Error("復旧するジョブが不正です。");
+  return next;
+}

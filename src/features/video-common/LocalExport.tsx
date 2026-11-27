@@ -53,7 +53,8 @@ export function LocalExport({
       }
       await reserveLocalExports(jobs, rest);
       setStatus(
-        "現在の設定で予約しました。下部の書き出しキューで確認できます。",
+        "現在の設定で予約しました。下部の書き出しキューで確認できます。" +
+          (jobs.some(job => job.cloudRecovery) ? " クラウド素材の復旧には同じアカウント、接続、元の素材が必要です。" : ""),
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "予約できません。");
