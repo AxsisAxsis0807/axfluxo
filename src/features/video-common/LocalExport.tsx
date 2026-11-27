@@ -1,9 +1,9 @@
 "use client";
 import { useRef, useState } from "react";
+import type { RecoverableLocalJob } from "../../services/video/cloud-local-job";
 import {
   recorderType,
   usesTimedLocalEncoding,
-  type LocalEncodeJob,
 } from "../../services/video/local-encode";
 import {
   allowExportAudio,
@@ -16,7 +16,7 @@ export function LocalExport({
   rest: savedRest,
   onRestChange,
 }: {
-  prepare: () => Promise<LocalEncodeJob[]>;
+  prepare: () => Promise<RecoverableLocalJob[]>;
   disabled: boolean;
   rest?: boolean;
   onRestChange?: (rest: boolean) => void;
@@ -53,9 +53,7 @@ export function LocalExport({
       }
       await reserveLocalExports(jobs, rest);
       setStatus(
-        jobs.every((job) => job.recovery)
-          ? "現在の設定で予約しました。下部の書き出しキューで確認できます。"
-          : "このページでの書き出しを予約しました。中断時にジョブを復旧するにはサーバー書き出しを利用してください。",
+        "現在の設定で予約しました。下部の書き出しキューで確認できます。",
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "予約できません。");

@@ -1,4 +1,5 @@
 import type { LocalEncodeJob } from "./local-encode";
+import type { CloudLocalRecipe, RecoverableLocalJob } from "./cloud-local-job";
 export type ExportState =
   "queued" | "preparing" | "rendering" | "completed" | "failed" | "cancelled";
 export type ExportEntry = {
@@ -13,14 +14,15 @@ export type ExportEntry = {
   state: ExportState;
   progress: number;
   message: string;
-  input?: LocalEncodeJob;
+  input?: RecoverableLocalJob;
+  cloudRecovery?: CloudLocalRecipe;
   recovery?: LocalEncodeJob["recovery"];
   rest: boolean;
   result?: { blob: Blob; filename: string; note?: string };
   error?: string;
 };
 export type ExportRunner = (
-  job: LocalEncodeJob,
+  job: RecoverableLocalJob,
   signal: AbortSignal,
   rest: boolean,
   update: (progress: number, message: string) => void,
@@ -64,7 +66,7 @@ export class ExportQueue {
     );
     this.publish();
   }
-  enqueue(jobs: LocalEncodeJob[], rest: boolean) {
+  enqueue(jobs: RecoverableLocalJob[], rest: boolean) {
     if (!jobs.length) throw Error("書き出す動画がありません。");
     if (this.entries.length + jobs.length > this.maxJobs)
       throw Error(
@@ -80,6 +82,7 @@ export class ExportQueue {
       message: "予約待ち",
       rest,
       recovery: job.recovery,
+      ...(job.cloudRecovery ? { cloudRecovery: job.cloudRecovery } : {}),
       input: { ...job, pieces: job.pieces.map((p) => ({ ...p })) },
     }));
     this.entries = [...this.entries, ...additions];

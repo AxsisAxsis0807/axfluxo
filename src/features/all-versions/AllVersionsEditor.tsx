@@ -1,8 +1,8 @@
 "use client";
 import { LocalExport } from "../video-common/LocalExport";
+import { buildCloudLocalJobs, type RecoverableLocalJob } from "../../services/video/cloud-local-job";
 import {
   imageForEncode,
-  type LocalEncodeJob,
 } from "../../services/video/local-encode";
 /* eslint-disable @next/next/no-img-element -- Private signed media and server-rasterized PNGs use native images without an optimization service. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -284,94 +284,9 @@ export function AllVersionsEditor({
       drawReferenceFrame(ctx, previewArtwork.canvas, frame, versions, project.design, drawPreviewTitle.current);
     } else ctx.drawImage(previewArtwork.canvas, 0, 0);
   }, [coverUrl, frame, previewArtwork, previewFontReady, previewHeight, project.design, showReference, versions]);
-  async function prepareLocal(): Promise<LocalEncodeJob[]> {
-    if (
-      !cloud ||
-      !remote ||
-      !project.document ||
-      !project.cover ||
-      projectIssues(project).length
-    )
-      throw Error("素材と名前を確認してください。");
-    const membership = await api!.me();
-    if (!membership.ok) throw Error("開発者権限を確認できません。");
-    const coverAccess = await cloud.access(project.cover.versionId);
-    if (!coverAccess.ok) throw Error(coverAccess.code);
-    const cover = await imageForEncode(coverAccess.data.url);
-    const overlays: HTMLImageElement[] = [];
-    if (reference) await loadReferenceFonts(names);
-    else for (let i = 0; i < versions.length; i++) {
-      const r = await remote.text(project, i);
-      overlays.push(await imageForEncode(`data:image/png;base64,${r.png}`));
-    }
-    const drawTitle = reference ? referenceCanvasTitle(names) : null;
-    const height = project.design.height,
-      width = (height * 16) / 9;
-    const artwork = reference ? referenceArtwork(cover, width, height) : null;
-    return [
-      {
-        filename: "All Versions.mp4",
-        timestamped: true,
-        width,
-        height,
-        pieces: project.document.clips.map((c) => ({
-          start: c.interval.startUs / 1e6,
-          end: c.interval.endUs / 1e6,
-          url: async () => {
-            const r = await cloud.access(c.source.versionId);
-            if (!r.ok) throw Error(r.code);
-            return r.data.url;
-          },
-        })),
-        draw: (ctx, _media, seconds) => {
-          if (artwork && drawTitle) {
-            drawReferenceFrame(ctx, artwork, Math.round(seconds * 60), versions,
-              project.design, drawTitle);
-            return;
-          }
-          ctx.save();
-          ctx.scale(width / 1920, height / 1080);
-          ctx.fillStyle = "black";
-          ctx.fillRect(0, 0, 1920, 1080);
-          ctx.save();
-          ctx.filter = "blur(24px)";
-          ctx.globalAlpha = 0.7;
-          const scale = Math.max(2150 / cover.width, 1210 / cover.height);
-          ctx.drawImage(
-            cover,
-            (1920 - cover.width * scale) / 2,
-            (1080 - cover.height * scale) / 2,
-            cover.width * scale,
-            cover.height * scale,
-          );
-          ctx.restore();
-          const size = 605,
-            crop = Math.min(cover.width, cover.height);
-          ctx.drawImage(
-            cover,
-            (cover.width - crop) / 2,
-            (cover.height - crop) / 2,
-            crop,
-            crop,
-            (1920 - size) / 2,
-            130,
-            size,
-            size,
-          );
-          ctx.fillStyle = "rgba(0,0,0,.48)";
-          ctx.fillRect(96, 842, 1728, 162);
-          const frame = Math.floor(seconds * 60),
-            i = versions.findIndex(
-              (v) => frame >= v.startFrame && frame < v.endFrame,
-            );
-          if (i >= 0) {
-            ctx.globalAlpha = textAlpha(frame, versions[i], project.design);
-            ctx.drawImage(overlays[i], 0, 0, 1920, 1080);
-          }
-          ctx.restore();
-        },
-      },
-    ];
+  async function prepareLocal(): Promise<RecoverableLocalJob[]> {
+    if (!api || !owner) throw Error("素材と名前を確認してください。");
+    return buildCloudLocalJobs({ version: 1, kind: "all-versions", ownerId: owner, index: 0, project }, api);
   }
   async function exportVideo() {
     if (rendered.current?.key === JSON.stringify(project)) {

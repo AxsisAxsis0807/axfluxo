@@ -1,5 +1,6 @@
 import { ExportQueue, type ExportEntry } from "./export-queue";
-import { encodeLocal, usesTimedLocalEncoding, type LocalEncodeJob } from "./local-encode";
+import { encodeLocal, usesTimedLocalEncoding } from "./local-encode";
+import type { RecoverableLocalJob } from "./cloud-local-job";
 import { isUnlocked } from "../developer/local-lock";
 let audio: AudioContext | undefined;
 const budget = { processing: 0 };
@@ -24,6 +25,15 @@ export const localExportQueue = new ExportQueue(
     }
     await flushExportRecovery();
     signal.throwIfAborted();
+    if (job.needsCloudRebuild) {
+      if (!job.cloudRecovery) throw Error("復旧するジョブが不正です。");
+      const { buildCloudLocalJobs } = await import("./cloud-local-job");
+      const rebuilt = await buildCloudLocalJobs(job.cloudRecovery);
+      const next = rebuilt[job.cloudRecovery.index];
+      if (!next) throw Error("復旧するジョブが不正です。");
+      job = next;
+      signal.throwIfAborted();
+    }
     const urls: string[] = [];
     try {
       const legacyRecorder = !usesTimedLocalEncoding(job);
@@ -191,10 +201,12 @@ export async function discoverExportRecovery(signal: AbortSignal) {
   }
 }
 
-export async function reserveLocalExports(jobs: LocalEncodeJob[], rest: boolean) {
+export async function reserveLocalExports(jobs: RecoverableLocalJob[], rest: boolean) {
   try {
     await initializeExportRecovery();
     if (!persistenceEnabled) throw Error(recoveryFailure);
+    if (jobs.some(job => !job.recovery && !job.cloudRecovery))
+      throw Error("復旧に必要な設定が不足しています。予約していません。");
     localExportQueue.enqueue(jobs, rest);
     // The runner also waits for persistence before it opens a decoder.
     await flushExportRecovery();

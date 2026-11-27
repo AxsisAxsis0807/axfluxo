@@ -603,6 +603,7 @@ export async function saveExportEntries(
       if (recipe) await publishAssets(tx, recipe.project);
       const row: StoredEntry = {
         ...metadata,
+        ...(entry.cloudRecovery ?? input?.cloudRecovery ? { cloudRecovery: entry.cloudRecovery ?? input?.cloudRecovery } : {}),
         order: managedIds
           ? previous.find((old) => old.id === entry.id)?.order ??
             previous.length + entries.indexOf(entry)
@@ -645,7 +646,23 @@ export async function loadExportEntries(): Promise<ExportEntry[]> {
       });
       continue;
     }
-    if (recipe) {
+    if (entry.cloudRecovery) {
+      try {
+        const { restoreCloudLocalJob } = await import("./cloud-local-job");
+        const input = restoreCloudLocalJob(entry.cloudRecovery);
+        const interrupted = ["queued", "preparing", "rendering"].includes(entry.state) || Boolean(entry.interrupted);
+        const attempts = (entry.recoveryAttempts ?? 0) + (interrupted ? 1 : 0);
+        entries.push({
+          ...entry, input, recoveryAttempts: attempts, interrupted: false,
+          state: interrupted ? attempts > 3 ? "failed" : "queued" : entry.state,
+          progress: interrupted ? 0 : entry.progress,
+          message: interrupted ? "中断した動画を先頭から再作成します" : entry.message,
+          error: attempts > 3 ? "復旧を3回試行しました。ログインと素材を確認して再試行してください。" : entry.error,
+        });
+      } catch {
+        entries.push({ ...entry, state: "failed", error: "クラウド復旧設定を読み込めません。保存データは保持しています。" });
+      }
+    } else if (recipe) {
       let project: LocalProjectData | undefined;
       try {
         project = await hydrate(recipe.project);
