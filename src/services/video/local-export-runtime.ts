@@ -129,6 +129,7 @@ let persistenceTail = Promise.resolve();
 let persistenceEnabled = false;
 let lastPublishedEntries: ExportEntry[] = [];
 let recoveryFailure = "";
+let pausedBeforePersistenceFailure = false;
 const recoveryListeners = new Set<() => void>();
 export const subscribeRecovery = (listener: () => void) => {
   recoveryListeners.add(listener);
@@ -144,6 +145,7 @@ function setRecoveryError(message: string) {
 function stopPersistence(error: unknown) {
   if (!persistenceEnabled) return;
   persistenceEnabled = false;
+  pausedBeforePersistenceFailure = localExportQueue.getSnapshot().paused;
   setRecoveryError(recoveryMessage(error));
   localExportQueue.pause(true);
 }
@@ -183,10 +185,12 @@ function initializeExportRecovery() {
   }));
 }
 
-export async function discoverExportRecovery(signal: AbortSignal) {
+export async function discoverExportRecovery(signal: AbortSignal, explicitRetry = false) {
   try {
     if (initialized) {
       await initialized;
+      signal.throwIfAborted();
+      if (explicitRetry && recoveryFailure) await retryRecoveryPersistence();
       return;
     }
     const count = await countStoredExportEntries();
@@ -194,7 +198,7 @@ export async function discoverExportRecovery(signal: AbortSignal) {
     if (count) await initializeExportRecovery();
     else if (!initialized) setRecoveryError("");
   } catch (error) {
-    if (!signal.aborted && !restored) setRecoveryError(recoveryMessage(error));
+    if (!signal.aborted && (!restored || explicitRetry)) setRecoveryError(recoveryMessage(error));
   }
 }
 
@@ -204,9 +208,17 @@ export async function reserveLocalExports(jobs: RecoverableLocalJob[], rest: boo
     if (!persistenceEnabled) throw Error(recoveryFailure);
     if (jobs.some(job => !job.recovery && !job.cloudRecovery))
       throw Error("復旧に必要な設定が不足しています。予約していません。");
-    localExportQueue.enqueue(jobs, rest);
-    // The runner also waits for persistence before it opens a decoder.
-    await flushExportRecovery();
+    const ids = localExportQueue.enqueue(jobs, rest, true);
+    // Capture this admission transaction, not a later progress transaction.
+    // Until it succeeds the new rows cannot run or appear as accepted jobs.
+    const admission = flushExportRecovery();
+    try {
+      await admission;
+    } catch (error) {
+      localExportQueue.settleAdmission(ids, false);
+      throw error;
+    }
+    localExportQueue.settleAdmission(ids, true);
   } catch (error) {
     if (recoveryFailure) throw Error(recoveryFailure, { cause: error });
     throw error;
@@ -286,5 +298,7 @@ export function retryRecoveryPersistence() {
       void persistenceTail.catch(stopPersistence);
       await persistenceTail;
     }
+    if (!pausedBeforePersistenceFailure && isUnlocked(sessionStorage) && !document.hidden)
+      localExportQueue.resume();
   })().finally(() => { retrying = undefined; }));
 }

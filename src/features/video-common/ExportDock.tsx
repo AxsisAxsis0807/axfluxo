@@ -24,11 +24,12 @@ function SavedFile({ entry }: { entry: ExportEntry }) {
   ) : null;
 }
 export default function ExportDock() {
-  const { entries, paused } = useSyncExternalStore(
+  const { entries: allEntries, paused } = useSyncExternalStore(
     queue.subscribe,
     queue.getSnapshot,
     queue.getSnapshot,
   );
+  const entries = allEntries.filter(entry => !queue.isPendingAdmission(entry.id));
   const recoveryError = useSyncExternalStore(
     subscribeRecovery,
     getRecoveryError,

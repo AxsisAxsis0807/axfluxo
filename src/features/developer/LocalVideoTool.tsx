@@ -277,7 +277,7 @@ export default function LocalVideoTool({
   }
   useEffect(() => {
     const control = new AbortController();
-    void discoverExportRecovery(control.signal);
+    void discoverExportRecovery(control.signal, recoveryAttempt > 0);
     return () => control.abort();
   }, [recoveryAttempt]);
   function projectData(): LocalProjectData {

@@ -607,6 +607,7 @@ test("a blocked reservation never reports success before storage commits", async
     return `${hook}: ${message}`;
   }).toMatch(/^function:/);
   await expect(page.getByText("現在の設定で予約しました。", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("complementary", { name: "エクスポートミニバー" })).toHaveCount(0);
   await title.fill("EDITABLE");
   await page.evaluate(() =>
     (window as typeof window & { denyReservation?: () => void }).denyReservation?.(),
@@ -614,4 +615,17 @@ test("a blocked reservation never reports success before storage commits", async
   await expect(exports.getByRole("status")).toContainText("保存容量が不足");
   await expect(title).toHaveValue("EDITABLE");
   expect(await inventory(page)).toEqual([[], [], []]);
+  const queueCount = () => page.evaluate(() => (window as unknown as { localExportQueue: { getSnapshot: () => { entries: unknown[] } } }).localExportQueue.getSnapshot().entries.length);
+  expect(await queueCount()).toBe(0);
+  // A storage retry must not silently resurrect a reservation rejected above.
+  await page.evaluate(() => Object.defineProperty(navigator, "storage", { configurable: true, value: { estimate: async () => ({ quota: 1024 ** 3, usage: 0 }) } }));
+  await page.getByRole("button", { name: "書き出しデータの復旧を再試行" }).click();
+  await expect(page.getByRole("region", { name: "書き出しデータの復旧" })).toHaveCount(0);
+  expect(await queueCount()).toBe(0);
+  expect(await inventory(page)).toEqual([[], [], []]);
+  // A new explicit reservation uses the current editor, not the rejected one.
+  await page.getByRole("button", { name: "端末内で書き出す", exact: true }).click();
+  await expect(exports.getByRole("status")).toContainText("現在の設定で予約しました。");
+  expect(await queueCount()).toBe(1);
+  expect((await inventory(page))[2]).toHaveLength(1);
 });

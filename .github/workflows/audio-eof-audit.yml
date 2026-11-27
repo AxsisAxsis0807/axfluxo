@@ -12,6 +12,9 @@ on:
       - 'src/services/video/local-project.ts'
       - 'src/services/video/local-encode.ts'
       - 'src/services/video/export-queue.ts'
+      - 'src/services/video/local-export-runtime.ts'
+      - 'src/features/video-common/ExportDock.tsx'
+      - 'tests/video/timeline/export-queue.test.ts'
       - 'src/services/video/cloud-local-job.ts'
       - 'tests/video/cloud-local-job.test.ts'
       - 'server/tests/browser/cloud-local-recovery.spec.ts'
@@ -41,7 +44,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck && npm run lint
-      - run: npx vitest run tests/video/local-timed-audio-eof.test.ts tests/video/recovery-startup-lease.test.ts tests/video/recovery-store.test.ts tests/video/cloud-local-job.test.ts
+      - run: npx vitest run tests/video/local-timed-audio-eof.test.ts tests/video/recovery-startup-lease.test.ts tests/video/recovery-store.test.ts tests/video/cloud-local-job.test.ts tests/video/timeline/export-queue.test.ts
       - run: |
           if ! command -v ffprobe >/dev/null; then
             sudo apt-get update
