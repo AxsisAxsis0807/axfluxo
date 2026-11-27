@@ -1,9 +1,5 @@
-import type {
-  LocalProjectData,
-  Source,
-} from "../../services/video/local-project";
+import type { Source } from "../../services/video/local-project";
 
-export type LocalEditorProject = LocalProjectData & { songTitle?: string };
 export type AudioEdit = { sources: Source[]; names: string };
 
 function nameCount(source: Source) {

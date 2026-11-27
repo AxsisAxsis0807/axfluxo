@@ -1,4 +1,5 @@
 import type { LocalEncodeJob } from "./local-encode";
+import type { CloudLocalRecipe, RecoverableLocalJob } from "./cloud-local-job";
 export type ExportState =
   "queued" | "preparing" | "rendering" | "completed" | "failed" | "cancelled";
 export type ExportEntry = {
@@ -13,14 +14,15 @@ export type ExportEntry = {
   state: ExportState;
   progress: number;
   message: string;
-  input?: LocalEncodeJob;
+  input?: RecoverableLocalJob;
+  cloudRecovery?: CloudLocalRecipe;
   recovery?: LocalEncodeJob["recovery"];
   rest: boolean;
   result?: { blob: Blob; filename: string; note?: string };
   error?: string;
 };
 export type ExportRunner = (
-  job: LocalEncodeJob,
+  job: RecoverableLocalJob,
   signal: AbortSignal,
   rest: boolean,
   update: (progress: number, message: string) => void,
@@ -29,6 +31,7 @@ const activeStates = new Set<ExportState>(["preparing", "rendering"]);
 /** One slot is held through cancellation cleanup. Components never own the runner. */
 export class ExportQueue {
   private entries: ExportEntry[] = [];
+  private pendingAdmissions = new Set<string>();
   private listeners = new Set<() => void>();
   private running: { id: string; control: AbortController } | undefined;
   private snapshot = { entries: this.entries, paused: false };
@@ -64,7 +67,8 @@ export class ExportQueue {
     );
     this.publish();
   }
-  enqueue(jobs: LocalEncodeJob[], rest: boolean) {
+  isPendingAdmission = (id: string) => this.pendingAdmissions.has(id);
+  enqueue(jobs: RecoverableLocalJob[], rest: boolean, deferAdmission = false) {
     if (!jobs.length) throw Error("書き出す動画がありません。");
     if (this.entries.length + jobs.length > this.maxJobs)
       throw Error(
@@ -80,13 +84,27 @@ export class ExportQueue {
       message: "予約待ち",
       rest,
       recovery: job.recovery,
+      ...(job.cloudRecovery ? { cloudRecovery: job.cloudRecovery } : {}),
       input: { ...job, pieces: job.pieces.map((p) => ({ ...p })) },
     }));
+    const ids = additions.map(entry => entry.id);
+    if (deferAdmission) ids.forEach(id => this.pendingAdmissions.add(id));
     this.entries = [...this.entries, ...additions];
+    this.publish();
+    if (!deferAdmission) void this.pump();
+    return ids;
+  }
+  /** No pending reservation can run or be managed until its first durable commit. */
+  settleAdmission(ids: string[], accepted: boolean) {
+    const pending = new Set(ids.filter(id => this.pendingAdmissions.has(id)));
+    if (!pending.size) return;
+    pending.forEach(id => this.pendingAdmissions.delete(id));
+    if (!accepted) this.entries = this.entries.filter(entry => !pending.has(entry.id));
     this.publish();
     void this.pump();
   }
   cancel(id: string) {
+    if (this.isPendingAdmission(id)) return;
     const entry = this.entries.find((j) => j.id === id);
     if (!entry || !(entry.state === "queued" || activeStates.has(entry.state)))
       return;
@@ -114,7 +132,7 @@ export class ExportQueue {
     void this.pump();
   }
   move(id: string, direction: -1 | 1) {
-    const queued = this.entries.filter((j) => j.state === "queued");
+    const queued = this.entries.filter((j) => j.state === "queued" && !this.isPendingAdmission(j.id));
     const index = queued.findIndex((j) => j.id === id),
       other = queued[index + direction];
     if (index < 0 || !other) return;
@@ -173,7 +191,7 @@ export class ExportQueue {
       return;
     }
     const entry = this.entries.find((j) => j.state === "queued");
-    if (!entry?.input) return;
+    if (!entry?.input || this.isPendingAdmission(entry.id)) return;
     const control = new AbortController();
     this.running = { id: entry.id, control };
     this.change(entry.id, {

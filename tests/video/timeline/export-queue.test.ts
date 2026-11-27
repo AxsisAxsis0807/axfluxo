@@ -14,6 +14,24 @@ const job = (filename: string): LocalEncodeJob => ({
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 const result = { filename: "done.mp4", blob: new Blob(["result"]) };
 describe("automatic export queue", () => {
+  it("holds staged reservations until commit and discards only rejected admissions", async () => {
+    const calls: string[] = [];
+    const queue = new ExportQueue(async input => { calls.push(input.filename); return result; });
+    const rejected = queue.enqueue([job("rejected-a"), job("rejected-b")], false, true);
+    const accepted = queue.enqueue([job("accepted")], false, true);
+    expect(calls).toEqual([]);
+    queue.cancel(rejected[0]);
+    queue.move(accepted[0], -1);
+    queue.resume();
+    expect(calls).toEqual([]);
+    queue.settleAdmission(rejected, false);
+    expect(queue.getSnapshot().entries.map(e => e.id)).toEqual(accepted);
+    expect(calls).toEqual([]);
+    queue.settleAdmission(accepted, true);
+    await settle();
+    expect(calls).toEqual(["accepted"]);
+    expect(queue.getSnapshot().entries[0].state).toBe("completed");
+  });
   it("serializes 3+ jobs, snapshots mutable piece values and permits enqueue during rendering", async () => {
     const calls: string[] = [],
       releases: (() => void)[] = [];

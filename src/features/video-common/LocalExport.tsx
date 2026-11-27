@@ -1,13 +1,13 @@
 "use client";
 import { useRef, useState } from "react";
+import type { RecoverableLocalJob } from "../../services/video/cloud-local-job";
 import {
   recorderType,
   usesTimedLocalEncoding,
-  type LocalEncodeJob,
 } from "../../services/video/local-encode";
 import {
   allowExportAudio,
-  localExportQueue,
+  reserveLocalExports,
   releaseIdleExportAudio,
 } from "../../services/video/local-export-runtime";
 export function LocalExport({
@@ -16,7 +16,7 @@ export function LocalExport({
   rest: savedRest,
   onRestChange,
 }: {
-  prepare: () => Promise<LocalEncodeJob[]>;
+  prepare: () => Promise<RecoverableLocalJob[]>;
   disabled: boolean;
   rest?: boolean;
   onRestChange?: (rest: boolean) => void;
@@ -29,15 +29,17 @@ export function LocalExport({
   async function add() {
     if (adding.current) return;
     adding.current = true;
+    let preparingReservation = true;
     setPreparing(true);
     setStatus("入力内容と出力形式を確認しています…");
     try {
       // The legacy recorder needs activation during the tap, before preparation.
       const supportedRecorder = !!recorderType();
       if (supportedRecorder)
-        void allowExportAudio().catch(() =>
-          setStatus("下部の詳細から音声処理を許可してください。"),
-        );
+        void allowExportAudio().catch(() => {
+          if (preparingReservation)
+            setStatus("下部の詳細から音声処理を許可してください。");
+        });
       const jobs = await prepare();
       if (jobs.some((job) => !usesTimedLocalEncoding(job))) {
         if (!supportedRecorder)
@@ -49,13 +51,15 @@ export function LocalExport({
             "このブラウザーはCanvasの動画書き出しに対応していません。",
           );
       }
-      localExportQueue.enqueue(jobs, rest);
+      await reserveLocalExports(jobs, rest);
       setStatus(
-        "現在の設定で予約しました。下部の書き出しキューで確認できます。",
+        "現在の設定で予約しました。下部の書き出しキューで確認できます。" +
+          (jobs.some(job => job.cloudRecovery) ? " クラウド素材の復旧には同じアカウント、接続、元の素材が必要です。" : ""),
       );
     } catch (e) {
       setStatus(e instanceof Error ? e.message : "予約できません。");
     } finally {
+      preparingReservation = false;
       adding.current = false;
       setPreparing(false);
       releaseIdleExportAudio();

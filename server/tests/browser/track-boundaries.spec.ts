@@ -170,11 +170,8 @@ test("PCM analysis, candidate navigation, candidate addition, audition, deletion
   await expect(smart.locator("li")).toHaveCount(0);
   await smart.locator("summary").click();
   await smart.getByLabel("候補の最小間隔（秒）").fill("12");
-  await expect(page.getByTestId("local-save-status")).toContainText(
-    "この端末に自動保存済み",
-  );
-  await page.reload();
-  await page.getByRole("button", { name: /前回の作業を再開/ }).click({timeout:35000});
+  // Closing and reopening retains timeline state within the editing session.
+  await page.getByRole("button", { name: "切り取り", exact: true }).click();
   await page.getByRole("button", { name: "切り取り", exact: true }).click({ timeout: 35000 });
   await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
@@ -291,11 +288,8 @@ test("repeated off-center pinches retain time, page scale and true endpoints", a
       )
       .toBe(42 * 8000 - 1);
   }
-  await expect(page.getByTestId("local-save-status")).toContainText(
-    "この端末に自動保存済み",
-  );
-  await page.reload();
-  await page.getByRole("button", { name: /前回の作業を再開/ }).click({timeout:35000});
+  // Closing and reopening retains timeline state within the editing session.
+  await page.getByRole("button", { name: "切り取り", exact: true }).click();
   await page.getByRole("button", { name: "切り取り", exact: true }).click({ timeout: 35000 });
   await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
@@ -414,7 +408,7 @@ test("Version handles snap in CSS pixels, release, disable snap and stay between
   await expect(field).toHaveValue("29.999999,30");
 });
 
-test("three direct boundaries persist through move, nearest deletion and reload", async ({
+test("three direct boundaries persist through move, nearest deletion and trim panel reopening", async ({
   page,
 }) => {
   test.setTimeout(90000);
@@ -481,11 +475,8 @@ test("three direct boundaries persist through move, nearest deletion and reload"
     .getByRole("button", { name: "Version境界を追加", exact: true })
     .click();
   await expect(field).toHaveValue("10,21.05,30");
-  await expect(page.getByTestId("local-save-status")).toContainText(
-    "この端末に自動保存済み",
-  );
-  await page.reload();
-  await page.getByRole("button", { name: /前回の作業を再開/ }).click({timeout:35000});
+  // Closing and reopening retains timeline state within the editing session.
+  await page.getByRole("button", { name: "切り取り", exact: true }).click();
   await page.getByRole("button", { name: "切り取り", exact: true }).click({ timeout: 35000 });
   await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({

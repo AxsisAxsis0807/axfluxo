@@ -1,8 +1,8 @@
 "use client";
 import { LocalExport } from "../video-common/LocalExport";
+import { buildCloudLocalJobs, type RecoverableLocalJob } from "../../services/video/cloud-local-job";
 import {
   imageForEncode,
-  type LocalEncodeJob,
 } from "../../services/video/local-encode";
 /* eslint-disable @next/next/no-img-element -- Private signed media and server-rasterized PNGs use native images without an optimization service. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -32,16 +32,6 @@ import {
   currentVideoSessionSource,
 } from "../../services/video/api-client";
 import { projectsClient } from "../../services/video/projects-client";
-import {
-  ProjectSaveQueue,
-  syncProject,
-} from "../../services/video/project-sync";
-import {
-  localProject,
-  forkConflict,
-  syncEntry,
-  listProjects,
-} from "../../services/developer-storage/projects";
 import { PlaybackError } from "../../services/video/playback";
 import { ALL_VERSIONS_REFERENCE as REF, referenceTimerText } from "../../domain/video/all-versions-reference";
 import { drawReferenceFrame, loadReferenceFonts, referenceArtwork, referenceCanvasTitle } from "../../services/video/all-versions-canvas";
@@ -60,15 +50,14 @@ const messages: Record<string, string> = {
   VERSION_ZERO_FRAMES: "同じframeの境界があります。markerを確認してください。",
   COVER_REQUIRED: "正方形表示のcoverを選択してください。",
   MEDIA_REQUIRED: "音声素材を選択してください。",
-  PROJECT_CONFLICT: "409：競合しました。ローカルとcloudを両方保持しています。",
+  PROJECT_CONFLICT: "書き出し設定の保存が競合しました。",
   FONT_GLYPH_UNSUPPORTED:
     "Aleoで描画できない文字があります。代替fontに変更していません。",
   FONT_UNAVAILABLE: "固定fontを使用できません。",
-  AUTH_EXPIRED: "認証の期限が切れました。端末内のprojectは保持されています。",
+  AUTH_EXPIRED: "認証の期限が切れました。",
   AUTH_REQUIRED: "ログインしてください。",
   REQUEST_FAILED:
-    "接続できません。端末に保存し、cloud同期を後で再試行できます。",
-  LOCAL_QUOTA: "端末への保存に失敗しました。編集内容は画面に保持されています。",
+    "接続できません。画面の編集内容を確認して再試行できます。",
 };
 export function AllVersionsEditor({
   api: injected,
@@ -95,13 +84,7 @@ export function AllVersionsEditor({
     ),
     [owner, setOwner] = useState<string | null>(null),
     [step, setStep] = useState(0),
-    [localState, setLocalState] = useState("未保存"),
-    [cloudState, setCloudState] = useState("未同期"),
     [error, setError] = useState(""),
-    [openId, setOpenId] = useState(""),
-    [localList, setLocalList] = useState<{ id: string; revision: number }[]>(
-      [],
-    ),
     [clock, setClock] = useState(0),
     [coverUrl, setCoverUrl] = useState(""),
     [text, setText] = useState<{ key: string; url: string } | null>(null),
@@ -112,8 +95,9 @@ export function AllVersionsEditor({
     () => (api && owner ? projectsClient(api, owner) : null),
     [api, owner],
   );
-  const queue = useRef<ProjectSaveQueue | null>(null),
-    docRef = useRef(project),
+  const submission = useRef<{ key: string; snapshot: AllVersionsProject; revision?: number } | null>(null);
+  const submittingExport = useRef(false);
+  const docRef = useRef(project),
     generation = useRef(0),
     rendered = useRef<{ key: string; batch: string } | null>(null),
     finalVideo = useRef<HTMLVideoElement | null>(null),
@@ -133,7 +117,6 @@ export function AllVersionsEditor({
               const id = session?.data.session?.user?.id;
               if (live && id) {
                 setOwner(id);
-                setCloudState("offline編集・cloud権限は未確認");
               }
             } catch {
               /* Local editor remains closed if the session owner is unavailable. */
@@ -146,73 +129,10 @@ export function AllVersionsEditor({
       live = false;
     };
   }, [api]);
-  useEffect(() => {
-    if (owner)
-      void listProjects(owner)
-        .then(setLocalList)
-        .catch(() => setError("LOCAL_QUOTA"));
-  }, [owner, localState]);
-  useEffect(() => {
-    if (!owner) return;
-    const q = new ProjectSaveQueue(owner);
-    q.onState = (s) =>
-      setLocalState(
-        s === "local-saved"
-          ? "端末に保存済み"
-          : s === "local-error"
-            ? "端末：未保存"
-            : "端末：保存待ち",
-      );
-    queue.current = q;
-    return () => {
-      const current = queue.current;
-      void current?.flush().catch(() => {});
-      current?.dispose();
-      q.dispose();
-      queue.current = null;
-    };
-  }, [owner]);
-  useEffect(() => {
-    if (!owner || !remote) return;
-    let stopped = false;
-    const sync = () => {
-      if (stopped || !navigator.onLine) return;
-      const id = docRef.current.id;
-      void (async () => {
-        if (!(await syncEntry(owner, id))) return false;
-        await syncProject(owner, id, remote.transport);
-        return true;
-      })()
-        .then(async (synced) => {
-          const pending = await syncEntry(owner, id);
-          if (!stopped && synced && docRef.current.id === id)
-            setCloudState(
-              !pending && queue.current?.isSaved
-                ? "cloudに保存済み"
-                : "cloud：未同期",
-            );
-        })
-        .catch((e) => {
-          if (!stopped) {
-            setCloudState("cloud：未同期／競合");
-            if (e.message === "PROJECT_CONFLICT") setError(e.message);
-          }
-        });
-    };
-    const timer = setInterval(sync, 1500);
-    window.addEventListener("online", sync);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-      window.removeEventListener("online", sync);
-    };
-  }, [owner, remote]);
   const change = useCallback((next: AllVersionsProject) => {
     generation.current++;
     setProject(next);
     docRef.current = next;
-    queue.current?.schedule(next);
-    setCloudState("cloud：未同期");
     setError("");
     rendered.current = null;
     setBatch("");
@@ -364,144 +284,9 @@ export function AllVersionsEditor({
       drawReferenceFrame(ctx, previewArtwork.canvas, frame, versions, project.design, drawPreviewTitle.current);
     } else ctx.drawImage(previewArtwork.canvas, 0, 0);
   }, [coverUrl, frame, previewArtwork, previewFontReady, previewHeight, project.design, showReference, versions]);
-  async function save(sync = true) {
-    try {
-      const id = docRef.current.id;
-      queue.current?.schedule(docRef.current);
-      await queue.current?.flush();
-      if (sync && owner && remote) {
-        setCloudState("cloud：同期中");
-        await syncProject(owner, id, remote.transport);
-        const pending = await syncEntry(owner, id);
-        if (docRef.current.id === id)
-          setCloudState(
-            !pending && queue.current?.isSaved
-              ? "cloudに保存済み"
-              : "cloud：未同期",
-          );
-      }
-      return true;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "LOCAL_QUOTA");
-      setCloudState("cloud：未同期／競合");
-      return false;
-    }
-  }
-  async function open() {
-    try {
-      if (!owner || !remote) return;
-      const request = ++generation.current;
-      await queue.current?.flush();
-      let row = await localProject(owner, openId);
-      if (!row) {
-        const r = await remote.get(openId);
-        if (!r.ok) throw new Error(r.code);
-        const { saveProject, acknowledge } =
-          await import("../../services/developer-storage/projects");
-        row = await saveProject(owner, r.data.project, 0);
-        await acknowledge(owner, openId, row.revision, r.data.revision);
-      }
-      if (request !== generation.current) return;
-      queue.current?.dispose();
-      const q = new ProjectSaveQueue(owner, row.revision);
-      q.onState = (s) =>
-        setLocalState(s === "local-saved" ? "端末に保存済み" : "端末：未保存");
-      queue.current = q;
-      setProject(row.project);
-      setError(row.conflict ? "PROJECT_CONFLICT" : "");
-      setCloudState(row.conflict ? "cloud：競合" : "cloud：保存状態を再確認");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "PROJECT_NOT_FOUND");
-    }
-  }
-  async function prepareLocal(): Promise<LocalEncodeJob[]> {
-    if (
-      !cloud ||
-      !remote ||
-      !project.document ||
-      !project.cover ||
-      projectIssues(project).length
-    )
-      throw Error("素材と名前を確認してください。");
-    const membership = await api!.me();
-    if (!membership.ok) throw Error("開発者権限を確認できません。");
-    const coverAccess = await cloud.access(project.cover.versionId);
-    if (!coverAccess.ok) throw Error(coverAccess.code);
-    const cover = await imageForEncode(coverAccess.data.url);
-    const overlays: HTMLImageElement[] = [];
-    if (reference) await loadReferenceFonts(names);
-    else for (let i = 0; i < versions.length; i++) {
-      const r = await remote.text(project, i);
-      overlays.push(await imageForEncode(`data:image/png;base64,${r.png}`));
-    }
-    const drawTitle = reference ? referenceCanvasTitle(names) : null;
-    const height = project.design.height,
-      width = (height * 16) / 9;
-    const artwork = reference ? referenceArtwork(cover, width, height) : null;
-    return [
-      {
-        filename: "All Versions.mp4",
-        timestamped: true,
-        width,
-        height,
-        pieces: project.document.clips.map((c) => ({
-          start: c.interval.startUs / 1e6,
-          end: c.interval.endUs / 1e6,
-          url: async () => {
-            const r = await cloud.access(c.source.versionId);
-            if (!r.ok) throw Error(r.code);
-            return r.data.url;
-          },
-        })),
-        draw: (ctx, _media, seconds) => {
-          if (artwork && drawTitle) {
-            drawReferenceFrame(ctx, artwork, Math.round(seconds * 60), versions,
-              project.design, drawTitle);
-            return;
-          }
-          ctx.save();
-          ctx.scale(width / 1920, height / 1080);
-          ctx.fillStyle = "black";
-          ctx.fillRect(0, 0, 1920, 1080);
-          ctx.save();
-          ctx.filter = "blur(24px)";
-          ctx.globalAlpha = 0.7;
-          const scale = Math.max(2150 / cover.width, 1210 / cover.height);
-          ctx.drawImage(
-            cover,
-            (1920 - cover.width * scale) / 2,
-            (1080 - cover.height * scale) / 2,
-            cover.width * scale,
-            cover.height * scale,
-          );
-          ctx.restore();
-          const size = 605,
-            crop = Math.min(cover.width, cover.height);
-          ctx.drawImage(
-            cover,
-            (cover.width - crop) / 2,
-            (cover.height - crop) / 2,
-            crop,
-            crop,
-            (1920 - size) / 2,
-            130,
-            size,
-            size,
-          );
-          ctx.fillStyle = "rgba(0,0,0,.48)";
-          ctx.fillRect(96, 842, 1728, 162);
-          const frame = Math.floor(seconds * 60),
-            i = versions.findIndex(
-              (v) => frame >= v.startFrame && frame < v.endFrame,
-            );
-          if (i >= 0) {
-            ctx.globalAlpha = textAlpha(frame, versions[i], project.design);
-            ctx.drawImage(overlays[i], 0, 0, 1920, 1080);
-          }
-          ctx.restore();
-        },
-      },
-    ];
+  async function prepareLocal(): Promise<RecoverableLocalJob[]> {
+    if (!api || !owner) throw Error("素材と名前を確認してください。");
+    return buildCloudLocalJobs({ version: 1, kind: "all-versions", ownerId: owner, index: 0, project }, api);
   }
   async function exportVideo() {
     if (rendered.current?.key === JSON.stringify(project)) {
@@ -512,19 +297,30 @@ export function AllVersionsEditor({
       setError(issues[0]);
       return;
     }
+    if (!remote || submittingExport.current) return;
+    const key = JSON.stringify(project);
+    const pending = submission.current?.key === key
+      ? submission.current
+      : { key, snapshot: { ...project, id: crypto.randomUUID() } };
+    submission.current = pending;
+    submittingExport.current = true;
     const request = generation.current;
-    if (!(await save()) || request !== generation.current) return;
     try {
-      if (!owner || !remote) return;
-      const row = await localProject(owner, project.id);
-      if (!row || row.conflict) throw new Error("PROJECT_CONFLICT");
-      const r = await remote.render(project.id, row.cloudRevision);
+      if (pending.revision === undefined) {
+        const result = await remote.transport.put(pending.snapshot, 0);
+        if ("conflict" in result) throw Error("PROJECT_CONFLICT");
+        pending.revision = result.revision;
+      }
+      const r = await remote.render(pending.snapshot.id, pending.revision);
       if (request !== generation.current) return;
-      rendered.current = { key: JSON.stringify(project), batch: r.id };
+      rendered.current = { key, batch: r.id };
       setBatch(r.id);
       setStatus("待機中");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "PROJECT_INVALID");
+      if (request === generation.current)
+        setError(e instanceof Error ? e.message : "PROJECT_INVALID");
+    } finally {
+      submittingExport.current = false;
     }
   }
   async function check() {
@@ -572,50 +368,7 @@ export function AllVersionsEditor({
       <p>{project.design.layout === "reference-pasa-v1"
         ? "参考動画再現プロファイル：タイトル中央・経過時間・同期フェード（元動画との完全一致は未検証）"
         : "暫定layoutです。参考画像との一致は未検証です。"}</p>
-      <p>
-        project ID：<output>{project.id}</output>
-      </p>
-      <p role="status" aria-label="保存状態">
-        {localState} ／ {cloudState}
-      </p>
       {error && <p role="alert">{messages[error] ?? error}</p>}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <button onClick={() => void save()}>手動保存・同期</button>
-        <button onClick={() => void save(false)}>端末保存を確定</button>
-        <label>
-          開くproject ID
-          <input value={openId} onChange={(e) => setOpenId(e.target.value)} />
-        </label>
-        <button onClick={() => void open()}>projectを開く</button>
-        <button
-          onClick={() => {
-            if (owner)
-              void forkConflict(owner, project.id, docRef.current).then(
-                (row) => {
-                  setOpenId(row.project.id);
-                  setError(
-                    "競合元を保持して別projectを作成しました。新しいIDを開いてください。",
-                  );
-                },
-              );
-          }}
-        >
-          競合を別projectとして保持
-        </button>
-      </div>
-      {localList.length > 0 && (
-        <label>
-          端末のproject一覧
-          <select value={openId} onChange={(e) => setOpenId(e.target.value)}>
-            <option value="">選択してください</option>
-            {localList.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.id}（revision {r.revision}）
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
       <nav
         aria-label="制作手順"
         style={{ display: "flex", flexWrap: "wrap", gap: 8 }}

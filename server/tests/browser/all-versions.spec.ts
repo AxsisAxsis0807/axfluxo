@@ -54,14 +54,15 @@ test.beforeAll(async () => {
   );
   media = await readFile(path);
 });
-test("six-step editor keeps names, saves offline, synchronizes revisions, and uses server text PNG", async ({
+test("six-step editor keeps drafts in memory and submits a durable server snapshot only at export", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   let saved: AllVersionsProject | null = null,
     revision = 0,
-    texts = 0;
+    texts = 0,
+    renders = 0;
   const headers = {
     "access-control-allow-origin": "*",
     "access-control-allow-headers":
@@ -161,6 +162,13 @@ test("six-step editor keeps names, saves offline, synchronizes revisions, and us
       }
       return;
     }
+    if (path.endsWith("/render")) {
+      expect(req.headers()["if-match"]).toBe(`"${revision}"`);
+      expect(path).toBe(`/projects/${saved?.id}/render`);
+      renders++;
+      await json({ id: "66666666-6666-4666-8666-666666666666", ownerId: owner, jobs: [], outputs: [] });
+      return;
+    }
     if (path.startsWith("/projects/")) {
       if (req.method() === "GET") {
         await json({ project: saved, revision });
@@ -247,11 +255,9 @@ test("six-step editor keeps names, saves offline, synchronizes revisions, and us
   await expect(names).toHaveValue("1. One\n2. Two");
   await page.getByRole("button", { name: "4. デザイン" }).click();
   await page.getByLabel("出力解像度").selectOption("1440");
-  await page.getByRole("button", { name: "手動保存・同期" }).click();
-  await expect(page.getByRole("status", { name: "保存状態" })).toContainText(
-    "cloudに保存済み",
-  );
-  expect((saved as AllVersionsProject | null)?.design.height).toBe(1440);
+  await expect(page.getByRole("button", { name: "手動保存・同期" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "projectを開く" })).toHaveCount(0);
+  expect(revision).toBe(0);
   await expect(page.getByLabel("表示テンプレート")).toHaveValue("reference-pasa-v1");
   await page.getByRole("button", { name: "5. 全長preview" }).click();
   await expect(page.getByLabel("参考レイアウト合成プレビュー")).toBeVisible();
@@ -262,35 +268,20 @@ test("six-step editor keeps names, saves offline, synchronizes revisions, and us
   await expect(page.getByAltText("server生成の文字")).toBeVisible();
   expect(texts).toBeGreaterThan(0);
   await expect(page.getByLabel("楽曲の経過時間")).toHaveCount(0);
-  await page.evaluate(() =>
-    Object.defineProperty(navigator, "onLine", {
-      configurable: true,
-      value: false,
-    }),
-  );
+  expect(revision).toBe(0);
+  await page.getByRole("button", { name: "全長previewを生成" }).click();
+  await expect(page.getByText("待機中", { exact: true })).toBeVisible();
+  expect(revision).toBe(1);
+  expect(renders).toBe(1);
+  expect((saved as AllVersionsProject | null)?.design.height).toBe(1440);
   await page.getByRole("button", { name: "3. 名前" }).click();
-  await names.fill("Offline One\nOffline Two");
-  await page.getByRole("button", { name: "端末保存を確定" }).click();
-  await expect(page.getByRole("status", { name: "保存状態" })).toContainText(
-    "端末に保存済み",
-  );
-  expect((saved as AllVersionsProject | null)?.namesText).toBe(
-    "1. One\n2. Two",
-  );
-  const stored = await page.evaluate(async () => {
-    const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const q = indexedDB.open("axfluxo-developer", 1);
-      q.onsuccess = () => resolve(q.result);
-      q.onerror = () => reject(q.error);
-    });
-    const rows = await new Promise<unknown[]>((resolve) => {
-      const q = db.transaction("documents").objectStore("documents").getAll();
-      q.onsuccess = () => resolve(q.result);
-    });
-    db.close();
-    return rows;
-  });
-  expect(JSON.stringify(stored)).toContain("Offline One");
-  expect(JSON.stringify(stored)).not.toContain("test-token");
+  await names.fill("Session One\nSession Two");
+  expect((saved as AllVersionsProject | null)?.namesText).toBe("1. One\n2. Two");
+  expect(await page.evaluate(async () => (await indexedDB.databases()).map((db) => db.name)))
+    .not.toContain("axfluxo-developer");
+  await page.reload();
+  await page.addScriptTag({ content: bundle });
+  await page.getByRole("button", { name: "3. 名前" }).click();
+  await expect(names).toHaveValue("");
   expect(errors).toEqual([]);
 });

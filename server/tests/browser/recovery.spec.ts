@@ -72,22 +72,36 @@ async function open(page: Page) {
     timeout: 35000,
   });
 }
-async function resumeSaved(page: Page) {
-  await page.getByRole("button", { name: /前回の作業を再開/ }).click({
-    timeout: 35000,
-  });
-  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
-    timeout: 35000,
-  });
+async function assertBlankEditor(page: Page) {
+  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /前回の作業を再開|保存済みの作業を再開|新しく作成/ })).toHaveCount(0);
+  await expect(page.getByTestId("local-save-status")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: /^素材 1/ })).toHaveCount(0);
+  await expect(page.getByRole("article", { name: /^音源 1$/ })).toHaveCount(0);
 }
 async function durable(page: Page) {
-  await expect(page.getByTestId("local-save-status")).toContainText(
-    "この端末に自動保存済み",
-  );
   await page.evaluate(async () => {
-    await (
-      window as unknown as { flushExportRecovery: () => Promise<void> }
-    ).flushExportRecovery();
+    await (window as unknown as { flushExportRecovery: () => Promise<void> }).flushExportRecovery();
+  });
+}
+async function inventory(page: Page) {
+  return page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("axfluxo.local-video-recovery");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      return await Promise.all(["projects", "assets", "jobs"].map((name) =>
+        new Promise<IDBValidKey[]>((resolve, reject) => {
+          const request = db.transaction(name).objectStore(name).getAllKeys();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        }),
+      ));
+    } finally {
+      db.close();
+    }
   });
 }
 test("a Safari IndexedDB open stall shows a safe retry instead of hanging forever", async ({ page }) => {
@@ -111,10 +125,15 @@ test("a Safari IndexedDB open stall shows a safe retry instead of hanging foreve
     }),
   );
   await page.goto("https://recovery.test/fnf");
-  const retry = page.getByRole("button", { name: "保存データの確認を再試行" });
+  await assertBlankEditor(page);
+  await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
+  await page.getByLabel("譜面名", { exact: true }).fill("EDITING WHILE STALLED");
+  const retry = page.getByRole("button", { name: "書き出しデータの復旧を再試行" });
   await expect(retry).toBeVisible({ timeout: 25_000 });
-  await expect(page.getByText(/保存データは削除していません/).first()).toBeVisible();
+  await expect(page.getByText(/保存済みデータは削除していません/).first()).toBeVisible();
   await retry.click();
+  await expect(retry).toHaveCount(0);
+  await expect(page.getByLabel("譜面名", { exact: true })).toHaveValue("EDITING WHILE STALLED");
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
     timeout: 30_000,
   });
@@ -202,13 +221,36 @@ test("All Versions composition uses audio-only playback and a cover canvas", asy
   await expect(composition.locator("video")).toHaveCount(0);
   await expect(composition.locator("canvas")).toBeVisible();
 });
-test("editor files, trim, labels and timeline restore after opt-in and stay separate from All Versions", async ({
+for (const method of ["fill", "keys"] as const) {
+test(`FNF edits stay in the page and its explicit template survives reload (${method})`, async ({
   page,
-}) => {
+}, info) => {
   test.setTimeout(90000);
+  const events: unknown[] = [];
+  const stages: unknown[] = [];
+  await page.exposeFunction("recordFNFInputEvent", (event: unknown) => { events.push(event); });
+  await page.addInitScript(() => {
+    for (const type of ["beforeinput", "input", "change", "focusin", "focusout", "keydown", "keyup"]) {
+      document.addEventListener(type, e => {
+        const el = e.target;
+        if (!(el instanceof HTMLInputElement) || el.type === "file") return;
+        void (window as unknown as { recordFNFInputEvent: (event: unknown) => Promise<void> }).recordFNFInputEvent({ type, time: performance.now(), trusted: e.isTrusted, value: el.value, attribute: el.getAttribute("value"), inputType: (e as InputEvent).inputType, label: el.closest("label")?.textContent });
+      }, true);
+    }
+  });
+  const chartName = page.getByLabel("譜面名", { exact: true });
+  async function checkpoint(stage: string) {
+    stages.push({ stage, ...await chartName.evaluate(el => ({ time: performance.now(), value: (el as HTMLInputElement).value, attribute: el.getAttribute("value") })) });
+    await expect(chartName, stage).toHaveValue("RESTORED");
+    // React renders the controlled value attribute from state as well as the live DOM value.
+    await expect(chartName, stage + " controlled value").toHaveAttribute("value", "RESTORED");
+  }
+  try {
   await open(page);
   await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
-  await page.getByLabel("譜面名", { exact: true }).fill("RESTORED");
+  if (method === "fill") await chartName.fill("RESTORED");
+  else await chartName.pressSequentially("RESTORED");
+  await checkpoint("after name input");
   await page
     .getByRole("button", { name: "中央に手動マーカー追加", exact: true })
     .click();
@@ -217,27 +259,25 @@ test("editor files, trim, labels and timeline restore after opt-in and stay sepa
       .getByRole("region", { name: "Smart Track Boundary Detection" })
       .locator("li"),
   ).toContainText("manual");
+  await checkpoint("after marker");
   await page.getByLabel("開始秒", { exact: true }).fill("0.5");
+  await checkpoint("after start");
   await page.getByLabel("終了秒", { exact: true }).fill("2");
+  await checkpoint("after end");
   await page.getByRole("button", { name: "拡大", exact: true }).click();
-  const zoom = await page.getByLabel("timeline倍率").textContent();
-  await durable(page);
+  await checkpoint("after zoom");
+  await page.getByRole("button", { name: "テンプレートを端末に保存" }).click();
+  const savedName = await page.evaluate(() => JSON.parse(localStorage.getItem("axfluxo.local-video-template.fnf-showcase") ?? "null")?.ranges?.[0]?.name);
+  expect(savedName).toBe("RESTORED");
+  expect(await inventory(page)).toEqual([[], [], []]);
   await page.reload();
-  await resumeSaved(page);
-  await expect(page.getByLabel("譜面名", { exact: true })).toHaveValue(
-    "RESTORED",
-  );
+  await assertBlankEditor(page);
+  await expect(page.getByLabel("譜面名", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "端末のテンプレートを読み込む" }).click();
+  await expect(page.getByLabel("譜面名", { exact: true })).toHaveValue("RESTORED");
   await expect(page.getByLabel("開始秒", { exact: true })).toHaveValue("0.5");
-  await expect(page.getByLabel("timeline倍率")).toHaveText(zoom!);
-  await page.getByRole("button", {
-    name: "素材 1 のプレビューを読み込む",
-  }).click();
-  expect(
-    await page
-      .locator("video")
-      .first()
-      .evaluate((v) => (v as HTMLVideoElement).src),
-  ).toContain("blob:");
+  await expect(page.getByLabel("終了秒", { exact: true })).toHaveValue("2");
+  expect(await inventory(page)).toEqual([[], [], []]);
   await page.goto("https://recovery.test/all");
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({
     timeout: 35000,
@@ -249,7 +289,11 @@ test("editor files, trim, labels and timeline restore after opt-in and stay sepa
   await expect(
     page.getByText("素材を選択してください。", { exact: true }).last(),
   ).toBeVisible();
+  } finally {
+    await info.attach("fnf-input-diagnostics", { body: JSON.stringify({ method, project: info.project.name, stages, events }, null, 2), contentType: "application/json" });
+  }
 });
+}
 test("durable queued jobs restart once; finished videos survive reload until each save is confirmed", async ({
   page,
 }, info) => {
@@ -261,6 +305,10 @@ test("durable queued jobs restart once; finished videos survive reload until eac
   await page.getByRole("button", { name: "rangeを追加", exact: true }).click();
   await page.getByLabel("譜面名", { exact: true }).nth(1).fill("B");
   await page.getByLabel("終了秒", { exact: true }).nth(1).fill("1.5");
+  await expect(page.getByLabel("譜面名", { exact: true }).first()).toHaveValue("A");
+  await expect(page.getByLabel("譜面名", { exact: true }).nth(1)).toHaveValue("B");
+  await expect(page.getByLabel("終了秒", { exact: true }).first()).toHaveValue("1.2");
+  await expect(page.getByLabel("終了秒", { exact: true }).nth(1)).toHaveValue("1.5");
   await durable(page);
   const canEncode = await page.evaluate(
     () =>
@@ -278,10 +326,8 @@ test("durable queued jobs restart once; finished videos survive reload until eac
       .getByRole("button", { name: "端末内で書き出す", exact: true })
       .click();
     await expect(
-      page.getByText(
-        /このブラウザーは端末内エンコードに対応していません|Canvasの動画書き出しに対応していません/,
-      ),
-    ).toBeVisible();
+      page.getByRole("region", { name: "端末内書き出し" }).getByRole("status"),
+    ).toContainText(/このブラウザーは端末内エンコードに対応していません|Canvasの動画書き出しに対応していません/);
     expect(
       await page.evaluate(
         () =>
@@ -293,13 +339,8 @@ test("durable queued jobs restart once; finished videos survive reload until eac
       ),
     ).toBe(0);
     await page.reload();
-    await resumeSaved(page);
-    await expect(
-      page.getByLabel("譜面名", { exact: true }).first(),
-    ).toHaveValue("A");
-    await expect(page.getByLabel("譜面名", { exact: true }).nth(1)).toHaveValue(
-      "B",
-    );
+    await assertBlankEditor(page);
+    expect(await inventory(page)).toEqual([[], [], []]);
     return;
   }
   await page.evaluate(() =>
@@ -316,10 +357,11 @@ test("durable queued jobs restart once; finished videos survive reload until eac
       { exact: true },
     ),
   ).toBeVisible();
+  await page.getByLabel("譜面名", { exact: true }).first().fill("CHANGED AFTER RESERVATION");
   await durable(page);
   await page.reload();
-  await resumeSaved(page);
-  await page.getByRole("button", { name: /詳細を開く/ }).click();
+  await assertBlankEditor(page);
+  await page.getByRole("button", { name: /詳細を開く/ }).click({ timeout: 35000 });
   const permit = page.getByRole("button", {
     name: "音声処理を許可・キューを再開",
     exact: true,
@@ -349,8 +391,8 @@ test("durable queued jobs restart once; finished videos survive reload until eac
   ).toBe(true);
   await durable(page);
   await page.reload();
-  await resumeSaved(page);
-  await page.getByRole("button", { name: /詳細を開く/ }).click();
+  await assertBlankEditor(page);
+  await page.getByRole("button", { name: /詳細を開く/ }).click({ timeout: 35000 });
   await expect(saveA).toBeVisible();
   await expect(saveB).toBeVisible();
   await expect(page.getByRole("dialog").locator("article")).toHaveCount(2);
@@ -368,69 +410,48 @@ test("durable queued jobs restart once; finished videos survive reload until eac
   expect(await page.getByRole("dialog").locator("article").count()).toBe(1);
 });
 
-test("new session skips old media bytes and keeps archived work restorable", async ({ page }) => {
-  test.setTimeout(90_000);
+test("new session does not read or delete archived media", async ({ page }) => {
   await open(page);
   await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
-  const chartName = page.getByLabel("譜面名", { exact: true });
-  await chartName.fill("ARCHIVED");
-  // Detect lost controlled-input edits before testing reload/lease recovery.
-  await expect(chartName).toHaveValue("ARCHIVED");
-  await durable(page);
-  await expect(chartName).toHaveValue("ARCHIVED");
-  await page.reload();
-  await expect(page.getByRole("button", { name: /前回の作業を再開：ARCHIVED/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /新しく作成（古い動画を読み込まない）/ })).toBeVisible({ timeout: 35000 });
-  const loaded = await page.evaluate(() => {
-    const global = window as typeof window & { __loadedAssets?: number };
-    global.__loadedAssets = 0;
-    const native = IDBObjectStore.prototype.get;
+  await page.getByLabel("譜面名", { exact: true }).fill("ARCHIVED");
+  await expect(page.getByLabel("譜面名", { exact: true })).toHaveValue("ARCHIVED");
+  await page.evaluate(() => (window as unknown as { seedLegacyData: (finished: boolean) => Promise<void> }).seedLegacyData(false));
+  const archived = await inventory(page);
+  expect(archived[0]).toEqual(["fnf-showcase:legacy-fixture"]);
+  expect(archived[1].length).toBeGreaterThan(1);
+  await page.addInitScript(() => {
+    const state = window as typeof window & { assetReads?: number };
+    state.assetReads = 0;
+    const get = IDBObjectStore.prototype.get;
     IDBObjectStore.prototype.get = function (key) {
-      if (this.name === "assets") global.__loadedAssets!++;
-      return native.call(this, key);
+      if (this.name === "assets") state.assetReads!++;
+      return get.call(this, key);
     };
-    return global.__loadedAssets;
   });
-  expect(loaded).toBe(0);
-  await page.getByRole("button", { name: /新しく作成（古い動画を読み込まない）/ }).click();
-  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({ timeout: 35000 });
-  expect(await page.evaluate(() => (window as typeof window & {
-    __loadedAssets?: number;
-  }).__loadedAssets)).toBe(0);
-  await expect(page.getByRole("group", { name: /^素材 1/ })).toHaveCount(0);
-  await durable(page);
   await page.reload();
-  await page.getByRole("button", { name: /保存済みの作業を再開：ARCHIVED/ }).click();
-  await expect(page.getByLabel("譜面名", { exact: true })).toHaveValue("ARCHIVED", {
-    timeout: 35000,
-  });
-  await expect(page.getByRole("button", { name: "素材 1 のプレビューを読み込む" })).toBeVisible();
-  await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
-  await page.getByRole("button", { name: "素材 1 のプレビューを読み込む" }).click();
-  await expect(page.locator('video[id^="local-media-"]')).toHaveAttribute("src", /blob:/);
+  await assertBlankEditor(page);
+  expect(await inventory(page)).toEqual(archived);
+  expect(await page.evaluate(() => (window as typeof window & { assetReads?: number }).assetReads)).toBe(0);
 });
 
 test("reload during lease renewal keeps archived work restorable", async ({ page }) => {
   test.setTimeout(90_000);
-  // Start a real navigation at the lease put boundary, without waiting for
-  // transaction completion or changing the original recovery regression.
   await page.addInitScript(() => {
-    const state = window as typeof window & {
-      __reloadAtLease?: boolean;
-      __assetReads?: number;
-    };
-    state.__assetReads = 0;
+    const state = window as typeof window & { reloadAtLease?: boolean; assetReads?: string[]; jobWrites?: number };
+    state.assetReads = [];
+    state.jobWrites = 0;
     const get = IDBObjectStore.prototype.get;
     IDBObjectStore.prototype.get = function (key) {
-      if (this.name === "assets") state.__assetReads!++;
+      if (this.name === "assets") state.assetReads!.push(String(key));
       return get.call(this, key);
     };
     const put = IDBObjectStore.prototype.put;
     IDBObjectStore.prototype.put = function (value, key) {
       const result = put.call(this, value, key);
-      if (state.__reloadAtLease && this.name === "meta" && key === "lease" &&
+      if (this.name === "jobs") state.jobWrites!++;
+      if (state.reloadAtLease && this.name === "meta" && key === "lease" &&
           this.transaction.objectStoreNames.length === 1) {
-        state.__reloadAtLease = false;
+        state.reloadAtLease = false;
         sessionStorage.setItem("lease-reload-observed", "yes");
         location.reload();
       }
@@ -439,34 +460,35 @@ test("reload during lease renewal keeps archived work restorable", async ({ page
   });
   await open(page);
   await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
-  const chartName = page.getByLabel("譜面名", { exact: true });
-  await chartName.fill("ARCHIVED");
-  // Detect lost controlled-input edits before testing reload/lease recovery.
-  await expect(chartName).toHaveValue("ARCHIVED");
-  await durable(page);
-  await expect(chartName).toHaveValue("ARCHIVED");
-  await page.reload();
-  await expect(page.getByRole("button", { name: /前回の作業を再開：ARCHIVED/ })).toBeVisible();
-  await page.getByRole("button", { name: /新しく作成（古い動画を読み込まない）/ }).click();
-  await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({ timeout: 35000 });
-  await expect(page.getByRole("group", { name: /^素材 1/ })).toHaveCount(0);
-  await durable(page);
+  const chart = page.getByLabel("譜面名", { exact: true });
+  await chart.fill("ARCHIVED");
+  await expect(chart).toHaveValue("ARCHIVED");
+  await page.evaluate(() => (window as unknown as { seedLegacyData: (finished: boolean) => Promise<void> }).seedLegacyData(true));
+  await expect(chart).toHaveValue("ARCHIVED");
+  const before = await inventory(page);
   const navigation = page.waitForEvent("framenavigated", {
-    predicate: (frame) => frame === page.mainFrame(),
-    timeout: 15000,
+    predicate: (frame) => frame === page.mainFrame(), timeout: 15000,
   });
   await page.evaluate(() => {
-    (window as typeof window & { __reloadAtLease?: boolean }).__reloadAtLease = true;
+    const state = window as unknown as { reloadAtLease?: boolean; renewRecoveryLease: () => Promise<void> };
+    state.reloadAtLease = true;
+    void state.renewRecoveryLease();
   });
   await navigation;
-  const archived = page.getByRole("button", { name: /保存済みの作業を再開：ARCHIVED/ });
-  await expect(archived).toBeVisible({ timeout: 15000 });
+  await assertBlankEditor(page);
   expect(await page.evaluate(() => sessionStorage.getItem("lease-reload-observed"))).toBe("yes");
-  expect(await page.evaluate(() => (window as typeof window & { __assetReads?: number }).__assetReads)).toBe(0);
-  await archived.click();
-  await expect(page.getByLabel("譜面名", { exact: true })).toHaveValue("ARCHIVED", { timeout: 35000 });
-  await expect(page.getByRole("button", { name: "素材 1 のプレビューを読み込む" })).toBeVisible();
-  await expect(page.locator('video[id^="local-media-"]')).toHaveCount(0);
+  await page.getByRole("button", { name: /詳細を開く/ }).click({ timeout: 35000 });
+  const save = page.getByRole("link", { name: "LEGACY.mp4を保存" });
+  await expect(save).toBeVisible();
+  const download = page.waitForEvent("download");
+  await save.click();
+  expect(await (await download).failure()).toBeNull();
+  expect(await inventory(page)).toEqual(before);
+  const reads = await page.evaluate(() => (window as typeof window & { assetReads?: string[] }).assetReads);
+  expect(reads?.some((key) => key.includes("output:legacy-output"))).toBe(true);
+  expect(reads?.some((key) => key.includes("legacy-fixture"))).toBe(false);
+  await durable(page);
+  expect(await page.evaluate(() => (window as typeof window & { jobWrites?: number }).jobWrites)).toBe(0);
 });
 
 test("All Versions mobile cards keep names and trim attached to each reordered file", async ({ page }, info) => {
@@ -524,12 +546,7 @@ test("All Versions mobile cards keep names and trim attached to each reordered f
   await trim(3).click();
   await expect(card(3).getByLabel("開始秒", { exact: true })).toHaveValue("0.25");
 
-  await durable(page);
-  await page.reload();
-  await resumeSaved(page);
-  await expect(title).toHaveValue(song);
-  await expect(names).toHaveValue("Original\n\nSlowed");
-  await expect(trim(3)).toHaveAttribute("aria-expanded", "false");
+  await trim(3).click();
   await trim(3).click();
   await expect(card(3).getByLabel("開始秒", { exact: true })).toHaveValue("0.25");
   await card(3).getByRole("button", { name: "素材を外す" }).click();
@@ -539,4 +556,76 @@ test("All Versions mobile cards keep names and trim attached to each reordered f
   await picker.setInputFiles({ name: longFile, mimeType: "audio/mpeg", buffer });
   await expect(card(4)).toContainText(longFile);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+  await page.getByRole("button", { name: "テンプレートを端末に保存" }).click();
+  expect(await inventory(page)).toEqual([[], [], []]);
+  await page.reload();
+  await assertBlankEditor(page);
+  await expect(title).toHaveValue("");
+  await expect(names).toHaveValue("");
+  await page.getByRole("button", { name: "端末のテンプレートを読み込む" }).click();
+  await expect(title).toHaveValue(song);
+
+});
+
+test("a blocked reservation never reports success before storage commits", async ({ page }) => {
+  await open(page);
+  await page.goto("https://recovery.test/all");
+  await page.getByLabel("端末の素材", { exact: true }).setInputFiles(mp3);
+  await page.getByLabel("カバー画像").setInputFiles({
+    name: "cover.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/Yp8AAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
+  const title = page.getByLabel("曲名", { exact: true });
+  await title.fill("NO SPACE");
+  await page.getByLabel("バージョン名（改行区切り）").fill("Original");
+  await page.evaluate(() => {
+    const state = window as unknown as {
+      denyReservation?: () => void;
+      localExportQueue: { pause: () => void };
+    };
+    state.localExportQueue.pause();
+    // Install the controlled StorageManager on the navigator itself so its
+    // estimator survives WebKit's native-wrapper lifetime.
+    Object.defineProperty(navigator, "storage", {
+      configurable: true,
+      value: {
+        estimate: () => new Promise<StorageEstimate>((resolve) => {
+          state.denyReservation = () => resolve({ quota: 1, usage: 1 });
+        }),
+      },
+    });
+  });
+  await page.getByRole("button", { name: "端末内で書き出す", exact: true }).click();
+  const exports = page.getByRole("region", { name: "端末内書き出し" });
+  await expect.poll(async () => {
+    const hook = await page.evaluate(() => typeof (window as typeof window & { denyReservation?: () => void }).denyReservation);
+    const message = await exports.getByRole("status").textContent();
+    return `${hook}: ${message}`;
+  }).toMatch(/^function:/);
+  await expect(page.getByText("現在の設定で予約しました。", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("complementary", { name: "エクスポートミニバー" })).toHaveCount(0);
+  await title.fill("EDITABLE");
+  await page.evaluate(() =>
+    (window as typeof window & { denyReservation?: () => void }).denyReservation?.(),
+  );
+  await expect(exports.getByRole("status")).toContainText("保存容量が不足");
+  await expect(title).toHaveValue("EDITABLE");
+  expect(await inventory(page)).toEqual([[], [], []]);
+  const queueCount = () => page.evaluate(() => (window as unknown as { localExportQueue: { getSnapshot: () => { entries: unknown[] } } }).localExportQueue.getSnapshot().entries.length);
+  expect(await queueCount()).toBe(0);
+  // A storage retry must not silently resurrect a reservation rejected above.
+  await page.evaluate(() => Object.defineProperty(navigator, "storage", { configurable: true, value: { estimate: async () => ({ quota: 1024 ** 3, usage: 0 }) } }));
+  await page.getByRole("button", { name: "書き出しデータの復旧を再試行" }).click();
+  await expect(page.getByRole("region", { name: "書き出しデータの復旧" })).toHaveCount(0);
+  expect(await queueCount()).toBe(0);
+  expect(await inventory(page)).toEqual([[], [], []]);
+  // A new explicit reservation uses the current editor, not the rejected one.
+  await page.getByRole("button", { name: "端末内で書き出す", exact: true }).click();
+  await expect(exports.getByRole("status")).toContainText("現在の設定で予約しました。");
+  expect(await queueCount()).toBe(1);
+  expect((await inventory(page))[2]).toHaveLength(1);
 });

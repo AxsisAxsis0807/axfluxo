@@ -16,15 +16,6 @@ type StoredEntry = Omit<
   order: number;
   recipe?: { project: StoredProject; index: number };
 };
-function fingerprint(value: unknown) {
-  return JSON.stringify(value, (_key, item) =>
-    item && typeof item === "object" && !Array.isArray(item)
-      ? Object.fromEntries(
-          Object.entries(item).sort(([a], [b]) => a.localeCompare(b)),
-        )
-      : item,
-  );
-}
 export class RecoveryLeaseError extends Error {}
 const DB = "axfluxo.local-video-recovery";
 const OWNER = crypto.randomUUID();
@@ -104,7 +95,7 @@ function done(tx: IDBTransaction) {
 export function recoveryMessage(error: unknown) {
   return error instanceof DOMException && error.name === "QuotaExceededError"
     ? "端末の保存容量が不足しています。自動復旧用の保存に失敗しました。元の素材と完成動画を保持してください。"
-    : `自動保存・復旧を利用できません。元の素材を保持してください。${error instanceof Error ? error.message : "保存領域を確認してください。"}`;
+    : `書き出しデータを保存・復旧できません。元の素材を保持してください。${error instanceof Error ? error.message : "保存領域を確認してください。"}`;
 }
 /** One writer for both tools and the shared queue. Every mutation rechecks the lease
  * in the same transaction; a frozen/expired tab cannot overwrite a new owner. */
@@ -463,9 +454,15 @@ export async function listLocalProjects(
       .sort((a, b) => Number(b.active) - Number(a.active));
 }
 export async function countStoredExportEntries(): Promise<number> {
-  return readDiscovery(["jobs"], (tx) =>
+  const count = readDiscovery(["jobs"], (tx) =>
     request(tx.objectStore("jobs").count()),
   );
+  return new Promise<number>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(Error("書き出しデータの確認が応答していません。保存済みデータは削除していません。"));
+    }, 15_000);
+    void count.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
 }
 export async function loadLocalProjectById(
   mode: LocalProjectData["mode"],
@@ -598,29 +595,7 @@ export async function saveExportEntries(
         (!managedIds || managedIds.has(row.id))
       ) {
         jobs.delete(row.id);
-        // Deletion follows explicit per-output save confirmation. A newer edit or
-        // any remaining job keeps the project and all of its shared materials.
-        const project = row.recipe?.project;
-        if (
-          row.state === "completed" &&
-          project &&
-          !entries.some((e) => {
-            const other = e.recovery?.project ?? e.persistedRecipe?.project;
-            return other?.id === project.id && other.mode === project.mode;
-          })
-        ) {
-          const projects = tx.objectStore("projects");
-          const key = `${project.mode}:${project.id}`;
-          const current = await request(projects.get(key));
-          if (fingerprint(current) === fingerprint(project)) {
-            projects.delete(key);
-            const meta = tx.objectStore("meta");
-            if (
-              (await request(meta.get(`active:${project.mode}`))) === project.id
-            )
-              meta.delete(`active:${project.mode}`);
-          }
-        }
+        // Archived edit records remain roots even after their last output is saved.
       }
     for (const entry of entries) {
       const { input, result, recovery, persistedRecipe, ...metadata } = entry;
@@ -628,6 +603,7 @@ export async function saveExportEntries(
       if (recipe) await publishAssets(tx, recipe.project);
       const row: StoredEntry = {
         ...metadata,
+        ...(entry.cloudRecovery ?? input?.cloudRecovery ? { cloudRecovery: entry.cloudRecovery ?? input?.cloudRecovery } : {}),
         order: managedIds
           ? previous.find((old) => old.id === entry.id)?.order ??
             previous.length + entries.indexOf(entry)
@@ -670,7 +646,23 @@ export async function loadExportEntries(): Promise<ExportEntry[]> {
       });
       continue;
     }
-    if (recipe) {
+    if (entry.cloudRecovery) {
+      try {
+        const { restoreCloudLocalJob } = await import("./cloud-local-job");
+        const input = restoreCloudLocalJob(entry.cloudRecovery);
+        const interrupted = ["queued", "preparing", "rendering"].includes(entry.state) || Boolean(entry.interrupted);
+        const attempts = (entry.recoveryAttempts ?? 0) + (interrupted ? 1 : 0);
+        entries.push({
+          ...entry, input, recoveryAttempts: attempts, interrupted: false,
+          state: interrupted ? attempts > 3 ? "failed" : "queued" : entry.state,
+          progress: interrupted ? 0 : entry.progress,
+          message: interrupted ? "中断した動画を先頭から再作成します" : entry.message,
+          error: attempts > 3 ? "復旧を3回試行しました。ログインと素材を確認して再試行してください。" : entry.error,
+        });
+      } catch {
+        entries.push({ ...entry, state: "failed", error: "クラウド復旧設定を読み込めません。保存データは保持しています。" });
+      }
+    } else if (recipe) {
       let project: LocalProjectData | undefined;
       try {
         project = await hydrate(recipe.project);
@@ -707,7 +699,15 @@ export async function loadExportEntries(): Promise<ExportEntry[]> {
       } finally {
         if (project) releaseProjectUrls(project);
       }
-    } else entries.push(entry);
+    } else {
+      // Older cloud-backed local jobs have no reloadable recipe. Keep the row
+      // visible without leaving a queued job that blocks the rest of the queue.
+      entries.push(
+        ["queued", "preparing", "rendering"].includes(entry.state)
+          ? { ...entry, state: "failed", error: "この端末内ジョブの素材を復旧できません。クラウド素材から再度書き出してください。" }
+          : entry,
+      );
+    }
   }
   return entries;
 }
