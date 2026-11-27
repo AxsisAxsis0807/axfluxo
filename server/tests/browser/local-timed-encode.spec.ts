@@ -51,11 +51,10 @@ test("All Versions writes source-clock MP4 with trimmed audio and unique frame t
               mode:"all-versions", cover:canvas.toDataURL(), names:"First\\nSecond\\nThird",
               ranges:[], sources,
             });
-            if (composition.gapBetweenPiecesSeconds !== 1) throw Error("Production job missing fixed gap");
+            if (composition.gapBetweenPiecesSeconds !== 0) throw Error("Production job must have no gap");
             const job = { ...composition, width:320, height:180 };
-            // Keep the original zero-gap encoder control case; the 1s case
-            // uses the real production recipe without injecting a gap.
-            if (gap === 0) job.gapBetweenPiecesSeconds = 0;
+            // Zero-gap case uses the production job unchanged; retain generic gap coverage.
+            if (gap) job.gapBetweenPiecesSeconds = gap;
             if (!usesTimedLocalEncoding(job)) return false;
             // Force a scheduling stall at the in-file marker.
             const draw = job.draw;
@@ -64,7 +63,7 @@ test("All Versions writes source-clock MP4 with trimmed audio and unique frame t
                 const until = performance.now() + 180;
                 while (performance.now() < until) {}
               }
-              draw(ctx, media, gap === 0 && time >= 4 ? time + 1 : time);
+              draw(ctx, media, gap && time >= 4 ? Math.max(4, time - gap) : time);
             };
             let result;
             try {

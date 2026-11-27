@@ -907,21 +907,18 @@ export default function LocalVideoTool({
                     type={k === "name" ? "text" : "number"}
                     step={k === "name" ? undefined : "0.01"}
                     value={r[k]}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      // Snapshot the DOM value during the event. React may
+                      // evaluate/replay the updater after the controlled input
+                      // has been restored or another edit has changed its value.
+                      const value = e.currentTarget.value;
+                      const nextValue = k === "name" ? value : Number(value);
                       setRanges((old) =>
                         old.map((v) =>
-                          v.id === r.id
-                            ? {
-                                ...v,
-                                [k]:
-                                  k === "name"
-                                    ? e.target.value
-                                    : Number(e.target.value),
-                              }
-                            : v,
+                          v.id === r.id ? { ...v, [k]: nextValue } : v,
                         ),
-                      )
-                    }
+                      );
+                    }}
                   />
                 </label>
               ))}

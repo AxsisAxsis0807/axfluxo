@@ -27,7 +27,7 @@ export type Source = {
   markers: string;
 };
 export type Range = { id: string; start: number; end: number; name: string };
-export const ALL_VERSIONS_FILE_GAP_SECONDS = 1;
+export const ALL_VERSIONS_FILE_GAP_SECONDS = 0;
 
 export function localIntervals(
   sources: Pick<Source, "start" | "end" | "duration" | "markers">[],

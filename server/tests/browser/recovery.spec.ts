@@ -372,9 +372,14 @@ test("new session skips old media bytes and keeps archived work restorable", asy
   test.setTimeout(90_000);
   await open(page);
   await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
-  await page.getByLabel("譜面名", { exact: true }).fill("ARCHIVED");
+  const chartName = page.getByLabel("譜面名", { exact: true });
+  await chartName.fill("ARCHIVED");
+  // Detect lost controlled-input edits before testing reload/lease recovery.
+  await expect(chartName).toHaveValue("ARCHIVED");
   await durable(page);
+  await expect(chartName).toHaveValue("ARCHIVED");
   await page.reload();
+  await expect(page.getByRole("button", { name: /前回の作業を再開：ARCHIVED/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /新しく作成（古い動画を読み込まない）/ })).toBeVisible({ timeout: 35000 });
   const loaded = await page.evaluate(() => {
     const global = window as typeof window & { __loadedAssets?: number };
@@ -434,9 +439,14 @@ test("reload during lease renewal keeps archived work restorable", async ({ page
   });
   await open(page);
   await page.getByLabel("端末の素材", { exact: true }).setInputFiles(source);
-  await page.getByLabel("譜面名", { exact: true }).fill("ARCHIVED");
+  const chartName = page.getByLabel("譜面名", { exact: true });
+  await chartName.fill("ARCHIVED");
+  // Detect lost controlled-input edits before testing reload/lease recovery.
+  await expect(chartName).toHaveValue("ARCHIVED");
   await durable(page);
+  await expect(chartName).toHaveValue("ARCHIVED");
   await page.reload();
+  await expect(page.getByRole("button", { name: /前回の作業を再開：ARCHIVED/ })).toBeVisible();
   await page.getByRole("button", { name: /新しく作成（古い動画を読み込まない）/ }).click();
   await expect(page.getByLabel("端末の素材", { exact: true })).toBeEnabled({ timeout: 35000 });
   await expect(page.getByRole("group", { name: /^素材 1/ })).toHaveCount(0);
@@ -490,8 +500,8 @@ test("All Versions mobile cards keep names and trim attached to each reordered f
   await expect(move(4, "下")).toBeDisabled();
   await expect(page.getByLabel("開始秒", { exact: true })).toHaveCount(0);
   await expect(page.locator('audio[id^="local-media-"]')).toHaveCount(0);
-  await expect(page.getByText("1秒（固定）", { exact: true })).toBeVisible();
-  await expect(page.getByText("別ファイルの間にのみ入ります。素材内のVersion境界には入りません。", { exact: true })).toBeVisible();
+  await expect(page.getByText("曲間", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("1秒（固定）", { exact: true })).toHaveCount(0);
   await names.blur();
   await page.getByRole("region", { name: "基本情報" }).screenshot({
     path: info.outputPath("all-versions-mobile.png"),
