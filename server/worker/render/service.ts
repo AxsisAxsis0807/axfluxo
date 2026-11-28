@@ -172,8 +172,9 @@ export async function executeRender(
       inputs[i] = { path, info };
     }
     let graphics: Awaited<ReturnType<typeof prepareGraphics>> | undefined;
-    if (c.project) {
-      const ref = c.project.cover!;
+    let coverPath: string | undefined;
+    if (c.project?.cover) {
+      const ref = c.project.cover;
       const cover = await fenced(
         db,
         c,
@@ -196,8 +197,9 @@ export async function executeRender(
         ref.hash,
         stop.signal,
       );
-      graphics = await prepareGraphics(c.project, path, dir);
+      coverPath = path;
     }
+    if (c.project) graphics = await prepareGraphics(c.project, coverPath, dir);
     const fnfGraphics = showcase
       ? await prepareFnf(showcase.preferences, dir)
       : undefined;

@@ -15,6 +15,7 @@ ENV NODE_ENV=production VIDEO_RENDER_DISK=/work VIDEO_RENDER_ENABLED=false VIDEO
 STOPSIGNAL SIGTERM
 RUN --mount=type=secret,id=proxy_ca set -eu; if [ -s /run/secrets/proxy_ca ]; then export APT_CONFIG=/tmp/axfluxo-apt.conf; printf 'Acquire::https::CaInfo "/run/secrets/proxy_ca";\n' > "$APT_CONFIG"; fi; apt-get update && apt-get install -y --no-install-recommends ffmpeg ca-certificates && rm -rf /var/lib/apt/lists/* /tmp/axfluxo-apt.conf && mkdir /work && chown node:node /work
 COPY --from=build /runtime/ ./
+COPY --chmod=644 public/video/all-versions-crt-v1.webp public/video/
 USER node:node
 
 # Separate selectable targets; CMD may be replaced with another bundled worker.

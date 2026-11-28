@@ -8,6 +8,9 @@
 !src/domain/**
 !src/config/
 !src/config/**
+!public/
+!public/video/
+!public/video/all-versions-crt-v1.webp
 !infra/
 !infra/video/
 !infra/video/Dockerfile

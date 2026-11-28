@@ -1,13 +1,15 @@
 import { it, expect } from "vitest";
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { newProject, versionIntervals } from "../../../src/domain/video/all-versions";
+import { newProject, projectIssues, versionIntervals } from "../../../src/domain/video/all-versions";
 import { allVersionsDocumentSchema } from "../../../src/domain/video/schema";
+import { backgroundImage } from "../../worker/templates/all-versions/graphics";
 import { encodeProjectSegment, prepareGraphics } from "../../worker/templates/all-versions/render";
+import { REFERENCE_BACKGROUND } from "../../../src/domain/video/all-versions-reference";
 import type { RenderPlan, Segment } from "../../worker/render/plan";
 
 function timerRegion(path: string, frame: number): Buffer {
@@ -40,22 +42,10 @@ function frames(path: string): number {
 it("renders reference title and resettable mm:ss clock using real FFmpeg across segment boundaries", async () => {
   const dir = await mkdtemp(join(tmpdir(), "axfluxo-av-reference-"));
   try {
-    const cover = createCanvas(64, 64);
-    const context = cover.getContext("2d");
-    context.fillStyle = "#152c40";
-    context.fillRect(0, 0, 64, 64);
-    context.fillStyle = "#b6d3e7";
-    context.fillRect(12, 12, 40, 40);
-    const coverPath = join(dir, "cover.png");
-    await writeFile(coverPath, await cover.encode("png"));
     const p = newProject();
     p.design.layout = "reference-pasa-v1";
     p.design.fadeInFrames = 9;
     p.design.fadeOutFrames = 9;
-    p.cover = {
-      libraryId: "cloud", fileId: randomUUID(), versionId: randomUUID(),
-      hash: "a".repeat(64), kind: "image",
-    };
     p.namesText = "PASA!(NORMAL)\nPASA!(SLOWED)";
     p.document = allVersionsDocumentSchema.parse({
       schemaVersion: 1,
@@ -77,7 +67,17 @@ it("renders reference title and resettable mm:ss clock using real FFmpeg across 
     expect(versionIntervals(p).map(v => [v.startFrame, v.endFrame])).toEqual([
       [0, 90], [90, 180],
     ]);
-    const graphics = await prepareGraphics(p, coverPath, dir);
+    expect(projectIssues(p)).toEqual([]);
+    const graphics = await prepareGraphics(p, undefined, dir);
+    const background = await loadImage(graphics.bg);
+    const expected = createCanvas(1920, 1080).getContext("2d");
+    expected.imageSmoothingQuality = "high";
+    expected.drawImage(await loadImage(join("public", REFERENCE_BACKGROUND)), 0, 0, 1920, 1080);
+    const actual = createCanvas(1920, 1080).getContext("2d");
+    actual.drawImage(background, 0, 0);
+    expect(Buffer.from(actual.getImageData(0, 0, 1920, 1080).data).equals(
+      Buffer.from(expected.getImageData(0, 0, 1920, 1080).data),
+    )).toBe(true);
     const plan = { width: 1920, height: 1080 } as RenderPlan;
     const segments = [
       { start: 0, length: 30 },
@@ -111,3 +111,29 @@ it("renders reference title and resettable mm:ss clock using real FFmpeg across 
     await rm(dir, { recursive: true, force: true });
   }
 }, 120000);
+
+it("uses each selected cover for the CRT screen and its surrounding glow", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "axfluxo-av-crt-"));
+  try {
+    const p = newProject();
+    p.design.layout = "reference-pasa-v1";
+    const cover = createCanvas(24, 48);
+    const source = cover.getContext("2d");
+    const output = createCanvas(1920, 1080).getContext("2d");
+    const path = join(dir, "cover.png");
+    for (const [color, channel] of [["#ee301c", 0], ["#2448ee", 2]] as const) {
+      source.fillStyle = color;
+      source.fillRect(0, 0, cover.width, cover.height);
+      await writeFile(path, await cover.encode("png"));
+      output.drawImage(await loadImage(await backgroundImage(p, path)), 0, 0);
+      for (const x of [960, 1610]) {
+        const pixel = output.getImageData(x, 480, 1, 1).data;
+        expect(pixel[channel] - pixel[2 - channel]).toBeGreaterThan(60);
+      }
+      const bezel = output.getImageData(435, 540, 1, 1).data;
+      expect(Math.max(bezel[0], bezel[1], bezel[2])).toBeLessThan(10);
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

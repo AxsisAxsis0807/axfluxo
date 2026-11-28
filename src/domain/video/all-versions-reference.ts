@@ -1,5 +1,7 @@
 /** Corner radius measured from the 1280×720 reference still. */
 export const ALL_VERSIONS_COVER_RADIUS_RATIO = 32 / 722;
+// Change the filename when replacing the image to invalidate render checkpoints.
+export const REFERENCE_BACKGROUND = "video/all-versions-crt-v1.webp";
 
 /**
  * All Versions layout measured from a 910x512, 30fps NORMAL/SLOWED reference.
@@ -9,11 +11,6 @@ export const ALL_VERSIONS_COVER_RADIUS_RATIO = 32 / 722;
 export const ALL_VERSIONS_REFERENCE = {
   width: 910,
   height: 512,
-  coverSize: 506,
-  coverTop: 3,
-  backgroundZoom: 0.98,
-  backgroundBlurRatio: 0.17,
-  backgroundShade: 0.02,
   titleMaxWidthRatio: 0.88,
   titleBandPadding: 8,
   titleCenterY: 255.5,

@@ -1,10 +1,12 @@
 import { test, expect } from "@playwright/test";
+import { createCanvas } from "@napi-rs/canvas";
 import { build } from "esbuild";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { textImage } from "../../worker/templates/all-versions/graphics";
+import { REFERENCE_BACKGROUND } from "../../../src/domain/video/all-versions-reference";
 import type { AllVersionsProject } from "../../../src/domain/video/all-versions";
 let bundle: string, media: Buffer;
 const owner = "11111111-1111-4111-8111-111111111111",
@@ -12,6 +14,8 @@ const owner = "11111111-1111-4111-8111-111111111111",
   version = "33333333-3333-4333-8333-333333333333",
   image = "44444444-4444-4444-8444-444444444444",
   imageVersion = "55555555-5555-4555-8555-555555555555",
+  secondImage = "66666666-6666-4666-8666-666666666666",
+  secondVersion = "77777777-7777-4777-8777-777777777777",
   hash = "a".repeat(64);
 test.beforeAll(async () => {
   const r = await build({
@@ -116,6 +120,10 @@ test("six-step editor keeps drafts in memory and submits a durable server snapsh
             mime: "image/png",
             size: 100,
           },
+          {
+            id: secondImage, folderId: null, name: "cover-blue.png", deleted: false,
+            versionId: secondVersion, hash, kind: "image", mime: "image/png", size: 100,
+          },
         ],
         nextCursor: null,
       });
@@ -146,7 +154,7 @@ test("six-step editor keeps drafts in memory and submits a durable server snapsh
     }
     if (path.endsWith("/access")) {
       await json({
-        url: "https://av-media.test/cover.png",
+        url: path.includes(secondVersion) ? "https://av-media.test/cover-blue.png" : "https://av-media.test/cover.png",
         expiresAt: Date.now() + 60000,
       });
       return;
@@ -189,6 +197,14 @@ test("six-step editor keeps drafts in memory and submits a durable server snapsh
     }
     await json({ error: { code: "NOT_FOUND" } }, 404);
   });
+  const canvas = createCanvas(32, 32);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ee321c";
+  ctx.fillRect(0, 0, 32, 32);
+  const red = await canvas.encode("png");
+  ctx.fillStyle = "#1534ec";
+  ctx.fillRect(0, 0, 32, 32);
+  const blue = await canvas.encode("png");
   await page.route("https://av-media.test/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith(".mp4")) {
@@ -219,12 +235,12 @@ test("six-step editor keeps drafts in memory and submits a durable server snapsh
       await route.fulfill({
         headers,
         contentType: "image/png",
-        body: Buffer.from(
-          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-          "base64",
-        ),
+        body: path.endsWith("/cover-blue.png") ? blue : red,
       });
   });
+  await page.route(`https://all-versions-browser.test/${REFERENCE_BACKGROUND}`, (route) =>
+    route.fulfill({ path: join("public", REFERENCE_BACKGROUND), contentType: "image/webp" }),
+  );
   await page.route("https://all-versions-browser.test/", (r) =>
     r.fulfill({
       contentType: "text/html",
@@ -259,6 +275,25 @@ test("six-step editor keeps drafts in memory and submits a durable server snapsh
   await expect(page.getByRole("button", { name: "projectを開く" })).toHaveCount(0);
   expect(revision).toBe(0);
   await expect(page.getByLabel("表示テンプレート")).toHaveValue("reference-pasa-v1");
+  await page.getByRole("button", { name: "5. 全長preview" }).click();
+  const preview = page.getByLabel("参考レイアウト合成プレビュー");
+  const warmth = () => preview.evaluate((canvas: HTMLCanvasElement) => {
+    const pixel = canvas.getContext("2d")!.getImageData(canvas.width * 0.84, canvas.height * 0.4, 1, 1).data;
+    return pixel[0] - pixel[2];
+  });
+  await expect.poll(warmth).toBeGreaterThan(50);
+  await page.getByRole("button", { name: "1. 素材" }).click();
+  await page.getByRole("button", { name: "使用：cover-blue.png" }).click();
+  await page.getByRole("button", { name: "5. 全長preview" }).click();
+  await expect.poll(warmth).toBeLessThan(-50);
+  await page.getByRole("button", { name: "1. 素材" }).click();
+  await page.getByRole("button", { name: "お手本の背景に戻す" }).click();
+  const fallback = page.waitForResponse((response) => response.url().endsWith(REFERENCE_BACKGROUND) && response.ok());
+  await page.getByRole("button", { name: "5. 全長preview" }).click();
+  await fallback;
+  await expect.poll(warmth).toBeLessThan(-10);
+  await page.getByRole("button", { name: "1. 素材" }).click();
+  await page.getByRole("button", { name: "使用：cover.png" }).click();
   await page.getByRole("button", { name: "5. 全長preview" }).click();
   await expect(page.getByLabel("参考レイアウト合成プレビュー")).toBeVisible();
   await expect(page.getByLabel("楽曲の経過時間")).toContainText(/\d{2}:\d{2}/);

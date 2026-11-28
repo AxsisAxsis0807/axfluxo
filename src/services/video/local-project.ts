@@ -190,12 +190,12 @@ async function createLocalJobs(
     throw Error(
       `名前をversion数（${intervals.length}）と同じ行数で入力してください。複数のVersion名にはVersion境界の設定が必要です。`,
     );
-  if (!cover) throw Error("カバー画像を選択してください。");
-  const image = await imageForEncode(cover);
+  const image = cover ? await imageForEncode(cover) : null;
   const width = 1920;
   const height = 1080;
   const reference = project.layout !== "provisional-v1";
-  const artwork = reference ? referenceArtwork(image, width, height) : null;
+  if (!reference && !image) throw Error("カバー画像を選択してください。");
+  const artwork = reference ? await referenceArtwork(image, width, height) : null;
   if (reference) await loadReferenceFonts(labels);
   const drawTitle = referenceCanvasTitle(labels);
   const versions = intervals.map(({ start, end }) => ({
@@ -221,6 +221,7 @@ async function createLocalJobs(
           drawReferenceFrame(ctx, artwork, Math.round(seconds * 60), versions, REF, drawTitle);
           return;
         }
+        if (!image) return;
         ctx.fillStyle = "black";
         ctx.fillRect(0, 0, 1920, 1080);
         ctx.save();
@@ -280,7 +281,7 @@ export function localProjectIssue(project: LocalProjectData): string {
       const labels = project.names.replace(/\r\n?/g, "\n").split("\n");
       if (labels.length !== count || labels.some((label) => !label.trim()))
         return `Version名は${count}行必要です。1つの素材に複数の名前を付ける場合は、Version境界を設定してください。`;
-      if (!project.cover) return "カバー画像を選択してください。";
+      if (project.layout === "provisional-v1" && !project.cover) return "カバー画像を選択してください。";
     } else {
       const source = project.sources[0];
       if (!/^@\S+$/.test(project.username))
