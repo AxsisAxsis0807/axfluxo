@@ -143,6 +143,7 @@ export function Timeline({
   media,
   onVisibleWindow,
   onMarkerEdit,
+  independentMarkers = false,
   navigation,
   selectedBoundary,
   onBoundarySelect,
@@ -166,6 +167,7 @@ export function Timeline({
   items: TimelineItem[];
   markers: number[];
   onMarkerEdit?: (index: number, us: number) => void;
+  independentMarkers?: boolean;
   onSeek: (us: number) => void;
   onEdit: (id: string, startUs: number, endUs: number) => void;
   waveform?: TimelineWaveform;
@@ -226,6 +228,9 @@ export function Timeline({
 
   const minTime = bounds && !editing ? bounds.startUs : 0;
   const maxTime = bounds && !editing ? bounds.endUs : durationUs;
+  const markerStart = independentMarkers ? 0 : (items[0]?.startUs ?? minTime);
+  const markerEnd = independentMarkers ? durationUs : (items.at(-1)?.endUs ?? maxTime);
+  const trimMarkers = mode === "all-versions" && onMarkerEdit && !independentMarkers ? markers : [];
   const pps = zoom,
     spanUs = Math.min(maxTime - minTime, (8_000_000 / pps) * 1_000_000),
     padding = width / 2,
@@ -421,8 +426,8 @@ export function Timeline({
       );
       d.snapped = snap.snapped;
       const index = Number(base.id);
-      const lower = markers[index - 1] ?? items[0]?.startUs ?? minTime;
-      const upper = markers[index + 1] ?? items.at(-1)?.endUs ?? maxTime;
+      const lower = markers[index - 1] ?? markerStart;
+      const upper = markers[index + 1] ?? markerEnd;
       if (upper - lower > 1) {
         pendingDraft.current = {
           ...base,
@@ -443,7 +448,7 @@ export function Timeline({
       base,
       durationUs,
       frameTimeUs(1),
-      mode === "all-versions" && onMarkerEdit ? markers : [],
+      trimMarkers,
     );
     if (d.kind === "start")
       start = clamp(start + snappedDelta, limits.startMin, limits.startMax);
@@ -843,9 +848,7 @@ export function Timeline({
                           item,
                           durationUs,
                           frameTimeUs(1),
-                          mode === "all-versions" && onMarkerEdit
-                            ? markers
-                            : [],
+                          trimMarkers,
                         );
                         const start =
                           edge === "start"
@@ -1006,9 +1009,9 @@ export function Timeline({
                   const target =
                     m + (event.key === "ArrowLeft" ? -1 : 1) * frameTimeUs(1);
                   const lower =
-                    markers[index - 1] ?? items[0]?.startUs ?? minTime;
+                    markers[index - 1] ?? markerStart;
                   const upper =
-                    markers[index + 1] ?? items.at(-1)?.endUs ?? maxTime;
+                    markers[index + 1] ?? markerEnd;
                   if (target > lower && target < upper)
                     onMarkerEdit(index, Math.round(target));
                 }}

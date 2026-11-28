@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import type { RecoverableLocalJob } from "../../services/video/cloud-local-job";
 import {
   recorderType,
+  TIMED_MP4_UNAVAILABLE,
   usesTimedLocalEncoding,
 } from "../../services/video/local-encode";
 import {
@@ -41,7 +42,7 @@ export function LocalExport({
             setStatus("下部の詳細から音声処理を許可してください。");
         });
       const jobs = await prepare();
-      if (jobs.some((job) => !usesTimedLocalEncoding(job))) {
+      if (jobs.some((job) => !job.requireTimedMp4 && !usesTimedLocalEncoding(job))) {
         if (!supportedRecorder)
           throw Error(
             "このブラウザーは端末内エンコードに対応していません。Safari／ブラウザーで利用可能なMP4・WebM形式がありません。別の対応ブラウザーでお試しください。",
@@ -54,6 +55,7 @@ export function LocalExport({
       await reserveLocalExports(jobs, rest);
       setStatus(
         "現在の設定で予約しました。下部の書き出しキューで確認できます。" +
+          (jobs.some(job => job.requireTimedMp4 && !usesTimedLocalEncoding(job)) ? ` ${TIMED_MP4_UNAVAILABLE}` : "") +
           (jobs.some(job => job.cloudRecovery) ? " クラウド素材の復旧には同じアカウント、接続、元の素材が必要です。" : ""),
       );
     } catch (e) {

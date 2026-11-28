@@ -630,6 +630,7 @@ export async function loadExportEntries(): Promise<ExportEntry[]> {
     db.transaction("jobs").objectStore("jobs").getAll(),
   )) as StoredEntry[];
   const { buildLocalJobs } = await import("./local-project");
+  const batches = new Map<string, Awaited<ReturnType<typeof buildLocalJobs>>>();
   const entries: ExportEntry[] = [];
   for (const row of rows.sort((a, b) => a.order - b.order)) {
     const { recipe, order: _order, result: savedResult, ...entry } = row;
@@ -665,8 +666,15 @@ export async function loadExportEntries(): Promise<ExportEntry[]> {
     } else if (recipe) {
       let project: LocalProjectData | undefined;
       try {
-        project = await hydrate(recipe.project);
-        const jobs = await buildLocalJobs(project);
+        // A batch stores the same immutable settings on each output row.
+        // Share its decoded artwork and bounded analysis cache after reload.
+        const key = JSON.stringify(recipe.project);
+        let jobs = batches.get(key);
+        if (!jobs) {
+          project = await hydrate(recipe.project);
+          jobs = await buildLocalJobs(project);
+          batches.set(key, jobs);
+        }
         if (!jobs[recipe.index]) throw Error("復旧するジョブが不正です。");
         const interrupted =
           ["queued", "preparing", "rendering"].includes(entry.state) ||

@@ -72,7 +72,7 @@ export function exportNames(songTitle: string, names: string) {
     .replace(/\r\n?/g, "\n")
     .split("\n")
     .map((version) =>
-      version.trim() ? `${title} - ${version.trim()}` : version,
+      version.trim() ? `${title} ${version.trim()}` : version,
     )
     .join("\n");
 }

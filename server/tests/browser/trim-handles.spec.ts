@@ -372,24 +372,28 @@ for (const mode of ["all", "fnf"]) {
   });
 }
 
-test("All Versions trim edges cannot cross or erase Version boundaries", async ({
+test("short trim edges can cross without changing the landscape Version boundaries", async ({
   page,
 }) => {
   await open(page, "all");
+  await page.getByLabel("編集する範囲").selectOption("short");
   await page.getByLabel("version境界（素材内の秒、カンマ区切り）").fill("2,6");
   await page
     .getByRole("button", { name: "トリミング範囲を編集", exact: true })
     .click();
   for (let i = 0; i < 4; i++)
     await page.getByRole("button", { name: "縮小", exact: true }).click();
-  await touchDrag(page, page.locator('[data-action="start"]'), 180);
-  await expect(page.getByLabel("開始秒", { exact: true })).toHaveValue(
-    "1.999999",
-  );
-  await touchDrag(page, page.locator('[data-action="end"]'), -180);
-  await expect(page.getByLabel("終了秒", { exact: true })).toHaveValue(
-    "6.000001",
-  );
+  await touchDrag(page, page.locator('[data-action="start"]'), 50);
+  const start = page.getByLabel("開始秒", { exact: true });
+  await expect.poll(async () => Number(await start.inputValue())).toBeGreaterThan(2);
+  const timeline = page.getByTestId("video-timeline");
+  await timeline.focus();
+  await timeline.press("End");
+  const endHandle = page.locator('[data-action="end"]');
+  await visibleHandle(endHandle);
+  await touchDrag(page, endHandle, -50);
+  const end = page.getByLabel("終了秒", { exact: true });
+  await expect.poll(async () => Number(await end.inputValue())).toBeLessThan(6);
   await expect(
     page.getByLabel("version境界（素材内の秒、カンマ区切り）"),
   ).toHaveValue("2,6");

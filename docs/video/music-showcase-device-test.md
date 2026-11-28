@@ -1,0 +1,11 @@
+# iPhone device test for music showcase
+
+This is a physical-device checklist. Desktop Chromium and Playwright WebKit results do not count as passing it. Record the iPhone model, iOS version, available storage, browser version and renderer commit for each run.
+
+1. On the device All Versions page, import two versions and a cover, enter a title and names, then verify the original full mix with individual exports switched off. Check the cover corners, background, title, clock, gap-free transitions and audio end.
+2. Reopen one audio card. Switch between the full-mix and portrait scopes. Pan and pinch the waveform, drag each handle at both endpoints, audition the scope and set in/out from the playhead. Include a short selection, drag cancellation and one source change. Confirm that portrait edits leave full-mix markers and individual ranges intact.
+3. Reserve a small batch containing the full mix, portrait and individual landscapes. While it runs, change the title and trim on-screen and create no new reservation. Verify each queued output preserves the initial settings. Save one output from the queue to Files and open it in Photos. Record the codec pair, resolution, frame rate, audio duration and synchronization.
+4. Repeat with the specified 0–37 second portrait and a full-length individual version. Use headphone playback to compare the selected in/out times. Verify that black bars or blurred side backgrounds stay fixed, even while the center and bars react.
+5. Repeat a batch with the rest mode active, reload Safari during encoding, and verify one interrupted job resumes from its saved recipe while completed jobs remain available. Repeat with Safari terminated. Test a full-filesystem warning and multiple tabs if storage can be isolated without deleting other user data.
+6. Repeat short and full-size outputs consecutively, and record elapsed times, interruptions, memory pressure and device temperature if measurable. Try a browser with no suitable timed codec APIs and verify it reports the new format limitation while the established fallback for the full mix still works.
+7. Check FNF Showcase range editing, preview and export. Reopening the main editor should produce a blank editing session while admitting and restoring export jobs continues to work.

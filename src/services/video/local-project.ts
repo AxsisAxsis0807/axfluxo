@@ -8,6 +8,9 @@ import {
 } from "./all-versions-canvas";
 import { imageForEncode, type LocalEncodeJob } from "./local-encode";
 import { fnfFilenames, FNF_HEADING } from "../../domain/video/fnf-showcase";
+import { allVersionsShortJob, validShortRange, type AllVersionsShort } from "./all-versions-short";
+import { musicShowcase } from "./music-showcase";
+
 export type TimelineState = {
   boundarySettings?: import("./track-boundaries").BoundarySettings;
   boundaryPlacement?: import("./track-boundaries").BoundaryPlacement;
@@ -35,36 +38,39 @@ export type Source = {
 export type Range = { id: string; start: number; end: number; name: string };
 export const ALL_VERSIONS_FILE_GAP_SECONDS = 0;
 
-export function localIntervals(
-  sources: Pick<Source, "start" | "end" | "duration" | "markers">[],
-  gapBetweenFiles = 0,
-) {
+type SourceTiming = Pick<Source, "start" | "end" | "duration" | "markers">;
+
+function sourceBounds(s: SourceTiming) {
+  if (
+    ![s.start, s.end, s.duration].every(Number.isFinite) ||
+    s.start < 0 ||
+    s.end <= s.start ||
+    s.end > s.duration
+  )
+    throw Error("開始・終了時刻を素材の長さの範囲内で指定してください。");
+  const markers = s.markers.trim()
+    ? s.markers.split(",").map((v) => Number(v.trim()))
+    : [];
+  if (
+    markers.some(
+      (m, i) =>
+        !Number.isFinite(m) ||
+        m <= s.start ||
+        m >= s.end ||
+        (i > 0 && m <= markers[i - 1]),
+    )
+  )
+    throw Error(
+      "version境界は区間内の秒数を昇順・カンマ区切りで指定してください。",
+    );
+  return [s.start, ...markers, s.end];
+}
+
+export function localIntervals(sources: SourceTiming[], gapBetweenFiles = 0) {
   let offset = 0;
   return sources.flatMap((s, index) => {
     if (index) offset += gapBetweenFiles;
-    if (
-      ![s.start, s.end, s.duration].every(Number.isFinite) ||
-      s.start < 0 ||
-      s.end <= s.start ||
-      s.end > s.duration
-    )
-      throw Error("開始・終了時刻を素材の長さの範囲内で指定してください。");
-    const markers = s.markers.trim()
-      ? s.markers.split(",").map((v) => Number(v.trim()))
-      : [];
-    if (
-      markers.some(
-        (m, i) =>
-          !Number.isFinite(m) ||
-          m <= s.start ||
-          m >= s.end ||
-          (i > 0 && m <= markers[i - 1]),
-      )
-    )
-      throw Error(
-        "version境界は区間内の秒数を昇順・カンマ区切りで指定してください。",
-      );
-    const bounds = [s.start, ...markers, s.end];
+    const bounds = sourceBounds(s);
     const result = bounds.slice(0, -1).map((value, i) => ({
       start: offset + value - s.start,
       end: offset + bounds[i + 1] - s.start,
@@ -82,6 +88,8 @@ export type LocalProjectData = {
   cover: string;
   coverFile?: File;
   coverId: string;
+  short?: AllVersionsShort;
+  musicShowcase?: { version: 1; title: string; individual: boolean };
   names: string;
   ranges: Range[];
   username: string;
@@ -202,7 +210,7 @@ async function createLocalJobs(
     startFrame: Math.round(start * 60),
     endFrame: Math.round(end * 60),
   }));
-  return [
+  const jobs: LocalEncodeJob[] = [
     {
       filename: "All Versions.mp4",
       gapBetweenPiecesSeconds: ALL_VERSIONS_FILE_GAP_SECONDS,
@@ -256,6 +264,33 @@ async function createLocalJobs(
       },
     },
   ];
+  // Index 0 is the existing full mix, index 1 the short when selected.
+  // Previously reserved jobs have no showcase recipe and keep their old renderer.
+  const settings = project.musicShowcase;
+  const makeShowcase = settings && image
+    ? await musicShowcase(image, settings.title.trim(), settings.individual)
+    : undefined;
+  if (project.short && image) {
+    const short = project.short;
+    const source = sources.find((item) => item.id === short.sourceId);
+    if (!source) throw Error("ショート動画の音源がありません。");
+    jobs.push(makeShowcase
+      ? makeShowcase(source, short.start, short.end, "portrait", "All Versions Short.mp4")
+      : allVersionsShortJob(short, source, image));
+  }
+  if (settings?.individual && makeShowcase) {
+    let i = 0;
+    for (const source of sources) {
+      const bounds = sourceBounds(source);
+      for (let j = 1; j < bounds.length; j++) {
+        const name = labels[i].trim().replace(/[\u0000-\u001f\/\\:*?"<>|]/g, "_");
+        const filename = `${String(i + 1).padStart(2, "0")} ${Array.from(name).slice(0, 110).join("")}.mp4`;
+        jobs.push(makeShowcase(source, bounds[j - 1], bounds[j], "landscape", filename));
+        i++;
+      }
+    }
+  }
+  return jobs;
 }
 
 export async function buildLocalJobs(
@@ -265,6 +300,8 @@ export async function buildLocalJobs(
   if (issue) throw Error(issue);
   const project = {
     ...value,
+    ...(value.short ? { short: { ...value.short } } : {}),
+    ...(value.musicShowcase ? { musicShowcase: { ...value.musicShowcase } } : {}),
     sources: value.sources.map((s) => ({ ...s })),
     ranges: value.ranges.map((r) => ({ ...r })),
   };
@@ -282,6 +319,16 @@ export function localProjectIssue(project: LocalProjectData): string {
       if (labels.length !== count || labels.some((label) => !label.trim()))
         return `Version名は${count}行必要です。1つの素材に複数の名前を付ける場合は、Version境界を設定してください。`;
       if (project.layout === "provisional-v1" && !project.cover) return "カバー画像を選択してください。";
+      if (project.musicShowcase && (project.musicShowcase.version !== 1 || !project.cover ||
+        !project.musicShowcase.title.trim()))
+        return "曲紹介動画の曲名とカバー画像を指定してください。";
+      if (project.short) {
+        const source = project.sources.find((item) => item.id === project.short?.sourceId);
+        if (!project.cover || !project.short.title.trim())
+          return "ショート動画の曲名とカバー画像を指定してください。";
+        if (!source || !validShortRange(project.short, source.duration))
+          return "ショート動画の開始・終了を音源の範囲内で指定してください。";
+      }
     } else {
       const source = project.sources[0];
       if (!/^@\S+$/.test(project.username))

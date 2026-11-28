@@ -86,3 +86,16 @@ it("joins trimmed source files and internal version boundaries without gaps", ()
   ]);
   expect(localIntervals([first, second]).at(-1)?.end).toBe(7);
 });
+
+it("validates the short against its selected source without changing the landscape cut", () => {
+  const project = p();
+  project.sources[0].markers = "5";
+  project.short = { sourceId: "s", start: 2, end: 8, title: "KALYPSO" };
+  expect(localProjectIssue(project)).toBe("");
+  expect(localIntervals(project.sources)).toEqual([{ start: 0, end: 5 }, { start: 5, end: 10 }]);
+  project.short.end = 11;
+  expect(localProjectIssue(project)).toContain("ショート動画の開始・終了");
+  project.short.end = 8;
+  project.short.sourceId = "removed";
+  expect(localProjectIssue(project)).toContain("ショート動画の開始・終了");
+});

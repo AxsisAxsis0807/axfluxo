@@ -8,6 +8,9 @@ export type LocalEncodeJob = {
   recovery?: { project: LocalProjectData; index: number };
   /** For compositions that can be rendered without decoding source video. */
   timestamped?: boolean;
+  requireTimedMp4?: boolean;
+  prepareVideo?: (signal: AbortSignal) => Promise<LocalEncodeJob["draw"]>;
+  audioFadeOutSeconds?: number;
   filename: string;
   width: number;
   height: number;
@@ -27,6 +30,14 @@ export type LocalEncodeJob = {
     seconds: number,
   ) => void;
 };
+export function audioFadeGain(
+  remainingSeconds: number,
+  fadeSeconds: number | undefined,
+) {
+  return fadeSeconds && fadeSeconds > 0
+    ? Math.max(0, Math.min(1, remainingSeconds / fadeSeconds))
+    : 1;
+}
 export function imageForEncode(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -47,6 +58,9 @@ export function imageForEncode(url: string): Promise<HTMLImageElement> {
     image.src = url;
   });
 }
+export const TIMED_MP4_UNAVAILABLE =
+  "このブラウザーでは曲紹介動画の1080p・60fps MP4書き出しに必要なWebCodecsを利用できません。";
+
 export function usesTimedLocalEncoding(job: LocalEncodeJob) {
   return (
     !!job.timestamped &&
@@ -194,6 +208,13 @@ export async function encodeLocal(
       state: "running",
     });
   try {
+    if (job.requireTimedMp4 && !timed) throw Error(TIMED_MP4_UNAVAILABLE);
+    if (job.prepareVideo) {
+      status("曲紹介用の周波数と明暗を解析中…");
+      const draw = await job.prepareVideo(signal);
+      signal.throwIfAborted();
+      job = { ...job, draw };
+    }
     let result;
     if (timed) {
       const { encodeTimedLocal } = await import("./local-timed-encode");
@@ -266,14 +287,19 @@ async function recordLocal(
   media.style.cssText =
     "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none";
   document.body.append(media);
-  const { source, stream, recorder } = (() => {
+  const { source, gain, stream, recorder } = (() => {
     let source: MediaElementAudioSourceNode | undefined;
     let destination: MediaStreamAudioDestinationNode | undefined;
+    let gain: GainNode | undefined;
     let stream: MediaStream | undefined;
     try {
       destination = audio.createMediaStreamDestination();
       source = audio.createMediaElementSource(media);
-      source.connect(destination);
+      if (job.audioFadeOutSeconds) {
+        gain = audio.createGain();
+        source.connect(gain);
+        gain.connect(destination);
+      } else source.connect(destination);
       stream = canvas.captureStream(60);
       destination.stream.getAudioTracks().forEach((t) => stream!.addTrack(t));
       const recorder = new MediaRecorder(stream, {
@@ -281,16 +307,24 @@ async function recordLocal(
         videoBitsPerSecond: 8_000_000,
         audioBitsPerSecond: 320_000,
       });
-      return { source, stream, recorder };
+      return { source, gain, stream, recorder };
     } catch (error) {
       source?.disconnect();
+      gain?.disconnect();
       stream?.getTracks().forEach((t) => t.stop());
       destination?.stream.getTracks().forEach((t) => t.stop());
       media.remove();
       throw error;
     }
   })();
+  const total = job.pieces.reduce((n, p) => n + p.end - p.start, 0) +
+    Math.max(0, job.pieces.length - 1) * gap;
   const drawFrame = (seconds: number) => {
+    gain?.gain.setTargetAtTime(
+      audioFadeGain(total - seconds, job.audioFadeOutSeconds),
+      audio.currentTime,
+      0.008,
+    );
     job.draw(ctx, media, seconds);
     // Some engines drop the pre-start frame while the recorder is paused.
     // Explicitly request a fresh frame after resume, including static artwork.
@@ -309,8 +343,6 @@ async function recordLocal(
   recorder.onerror = () => {
     recordError = Error("端末内エンコードに失敗しました。");
   };
-  const total = job.pieces.reduce((n, p) => n + p.end - p.start, 0) +
-    Math.max(0, job.pieces.length - 1) * gap;
   let recordingStarted = false;
   let elapsed = 0;
   let outputBytes = 0;
@@ -433,6 +465,7 @@ async function recordLocal(
     media.load();
     media.remove();
     source.disconnect();
+    gain?.disconnect();
     stream.getTracks().forEach((t) => t.stop());
   }
 }

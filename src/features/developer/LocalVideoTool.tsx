@@ -1,6 +1,10 @@
 "use client";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { isInteriorBoundary } from "../../services/video/timeline-math";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  initialShortRange,
+  validShortRange,
+  type ShortRange,
+} from "../../services/video/all-versions-short";
 import LocalCompositionPreview from "./LocalCompositionPreview";
 import LocalMediaPreview from "./LocalMediaPreview";
 import LocalTimeline from "./LocalTimeline";
@@ -32,6 +36,8 @@ export { localIntervals } from "../../services/video/local-project";
 // Explicit extensions avoid iOS WebKit treating audio/* like video/* in the Files picker.
 const ALL_VERSIONS_MEDIA_ACCEPT =
   ".mp3,.wav,.m4a,.aac,.flac,.ogg,.oga,.aif,.aiff,.opus,.mp4,.mov,.m4v,.webm,.mkv";
+const detachedMedia = () => null;
+
 function metadata(file: File, url: string): Promise<Source> {
   return new Promise((resolve, reject) => {
     const media = document.createElement("video");
@@ -81,12 +87,17 @@ export default function LocalVideoTool({
   mode: "all-versions" | "fnf-showcase";
   ownerId: string;
 }) {
+  const fnf = mode === "fnf-showcase";
   const [layout, setLayout] = useState<NonNullable<LocalProjectData["layout"]>>("reference-pasa-v1");
   const [rest, setRest] = useState(true);
   const recoveryError = useSyncExternalStore(subscribeRecovery, getRecoveryError, () => "");
   const [recoveryAttempt, setRecoveryAttempt] = useState(0);
   // A single native decoder at a time is critical for mobile Safari.
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
+  const activeMedia = useCallback(
+    () => document.getElementById(`local-media-${activePreviewId}`) as HTMLMediaElement | null,
+    [activePreviewId],
+  );
   const [analysisEnabledIds, setAnalysisEnabledIds] = useState<string[]>([]);
   const [projectId] = useState(() => crypto.randomUUID());
   const [coverFile, setCoverFile] = useState<File>();
@@ -97,9 +108,21 @@ export default function LocalVideoTool({
   const { sources, names } = audio;
   const [cover, setCover] = useState("");
   const [songTitle, setSongTitle] = useState("");
+  const [shortSourceId, setShortSourceId] = useState<string>();
+  const [individual, setIndividual] = useState(true);
+  const [trimScope, setTrimScope] = useState<"all-versions" | "short">("all-versions");
+  const [shortRanges, setShortRanges] = useState<Record<string, ShortRange>>({});
+  const shortSource = sources.find((source) => source.id === shortSourceId) ?? sources[0];
+  const short = !fnf && shortSource && songTitle.trim() && cover
+    ? {
+        ...(shortRanges[shortSource.id] ?? initialShortRange(shortSource.duration)),
+        sourceId: shortSource.id,
+        title: songTitle,
+      }
+    : undefined;
   const [openTrimId, setOpenTrimId] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState("");
-  const key = JSON.stringify([songTitle, names, layout, cover, sources.map(
+  const key = JSON.stringify([songTitle, names, layout, cover, short, individual, sources.map(
     ({ id, start, end, markers }) => [id, start, end, markers],
   )]);
   const currentPreviewKey = useRef(key);
@@ -116,7 +139,6 @@ export default function LocalVideoTool({
     [loading, setLoading] = useState(false);
   const urls = useRef<string[]>([]),
     active = useRef(true);
-  const fnf = mode === "fnf-showcase";
   useEffect(() => {
     active.current = true;
     return () => {
@@ -291,6 +313,8 @@ export default function LocalVideoTool({
       coverFile,
       coverId,
       names: fnf ? names : exportNames(songTitle, names),
+      short,
+      ...(!fnf && short ? { musicShowcase: { version: 1, title: songTitle, individual } } : {}),
       ranges,
       username,
       scaleFactor,
@@ -308,9 +332,48 @@ export default function LocalVideoTool({
     if (closing || activePreviewId !== id) setActivePreviewId(null);
     setOpenTrimId(closing ? null : id);
   }
+  function changeShortRange(source: Source, range: ShortRange) {
+    const bounded = { start: range.start, end: Math.min(range.end, source.duration) };
+    if (!validShortRange(bounded, source.duration)) return;
+    setShortRanges((old) => ({ ...old, [source.id]: bounded }));
+    setShortSourceId(source.id);
+  }
   function renderTrim(s: Source, i: number) {
+    const editingShort = !fnf && trimScope === "short";
+    const range = editingShort
+      ? shortRanges[s.id] ?? initialShortRange(s.duration)
+      : { start: s.start, end: s.end };
+    const editRange = ({ start, end }: ShortRange) => {
+      if (editingShort) return changeShortRange(s, { start, end });
+      const candidate = { start, end: Math.min(end, s.duration) };
+      if (validShortRange(candidate, s.duration) &&
+        markers.every(marker => marker > candidate.start && marker < candidate.end))
+        patch(s.id, candidate);
+    };
+    const selectedForShort = shortSource?.id === s.id;
+    const markers = s.markers.trim() ? s.markers.split(",").map(Number) : [];
     return (
-      <>
+      <div className={fnf ? undefined : "av-short-trim"}>
+          {!fnf && (
+            <header className="av-short-trim-heading">
+              <h3>音声の波形編集</h3>
+              <label>
+                編集する範囲
+                <select value={trimScope} onChange={(event) =>
+                  setTrimScope(event.target.value === "short" ? "short" : "all-versions")}>
+                  <option value="all-versions">All Versions・個別横動画</option>
+                  <option value="short">縦ショート</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                aria-pressed={selectedForShort}
+                onClick={() => { setShortSourceId(s.id); setTrimScope("short"); }}
+              >
+                {selectedForShort ? "ショートに使用中" : "この音源をショートに使う"}
+              </button>
+            </header>
+          )}
           {activePreviewId === s.id ? (
             <>
               <button onClick={() => setActivePreviewId(null)}>
@@ -345,21 +408,18 @@ export default function LocalVideoTool({
             </button>
           )}
           <LocalTimeline
-            key={s.id}
+            key={`${s.id}:${editingShort}`}
             analysisEnabled={analysisEnabledIds.includes(s.id)}
             file={s.file}
-            timeline={s.timeline}
-            onTimelineState={(state) => {
+            timeline={editingShort ? undefined : s.timeline}
+            onTimelineState={editingShort ? undefined : (state) => {
               if (JSON.stringify(s.timeline) !== JSON.stringify(state))
                 patch(s.id, { timeline: state });
             }}
             duration={s.duration}
-            media={() =>
-              document.getElementById(
-                `local-media-${s.id}`,
-              ) as HTMLMediaElement | null
-            }
+            media={activePreviewId === s.id ? activeMedia : detachedMedia}
             fnf={fnf}
+            short={editingShort}
             items={
               fnf
                 ? ranges.map((r) => ({
@@ -368,75 +428,33 @@ export default function LocalVideoTool({
                     endUs: Math.round(r.end * 1e6),
                     label: r.name || "range",
                   }))
-                : [
-                    {
-                      id: s.id,
-                      startUs: Math.round(s.start * 1e6),
-                      endUs: Math.round(s.end * 1e6),
-                      label: s.file.name,
-                    },
-                  ]
+                : [{
+                    id: s.id,
+                    startUs: Math.round(range.start * 1e6),
+                    endUs: Math.round(range.end * 1e6),
+                    label: s.file.name,
+                  }]
             }
-            onMarkerAdd={
-              fnf
-                ? undefined
-                : (us) => {
-                    const markers = s.markers
-                      .split(",")
-                      .filter((v) => v.trim())
-                      .map(Number);
-                    if (
-                      markers.some((m) => !Number.isFinite(m)) ||
-                      !isInteriorBoundary(us, s.start * 1e6, s.end * 1e6)
-                    )
-                      return;
-                    patch(s.id, {
-                      markers: [...new Set([...markers, us / 1e6])]
-                        .sort((a, b) => a - b)
-                        .join(","),
-                    });
-                  }
+            markers={fnf ? [] : markers.filter(Number.isFinite).map((value) => value * 1e6)}
+            onMarkerAdd={fnf ? undefined : (us) => {
+              if (markers.some((value) => !Number.isFinite(value)) ||
+                us <= s.start * 1e6 || us >= s.end * 1e6) return;
+              patch(s.id, {
+                markers: [...new Set([...markers, us / 1e6])].sort((a, b) => a - b).join(","),
+              });
+            }}
+            onMarkerDelete={fnf ? undefined : (index) =>
+              patch(s.id, { markers: markers.filter((_, i) => i !== index).join(",") })
             }
-            onMarkerDelete={
-              fnf
-                ? undefined
-                : (index) =>
-                    patch(s.id, {
-                      markers: s.markers
-                        .split(",")
-                        .filter((v) => v.trim())
-                        .filter((_, i) => i !== index)
-                        .join(","),
-                    })
-            }
-            onMarkerEdit={
-              fnf
-                ? undefined
-                : (index, us) => {
-                    const markers = s.markers.split(",").map(Number);
-                    markers[index] = us / 1e6;
-                    patch(s.id, { markers: markers.join(",") });
-                  }
-            }
-            markers={s.markers
-              .split(",")
-              .filter((v) => v.trim() && Number.isFinite(Number(v)))
-              .map((v) => Number(v) * 1e6)}
+            onMarkerEdit={fnf ? undefined : (index, us) => {
+              if (markers.some((value) => !Number.isFinite(value)) ||
+                us <= s.start * 1e6 || us >= s.end * 1e6) return;
+              patch(s.id, { markers: markers.map((value, i) => i === index ? us / 1e6 : value).join(",") });
+            }}
             onEdit={(id, start, end) =>
               fnf
-                ? setRanges((old) =>
-                    old.map((r) => (r.id === id ? { ...r, start, end } : r)),
-                  )
-                : patch(id, {
-                    start,
-                    end,
-                    markers: s.markers
-                      .split(",")
-                      .filter(
-                        (v) => v.trim() && Number(v) > start && Number(v) < end,
-                      )
-                      .join(","),
-                  })
+                ? setRanges((old) => old.map((r) => r.id === id ? { ...r, start, end } : r))
+                : editRange({ start, end })
             }
           />
           {!fnf && (
@@ -447,10 +465,8 @@ export default function LocalVideoTool({
                   type="number"
                   min={0}
                   step="0.01"
-                  value={s.start}
-                  onChange={(e) =>
-                    patch(s.id, { start: Number(e.target.value) })
-                  }
+                  value={range.start}
+                  onChange={(e) => editRange({ ...range, start: Number(e.target.value) })}
                 />
               </label>
               <label>
@@ -459,8 +475,8 @@ export default function LocalVideoTool({
                   type="number"
                   min={0}
                   step="0.01"
-                  value={s.end}
-                  onChange={(e) => patch(s.id, { end: Number(e.target.value) })}
+                  value={range.end}
+                  onChange={(e) => editRange({ ...range, end: Number(e.target.value) })}
                 />
               </label>
               <label>
@@ -474,6 +490,11 @@ export default function LocalVideoTool({
                 onClick={() => {
                   setActivePreviewId(null);
                   setOpenTrimId(null);
+                  setShortSourceId((id) => id === s.id ? undefined : id);
+                  setShortRanges(({ [s.id]: removed, ...remaining }) => {
+                    void removed;
+                    return remaining;
+                  });
                   setAnalysisEnabledIds((ids) => ids.filter((id) => id !== s.id));
                   setAudio((old) => withAudioOrder(old, old.sources.filter((item) => item.id !== s.id)));
                 }}
@@ -482,7 +503,7 @@ export default function LocalVideoTool({
               </button>
             </>
           )}
-      </>
+      </div>
     );
   }
   return (
@@ -677,6 +698,15 @@ export default function LocalVideoTool({
           </label>
         </>
       )}
+      {!fnf && (
+        <>
+          <p>曲名とカバー画像を入れると、All Versionsと一緒に縦ショートを予約します。</p>
+          <label>
+            <input type="checkbox" checked={individual} onChange={event => setIndividual(event.target.checked)} />
+            バージョン別の横動画も作る
+          </label>
+        </>
+      )}
       <button
         disabled={loading || !sources.length}
         onClick={() => {
@@ -685,6 +715,7 @@ export default function LocalVideoTool({
             .then((jobs) => {
               if (!fnf && currentPreviewKey.current !== key) return;
               setPreviewKey(key);
+              if (!fnf) setPreviewIndex(short ? 1 : 0);
               setPreviewJobs(jobs);
             })
             .catch((e) =>
@@ -725,7 +756,7 @@ export default function LocalVideoTool({
         rest={rest}
         onRestChange={setRest}
       />
-      <style>{`.local-video-tool button,.local-video-tool input,.local-video-tool a{min-height:44px}.local-video-tool label{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.local-video-tool input,.local-video-tool textarea{max-width:100%;font-size:16px}.local-video-tool fieldset{min-width:0;margin:16px 0}.local-video-tool textarea{width:100%}.local-video-tool{overflow-wrap:anywhere}`}</style>
+      <style>{`.av-short-trim{background:#151922;border:1px solid #353d4f;border-radius:14px;padding:12px;margin-top:12px}.av-short-trim-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.av-short-trim-heading h3{font-size:1rem;margin:0}.av-short-trim-heading button[aria-pressed=true]{background:#264d48;color:#d2fff2}.av-short-trim input[type=number]{width:8ch}.local-video-tool button,.local-video-tool input,.local-video-tool a{min-height:44px}.local-video-tool label{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.local-video-tool input,.local-video-tool textarea{max-width:100%;font-size:16px}.local-video-tool fieldset{min-width:0;margin:16px 0}.local-video-tool textarea{width:100%}.local-video-tool{overflow-wrap:anywhere}`}</style>
     </main>
   );
 }
