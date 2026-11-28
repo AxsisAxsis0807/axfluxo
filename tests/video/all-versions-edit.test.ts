@@ -74,12 +74,12 @@ describe("All Versions audio editing", () => {
     expect(versionRows(reduced).unassigned).toEqual(["A2"]);
   });
 
-  it("preserves legacy names untouched and adapts titled rows to the existing export format", () => {
+  it("joins song and version names with a space and preserves entered hyphens", () => {
     expect(exportNames("", "  NAME - UNKNOWN\r\nB ")).toBe(
       "  NAME - UNKNOWN\r\nB ",
     );
-    expect(exportNames("Song", " Original \n\nSlowed")).toBe(
-      "Song - Original\n\nSong - Slowed",
+    expect(exportNames("KALYPSO", " (NORMAL) \n\n(Super-Slowed)")).toBe(
+      "KALYPSO (NORMAL)\n\nKALYPSO (Super-Slowed)",
     );
   });
 });
