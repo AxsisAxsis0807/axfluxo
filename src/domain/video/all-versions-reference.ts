@@ -1,3 +1,6 @@
+/** Corner radius measured from the 1280×720 reference still. */
+export const ALL_VERSIONS_COVER_RADIUS_RATIO = 32 / 722;
+
 /**
  * All Versions layout measured from a 910x512, 30fps NORMAL/SLOWED reference.
  * Measurements are observational, not exact InShot font/blur/keyframe settings.

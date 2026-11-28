@@ -1,5 +1,11 @@
 import { ALL_VERSIONS_REFERENCE as REF, type AllVersionsLayout } from "../../domain/video/all-versions-reference";
-import { drawReferenceFrame, loadReferenceFonts, referenceArtwork, referenceCanvasTitle } from "./all-versions-canvas";
+import {
+  drawAllVersionsCover,
+  drawReferenceFrame,
+  loadReferenceFonts,
+  referenceArtwork,
+  referenceCanvasTitle,
+} from "./all-versions-canvas";
 import { imageForEncode, type LocalEncodeJob } from "./local-encode";
 import { fnfFilenames, FNF_HEADING } from "../../domain/video/fnf-showcase";
 export type TimelineState = {
@@ -229,18 +235,7 @@ async function createLocalJobs(
           image.height * scale,
         );
         ctx.restore();
-        const crop = Math.min(image.width, image.height);
-        ctx.drawImage(
-          image,
-          (image.width - crop) / 2,
-          (image.height - crop) / 2,
-          crop,
-          crop,
-          660,
-          130,
-          600,
-          600,
-        );
+        drawAllVersionsCover(ctx, image, 660, 130, 600);
         const i = intervals.findIndex(
           (v) => seconds >= v.start && seconds < v.end,
         );

@@ -33,7 +33,11 @@ import {
 } from "../../services/video/api-client";
 import { projectsClient } from "../../services/video/projects-client";
 import { PlaybackError } from "../../services/video/playback";
-import { ALL_VERSIONS_REFERENCE as REF, referenceTimerText } from "../../domain/video/all-versions-reference";
+import {
+  ALL_VERSIONS_COVER_RADIUS_RATIO,
+  ALL_VERSIONS_REFERENCE as REF,
+  referenceTimerText,
+} from "../../domain/video/all-versions-reference";
 import { drawReferenceFrame, loadReferenceFonts, referenceArtwork, referenceCanvasTitle } from "../../services/video/all-versions-canvas";
 const steps = [
   "素材",
@@ -440,6 +444,7 @@ export function AllVersionsEditor({
                         width: "31.5%",
                         aspectRatio: "1",
                         objectFit: "cover",
+                        borderRadius: `${ALL_VERSIONS_COVER_RADIUS_RATIO * 100}%`,
                         left: "50%",
                         top: "12%",
                         transform: "translateX(-50%)",

@@ -9,7 +9,11 @@ import {
   type AllVersionsProject,
 } from "../../../../src/domain/video/all-versions";
 import { ApiError } from "../../../api/errors";
-import { ALL_VERSIONS_REFERENCE as REF, referenceTitleSize } from "../../../../src/domain/video/all-versions-reference";
+import {
+  ALL_VERSIONS_COVER_RADIUS_RATIO,
+  ALL_VERSIONS_REFERENCE as REF,
+  referenceTitleSize,
+} from "../../../../src/domain/video/all-versions-reference";
 export const fontPath = () =>
   resolve(
     process.env.VIDEO_ALEO_FONT ??
@@ -201,7 +205,7 @@ export async function backgroundImage(
     s = Math.max(side / cover.width, side / cover.height);
   ctx.save();
   ctx.beginPath();
-  ctx.rect(x, y, side, side);
+  ctx.roundRect(x, y, side, side, side * ALL_VERSIONS_COVER_RADIUS_RATIO);
   ctx.clip();
   ctx.drawImage(
     cover,
