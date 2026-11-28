@@ -109,6 +109,8 @@ export default function LocalVideoTool({
   const [cover, setCover] = useState("");
   const [songTitle, setSongTitle] = useState("");
   const [shortSourceId, setShortSourceId] = useState<string>();
+  const [individual, setIndividual] = useState(true);
+  const [trimScope, setTrimScope] = useState<"all-versions" | "short">("all-versions");
   const [shortRanges, setShortRanges] = useState<Record<string, ShortRange>>({});
   const shortSource = sources.find((source) => source.id === shortSourceId) ?? sources[0];
   const short = !fnf && shortSource && songTitle.trim() && cover
@@ -120,7 +122,7 @@ export default function LocalVideoTool({
     : undefined;
   const [openTrimId, setOpenTrimId] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState("");
-  const key = JSON.stringify([songTitle, names, layout, cover, short, sources.map(
+  const key = JSON.stringify([songTitle, names, layout, cover, short, individual, sources.map(
     ({ id, start, end, markers }) => [id, start, end, markers],
   )]);
   const currentPreviewKey = useRef(key);
@@ -312,6 +314,7 @@ export default function LocalVideoTool({
       coverId,
       names: fnf ? names : exportNames(songTitle, names),
       short,
+      ...(!fnf && short ? { musicShowcase: { version: 1, title: songTitle, individual } } : {}),
       ranges,
       username,
       scaleFactor,
@@ -336,18 +339,36 @@ export default function LocalVideoTool({
     setShortSourceId(source.id);
   }
   function renderTrim(s: Source, i: number) {
-    const range = shortRanges[s.id] ?? initialShortRange(s.duration);
+    const editingShort = !fnf && trimScope === "short";
+    const range = editingShort
+      ? shortRanges[s.id] ?? initialShortRange(s.duration)
+      : { start: s.start, end: s.end };
+    const editRange = ({ start, end }: ShortRange) => {
+      if (editingShort) return changeShortRange(s, { start, end });
+      const candidate = { start, end: Math.min(end, s.duration) };
+      if (validShortRange(candidate, s.duration) &&
+        markers.every(marker => marker > candidate.start && marker < candidate.end))
+        patch(s.id, candidate);
+    };
     const selectedForShort = shortSource?.id === s.id;
     const markers = s.markers.trim() ? s.markers.split(",").map(Number) : [];
     return (
       <div className={fnf ? undefined : "av-short-trim"}>
           {!fnf && (
             <header className="av-short-trim-heading">
-              <h3>ショートの音声範囲</h3>
+              <h3>音声の波形編集</h3>
+              <label>
+                編集する範囲
+                <select value={trimScope} onChange={(event) =>
+                  setTrimScope(event.target.value === "short" ? "short" : "all-versions")}>
+                  <option value="all-versions">All Versions・個別横動画</option>
+                  <option value="short">縦ショート</option>
+                </select>
+              </label>
               <button
                 type="button"
                 aria-pressed={selectedForShort}
-                onClick={() => setShortSourceId(s.id)}
+                onClick={() => { setShortSourceId(s.id); setTrimScope("short"); }}
               >
                 {selectedForShort ? "ショートに使用中" : "この音源をショートに使う"}
               </button>
@@ -387,18 +408,18 @@ export default function LocalVideoTool({
             </button>
           )}
           <LocalTimeline
-            key={s.id}
+            key={`${s.id}:${editingShort}`}
             analysisEnabled={analysisEnabledIds.includes(s.id)}
             file={s.file}
-            timeline={s.timeline}
-            onTimelineState={(state) => {
+            timeline={editingShort ? undefined : s.timeline}
+            onTimelineState={editingShort ? undefined : (state) => {
               if (JSON.stringify(s.timeline) !== JSON.stringify(state))
                 patch(s.id, { timeline: state });
             }}
             duration={s.duration}
             media={activePreviewId === s.id ? activeMedia : detachedMedia}
             fnf={fnf}
-            short={!fnf}
+            short={editingShort}
             items={
               fnf
                 ? ranges.map((r) => ({
@@ -433,7 +454,7 @@ export default function LocalVideoTool({
             onEdit={(id, start, end) =>
               fnf
                 ? setRanges((old) => old.map((r) => r.id === id ? { ...r, start, end } : r))
-                : changeShortRange(s, { start, end })
+                : editRange({ start, end })
             }
           />
           {!fnf && (
@@ -445,7 +466,7 @@ export default function LocalVideoTool({
                   min={0}
                   step="0.01"
                   value={range.start}
-                  onChange={(e) => changeShortRange(s, { ...range, start: Number(e.target.value) })}
+                  onChange={(e) => editRange({ ...range, start: Number(e.target.value) })}
                 />
               </label>
               <label>
@@ -455,7 +476,7 @@ export default function LocalVideoTool({
                   min={0}
                   step="0.01"
                   value={range.end}
-                  onChange={(e) => changeShortRange(s, { ...range, end: Number(e.target.value) })}
+                  onChange={(e) => editRange({ ...range, end: Number(e.target.value) })}
                 />
               </label>
               <label>
@@ -677,7 +698,15 @@ export default function LocalVideoTool({
           </label>
         </>
       )}
-      {!fnf && <p>曲名とカバー画像がある場合、横動画とショート動画を一緒に書き出します。</p>}
+      {!fnf && (
+        <>
+          <p>曲名とカバー画像を入れると、All Versionsと一緒に縦ショートを予約します。</p>
+          <label>
+            <input type="checkbox" checked={individual} onChange={event => setIndividual(event.target.checked)} />
+            バージョン別の横動画も作る
+          </label>
+        </>
+      )}
       <button
         disabled={loading || !sources.length}
         onClick={() => {

@@ -8,6 +8,8 @@ export type LocalEncodeJob = {
   recovery?: { project: LocalProjectData; index: number };
   /** For compositions that can be rendered without decoding source video. */
   timestamped?: boolean;
+  requireTimedMp4?: boolean;
+  prepareVideo?: (signal: AbortSignal) => Promise<LocalEncodeJob["draw"]>;
   audioFadeOutSeconds?: number;
   filename: string;
   width: number;
@@ -56,6 +58,9 @@ export function imageForEncode(url: string): Promise<HTMLImageElement> {
     image.src = url;
   });
 }
+export const TIMED_MP4_UNAVAILABLE =
+  "このブラウザーでは曲紹介動画の1080p・60fps MP4書き出しに必要なWebCodecsを利用できません。";
+
 export function usesTimedLocalEncoding(job: LocalEncodeJob) {
   return (
     !!job.timestamped &&
@@ -203,6 +208,13 @@ export async function encodeLocal(
       state: "running",
     });
   try {
+    if (job.requireTimedMp4 && !timed) throw Error(TIMED_MP4_UNAVAILABLE);
+    if (job.prepareVideo) {
+      status("曲紹介用の周波数と明暗を解析中…");
+      const draw = await job.prepareVideo(signal);
+      signal.throwIfAborted();
+      job = { ...job, draw };
+    }
     let result;
     if (timed) {
       const { encodeTimedLocal } = await import("./local-timed-encode");

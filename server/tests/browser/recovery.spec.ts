@@ -626,6 +626,63 @@ test("a blocked reservation never reports success before storage commits", async
   // A new explicit reservation uses the current editor, not the rejected one.
   await page.getByRole("button", { name: "端末内で書き出す", exact: true }).click();
   await expect(exports.getByRole("status")).toContainText("現在の設定で予約しました。");
-  expect(await queueCount()).toBe(2);
-  expect((await inventory(page))[2]).toHaveLength(2);
+  expect(await queueCount()).toBe(3);
+  expect((await inventory(page))[2]).toHaveLength(3);
+});
+
+test("one All Versions reservation keeps the full mix, short, and each version independent after reload", async ({ page }) => {
+  await open(page);
+  await page.goto("https://recovery.test/all");
+  const pick = page.getByLabel("端末の素材", { exact: true });
+  const buffer = await readFile(mp3);
+  await pick.setInputFiles(["one.mp3", "two.mp3"].map(name => ({ name, mimeType: "audio/mpeg", buffer })));
+  await page.getByLabel("曲名", { exact: true }).fill("Mix - 東京");
+  await page.getByLabel("カバー画像").setInputFiles({
+    name: "cover.png", mimeType: "image/png",
+    buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/Yp8AAAAASUVORK5CYII=", "base64"),
+  });
+  const first = page.getByRole("article", { name: "音源 1", exact: true });
+  await first.getByRole("button", { name: "切り取り", exact: true }).click();
+  await first.getByLabel("version境界（素材内の秒、カンマ区切り）").fill("1");
+  await page.getByLabel("バージョン名（改行区切り）").fill("(Normal)\n(Second)\n(Alternate)");
+  const second = page.getByRole("article", { name: "音源 2", exact: true });
+  await second.getByRole("button", { name: "切り取り", exact: true }).click();
+  await second.getByLabel("終了秒", { exact: true }).fill("1.75");
+  await second.getByRole("button", { name: "この音源をショートに使う" }).click();
+  await second.getByLabel("開始秒", { exact: true }).fill("0.25");
+  await second.getByLabel("終了秒", { exact: true }).fill("1.5");
+  await second.getByLabel("編集する範囲").selectOption("all-versions");
+  await expect(second.getByLabel("終了秒", { exact: true })).toHaveValue("1.75");
+  await page.evaluate(() =>
+    (window as unknown as { localExportQueue: { pause: () => void } }).localExportQueue.pause(),
+  );
+  await page.getByRole("button", { name: "端末内で書き出す", exact: true }).click();
+  await expect(page.getByRole("region", { name: "端末内書き出し" }).getByRole("status"))
+    .toContainText("現在の設定で予約しました。");
+  await page.getByLabel("曲名", { exact: true }).fill("Changed after reservation");
+  const inspect = () => page.evaluate(() =>
+    (window as unknown as { localExportQueue: { getSnapshot: () => { entries: {
+      input?: import("../../../src/services/video/local-encode").LocalEncodeJob;
+    }[] } } }).localExportQueue.getSnapshot().entries.map(({ input }) => ({
+      width: input?.width,
+      height: input?.height,
+      title: input?.recovery?.project.musicShowcase?.title,
+      ranges: input?.pieces.map(p => [p.file?.name, p.start, p.end]),
+    })),
+  );
+  const reserved = await inspect();
+  expect(reserved.map(job => [job.width, job.height])).toEqual([
+    [1920, 1080], [1080, 1920], [1920, 1080], [1920, 1080], [1920, 1080],
+  ]);
+  expect(reserved.map(job => job.title)).toEqual(Array(5).fill("Mix - 東京"));
+  expect(reserved[1].ranges).toEqual([["two.mp3", 0.25, 1.5]]);
+  expect(reserved[2].ranges).toEqual([["one.mp3", 0, 1]]);
+  expect(reserved[3].ranges?.[0]?.slice(0, 2)).toEqual(["one.mp3", 1]);
+  expect(reserved[4].ranges).toEqual([["two.mp3", 0, 1.75]]);
+  await durable(page);
+  // Disable real encoding in the reloading page until we verify the recipes.
+  await page.addInitScript(() => Object.defineProperty(window, "VideoEncoder", { value: undefined, configurable: true }));
+  await page.reload();
+  await expect.poll(async () => (await inspect()).length, { timeout: 20_000 }).toBe(5);
+  expect(await inspect()).toEqual(reserved);
 });

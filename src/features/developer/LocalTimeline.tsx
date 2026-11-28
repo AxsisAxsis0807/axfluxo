@@ -417,7 +417,7 @@ export default function LocalTimeline({
       <output aria-label="中央プレイヘッド時刻">
         {(current / 1e6).toFixed(6)} 秒
       </output>
-      {short && items[0] && (
+      {!fnf && items[0] && (
         <div className="av-short-playhead-actions">
           <button type="button"
             disabled={current >= items[0].endUs - 16667}

@@ -376,6 +376,7 @@ test("short trim edges can cross without changing the landscape Version boundari
   page,
 }) => {
   await open(page, "all");
+  await page.getByLabel("編集する範囲").selectOption("short");
   await page.getByLabel("version境界（素材内の秒、カンマ区切り）").fill("2,6");
   await page
     .getByRole("button", { name: "トリミング範囲を編集", exact: true })

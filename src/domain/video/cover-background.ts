@@ -90,6 +90,7 @@ export function drawCoverBackground<Image, Data extends Pixels>(
   cover: Image,
   coverWidth: number,
   coverHeight: number,
+  includeCover = true,
 ) {
   const bw = COVER_BLUR_WIDTH;
   const bh = COVER_BLUR_HEIGHT;
@@ -117,6 +118,10 @@ export function drawCoverBackground<Image, Data extends Pixels>(
   output.save();
   output.imageSmoothingQuality = "high";
   output.drawImage(backgroundCanvas, 0, 0, bw, bh, 0, 0, width, height);
+  if (!includeCover) {
+    output.restore();
+    return;
+  }
   const crop = Math.min(coverWidth, coverHeight);
   const side = height;
   const left = (width - side) / 2;

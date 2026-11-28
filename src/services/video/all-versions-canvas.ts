@@ -45,6 +45,7 @@ export async function referenceArtwork(
   cover: HTMLImageElement | null,
   width: number,
   height: number,
+  includeCover = true,
 ) {
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -67,6 +68,7 @@ export async function referenceArtwork(
       cover,
       cover.naturalWidth,
       cover.naturalHeight,
+      includeCover,
     );
   } else {
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";

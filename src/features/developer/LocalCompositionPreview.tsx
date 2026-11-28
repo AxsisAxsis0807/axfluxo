@@ -17,6 +17,22 @@ export default function LocalCompositionPreview({
   const [index, setIndex] = useState(0),
     [url, setUrl] = useState(""),
     [message, setMessage] = useState("");
+  const [prepared, setPrepared] = useState<{ job: LocalEncodeJob; draw: LocalEncodeJob["draw"] }>();
+  const drawVideo = job.prepareVideo ? (prepared?.job === job ? prepared.draw : undefined) : job.draw;
+  useEffect(() => {
+    if (!job.prepareVideo) return;
+    const controller = new AbortController();
+    setMessage("曲紹介用の周波数と明暗を解析中…");
+    void job.prepareVideo(controller.signal).then(draw => {
+      if (controller.signal.aborted) return;
+      setPrepared({ job, draw });
+      setMessage("");
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted)
+        setMessage(error instanceof Error ? error.message : "曲紹介の音声を解析できません。");
+    });
+    return () => controller.abort();
+  }, [job]);
   const selectedIndex = Math.min(index, job.pieces.length - 1);
   useEffect(() => {
     let live = true;
@@ -53,7 +69,7 @@ export default function LocalCompositionPreview({
         const time = offset + Math.max(0, media.currentTime - piece.start);
         if (job.audioFadeOutSeconds)
           media.volume = audioFadeGain(total - time, job.audioFadeOutSeconds);
-        job.draw(ctx, drawingMedia, time);
+        drawVideo?.(ctx, drawingMedia, time);
         if (media.currentTime >= piece.end && !media.paused) {
           media.pause();
           setMessage("区間の再生が完了しました。次の素材を選択できます。");
@@ -91,7 +107,7 @@ export default function LocalCompositionPreview({
       media.removeEventListener("seeked", once);
       document.removeEventListener("visibilitychange", hidden);
     };
-  }, [job, selectedIndex, url, audioOnly]);
+  }, [job, selectedIndex, url, audioOnly, drawVideo]);
   useEffect(() => {
     const media = audioOnly ? audio.current : video.current;
     return () => {
@@ -100,8 +116,8 @@ export default function LocalCompositionPreview({
       media.removeAttribute("src");
       media.load();
     };
-  }, [url, selectedIndex, audioOnly]);
-  const mediaKey = `${selectedIndex}:${url}:${job.pieces[selectedIndex].start}:${job.pieces[selectedIndex].end}`;
+  }, [url, selectedIndex, audioOnly, drawVideo]);
+  const mediaKey = `${selectedIndex}:${drawVideo ? url : ""}:${job.pieces[selectedIndex].start}:${job.pieces[selectedIndex].end}`;
   const onMetadata = (media: HTMLMediaElement) => {
     media.currentTime = job.pieces[selectedIndex].start;
   };
@@ -126,7 +142,7 @@ export default function LocalCompositionPreview({
         <audio
           key={mediaKey}
           ref={audio}
-          src={url || undefined}
+          src={drawVideo ? (url || undefined) : undefined}
           controls
           preload="none"
           onLoadedMetadata={(e) => onMetadata(e.currentTarget)}
@@ -137,7 +153,7 @@ export default function LocalCompositionPreview({
         <video
           key={mediaKey}
           ref={video}
-          src={url || undefined}
+          src={drawVideo ? (url || undefined) : undefined}
           controls
           playsInline
           preload="none"

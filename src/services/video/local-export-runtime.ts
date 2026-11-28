@@ -1,5 +1,5 @@
 import { ExportQueue, type ExportEntry } from "./export-queue";
-import { encodeLocal, usesTimedLocalEncoding } from "./local-encode";
+import { encodeLocal, TIMED_MP4_UNAVAILABLE, usesTimedLocalEncoding } from "./local-encode";
 import type { RecoverableLocalJob } from "./cloud-local-job";
 import { isUnlocked } from "../developer/local-lock";
 let audio: AudioContext | undefined;
@@ -34,6 +34,7 @@ export const localExportQueue = new ExportQueue(
     const urls: string[] = [];
     try {
       const legacyRecorder = !usesTimedLocalEncoding(job);
+      if (job.requireTimedMp4 && legacyRecorder) throw Error(TIMED_MP4_UNAVAILABLE);
       if (legacyRecorder) audio ??= new AudioContext();
       if (legacyRecorder && audio?.state !== "running") {
         update(0, "音声処理を許可してください");

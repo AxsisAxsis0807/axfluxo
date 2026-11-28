@@ -59,6 +59,72 @@ test("All Versions local jobs draw the cover, centered title band and version ti
             indices: [landscape.recovery.index,short.recovery.index],
           };
         };
+        window.inspectMusicShowcase = async () => {
+          const artwork = document.createElement("canvas");
+          artwork.width = artwork.height = 64;
+          const artworkContext = artwork.getContext("2d");
+          artworkContext.fillStyle = "#26412f";
+          artworkContext.fillRect(0, 0, 64, 64);
+          artworkContext.fillStyle = "#eceffb";
+          artworkContext.fillRect(28, 15, 8, 8);
+          const rate = 48000, count = rate * 4;
+          const bytes = new ArrayBuffer(44 + count * 2);
+          const header = new DataView(bytes);
+          function ascii(offset, value) {
+            for (let i = 0; i < value.length; i++) header.setUint8(offset + i, value.charCodeAt(i));
+          }
+          ascii(0,"RIFF"); header.setUint32(4, count * 2 + 36, true); ascii(8,"WAVE");
+          ascii(12,"fmt "); header.setUint32(16, 16, true); header.setUint16(20, 1, true);
+          header.setUint16(22, 1, true); header.setUint32(24, rate, true);
+          header.setUint32(28, rate * 2, true); header.setUint16(32, 2, true);
+          header.setUint16(34, 16, true); ascii(36,"data"); header.setUint32(40,count * 2,true);
+          for(let i=rate*1.5;i<count;i++) header.setInt16(44+i*2, 25000 * Math.sin(i * 2 * Math.PI * 330 / rate), true);
+          const file = new File([bytes], "fixture.wav", {type:"audio/wav"});
+          const [,,shortWide,secondWide] = await buildLocalJobs({
+            mode:"all-versions", cover:artwork.toDataURL(),
+            names:"MIX (I)\\nMIX (II)",
+            sources:[{ id:"one", file,url:"unused",start:0,end:4,duration:4,markers:"2" }],
+            short:{sourceId:"one",title:"Mix",start:0,end:4},
+            musicShowcase:{version:1,title:"Mix (東京) " + "Very long title ".repeat(12),individual:true},
+            ranges:[],
+          });
+          const [,portrait] = await buildLocalJobs({
+            mode:"all-versions", cover:artwork.toDataURL(), names:"Mix",
+            sources:[{id:"one",file,url:"unused",start:0,end:4,duration:4,markers:""}],
+            short:{sourceId:"one",title:"Mix",start:0,end:4},
+            musicShowcase:{version:1,title:"Mix",individual:false},ranges:[],
+          });
+          const signal = new AbortController().signal;
+          const video = document.createElement("video");
+          const draw = await portrait.prepareVideo(signal);
+          const drawWide = await shortWide.prepareVideo(signal);
+          const canvas=document.createElement("canvas");
+          canvas.width = portrait.width; canvas.height = portrait.height;
+          const ctx = canvas.getContext("2d");
+          const pixel = (x,y) => Array.from(ctx.getImageData(x,y,1,1).data);
+          const region = (x,y,w,h) => Array.from(ctx.getImageData(x,y,w,h).data);
+          draw(ctx,video,1.4);
+          const before = region(173,923,734,50);
+          draw(ctx,video,2.4);
+          const after = region(173,923,734,50);
+          const bars = [];
+          for(let x=173;x<907;x++) {
+            const i=((948-923)*734+(x-173))*4;
+            if(after[i]>175&&(x===173||after[i-4]<=175)) bars.push(x);
+          }
+          const top=pixel(540,419), bottom=pixel(540,1500);
+          draw(ctx,video,1.4);
+          const repeat=region(173,923,734,50).every((v,i) => v===before[i]);
+          canvas.width=shortWide.width; canvas.height=shortWide.height;
+          drawWide(ctx,video,0);
+          const side0=region(0,0,420,1080);
+          drawWide(ctx,video,2);
+          const sameSide=region(0,0,420,1080).every((v,i) => v===side0[i]);
+          return {top,bottom,repeat,sameSide,bars,
+            changes: after.reduce((n,v,i)=>n+(v!==before[i]),0),
+            ranges:[shortWide,secondWide].map(j=>j.pieces.map(p=>[p.start,p.end])),
+            layouts:[[portrait.width,portrait.height],[shortWide.width,shortWide.height]]};
+        };
         window.inspectLayout = async (layout, multiple = false, useCover = true) => {
           const canvas = document.createElement('canvas');
           canvas.width = canvas.height = 32;
@@ -160,6 +226,21 @@ test("All Versions local jobs draw the cover, centered title band and version ti
   expect(short.first.timer).toBe(0);
   expect(short.last).toBe(0);
   expect(short.fadeOut).toBe(2);
+
+  const showcase = await page.evaluate(() => (window as unknown as {
+    inspectMusicShowcase: () => Promise<{
+      top: number[]; bottom: number[]; repeat: boolean; sameSide: boolean;
+      bars: number[]; changes: number; ranges: number[][][]; layouts: number[][];
+    }>;
+  }).inspectMusicShowcase());
+  expect(showcase.top).toEqual([0, 0, 0, 255]);
+  expect(showcase.bottom).toEqual([0, 0, 0, 255]);
+  expect(showcase.repeat && showcase.sameSide).toBe(true);
+  expect(showcase.changes).toBeGreaterThan(50);
+  expect(showcase.bars).toHaveLength(104);
+  expect((showcase.bars.at(-1)! - showcase.bars[0]) / 103).toBeCloseTo(7.04, 1);
+  expect(showcase.ranges).toEqual([[[0, 2]], [[2, 4]]]);
+  expect(showcase.layouts).toEqual([[1080, 1920], [1920, 1080]]);
 
   type Sample = {
     cover: number;

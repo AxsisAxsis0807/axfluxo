@@ -18,6 +18,10 @@ const intro = [
   [3.0, 1, 1],
 ] as const;
 
+// The reference's 1.9-second jump is not a proven template rule. New
+// compositions interpolate the surrounding points and use their own audio.
+const responsiveIntro = intro.filter(([time]) => time < 1.85 || time >= 2.0);
+
 const outro = [
   [0, 0, 0, 0],
   [0.1, 0, 0, 0.01],
@@ -52,13 +56,13 @@ function interpolate(
   return a[column] + weight * (b[column] - a[column]);
 }
 
-export function shortReferenceOpacity(seconds: number, duration: number) {
+export function shortReferenceOpacity(seconds: number, duration: number, responsive = false) {
   const time = Math.max(0, Math.min(seconds, duration));
   // Give very short excerpts enough time to show the cover and overlays.
   const introTime = time * (3 / Math.min(3, duration / 3));
   const remaining = (duration - time) * (1.4 / Math.min(1.4, duration / 3));
   return {
-    cover: interpolate(intro, introTime, 1) * interpolate(outro, remaining, 1),
+    cover: interpolate(responsive ? responsiveIntro : intro, introTime, 1) * interpolate(outro, remaining, 1),
     title: interpolate(outro, remaining, 2),
     clock: interpolate(intro, introTime, 2) * interpolate(outro, remaining, 3),
   };
