@@ -43,6 +43,10 @@ const edges = [20, 80, 160, 320, 1000, 4000, 10_000].map(
   (hz) => (hz * fftSize) / sampleRate,
 );
 const smoothing = (ms: number) => 1 - Math.exp(-1000 / (60 * ms));
+// Channel order is RMS, peak, then the six frequency ranges in edges.
+// The normalized mid ranges help describe both reference recordings.
+const exposureWeights = [0.11, 0.04, 0.04, 0.02, 0.015, 0.45, 0.31, 0.015];
+const exposureFloors = [0.025, 0.06, 0.02, 0.012, 0.012, 0.018, 0.016, 0.01];
 const rise = smoothing(38);
 const fall = smoothing(185);
 const smooth = (previous: number, value: number) =>
@@ -92,6 +96,8 @@ export function showcaseAnalyzer(totalSamples: number) {
   const power = new Float64Array(Math.ceil(edges.at(-1)!) + 1);
   const bands = new Float64Array(6);
   const previousBands = new Float64Array(6);
+  const exposureReference = new Float64Array(exposureWeights.length);
+  let exposureInitialized = false;
   const bars = new Float64Array(SHOWCASE_SPECTRUM.count);
   let position = 0;
   let index = 0;
@@ -170,8 +176,17 @@ export function showcaseAnalyzer(totalSamples: number) {
     base += (activity - base) * 0.013 * audible;
     const scaled = activity / Math.max(0.025, base);
     const transient = clamp(flux / Math.max(0.05, base * 2.2));
+    let relativeEnergy = 0;
+    for (let i = 0; i < exposureWeights.length; i++) {
+      const level = i === 0 ? rms : i === 1 ? peak : bands[i - 2];
+      if (!exposureInitialized) exposureReference[i] = level;
+      const normal = Math.max(exposureReference[i], exposureFloors[i]);
+      relativeEnergy += exposureWeights[i] * clamp(level / normal - 1, -1, 2);
+      exposureReference[i] += (level - exposureReference[i]) * 0.013;
+    }
+    exposureInitialized ||= audible > 0.15;
     const light = clamp(
-      0.5 + audible * (0.3 * (scaled - 1) + 0.15 * transient),
+      0.5 + audible * (0.48 * relativeEnergy + 0.055 * transient),
     );
     exposure = smooth(exposure, light);
     glow = smooth(
