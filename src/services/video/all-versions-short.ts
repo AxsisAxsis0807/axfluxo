@@ -1,3 +1,7 @@
+import {
+  SHORT_AUDIO_FADE_SECONDS,
+  shortReferenceOpacity,
+} from "../../domain/video/all-versions-short-reference";
 import type { LocalEncodeJob } from "./local-encode";
 import type { Source } from "./local-project";
 
@@ -44,8 +48,6 @@ export function allVersionsShortJob(
     width,
     width,
   );
-  image.fillStyle = "rgba(0,0,0,0.15)";
-  image.fillRect(0, 0, width, width);
 
   const title = short.title.trim().toUpperCase();
   const duration = short.end - short.start;
@@ -54,6 +56,7 @@ export function allVersionsShortJob(
     width,
     height,
     timestamped: true,
+    audioFadeOutSeconds: Math.min(duration, SHORT_AUDIO_FADE_SECONDS),
     pieces: [
       {
         file: source.file,
@@ -65,17 +68,16 @@ export function allVersionsShortJob(
     ],
     draw(ctx, _media, seconds) {
       const time = Math.min(duration, Math.max(0, seconds));
-      const fade = Math.min(duration / 3, 0.7);
-      const opacity = Math.min(1, time / fade, (duration - time) / fade);
+      const opacity = shortReferenceOpacity(time, duration);
       ctx.save();
       ctx.fillStyle = "black";
       ctx.fillRect(0, 0, width, height);
-      ctx.globalAlpha = 0.24 + 0.76 * opacity;
+      ctx.globalAlpha = opacity.cover;
       ctx.drawImage(artwork, 0, squareTop);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "white";
-      ctx.globalAlpha = opacity;
+      ctx.globalAlpha = opacity.title;
       ctx.font = "700 56px Arial, sans-serif";
       ctx.shadowColor = "rgba(0,0,0,0.9)";
       ctx.shadowBlur = 6;
@@ -84,6 +86,7 @@ export function allVersionsShortJob(
       const whole = Math.floor(time + 1e-6);
       const minutes = String(Math.floor(whole / 60)).padStart(2, "0");
       const remainder = String(whole % 60).padStart(2, "0");
+      ctx.globalAlpha = opacity.clock;
       ctx.font = "400 30px Arial, sans-serif";
       ctx.fillText(`${minutes}:${remainder}`, width / 2, 1332);
       ctx.restore();

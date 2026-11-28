@@ -17,7 +17,7 @@ import {
   canEncodeAudio,
   canEncodeVideo,
 } from "mediabunny";
-import type { LocalEncodeJob } from "./local-encode";
+import { audioFadeGain, type LocalEncodeJob } from "./local-encode";
 import { inspectTimedAudio, localAudioRate, timedAudio, type AudioIntervalPlan } from "./local-timed-audio";
 import { setEncodeReport } from "./local-encode-diagnostics";
 import { aacPacketStartSample, localAudioBitrate } from "./local-timed-aac";
@@ -273,10 +273,38 @@ export async function encodeTimedLocal(
   const writeAudio = async (sample: AudioSample) => {
     const end =
       Math.round(sample.timestamp * localAudioRate) + sample.numberOfFrames;
+    let faded: AudioSample | undefined;
     try {
       stage = "audio-add";
-      await audio.add(sample);
+      const fade = job.audioFadeOutSeconds;
+      if (fade && end / localAudioRate > total - fade) {
+        const frames = sample.numberOfFrames;
+        const data = new Float32Array(frames * 2);
+        for (let channel = 0; channel < 2; channel++) {
+          sample.copyTo(data.subarray(channel * frames, (channel + 1) * frames), {
+            planeIndex: channel,
+            format: "f32-planar",
+          });
+        }
+        for (let i = 0; i < frames; i++) {
+          const gain = audioFadeGain(
+            total - sample.timestamp - i / localAudioRate,
+            fade,
+          );
+          data[i] *= gain;
+          data[frames + i] *= gain;
+        }
+        faded = new AudioSample({
+          data,
+          format: "f32-planar",
+          numberOfChannels: 2,
+          sampleRate: localAudioRate,
+          timestamp: sample.timestamp,
+        });
+      }
+      await audio.add(faded ?? sample);
     } finally {
+      faded?.close();
       sample.close();
     }
     await audioPackets;

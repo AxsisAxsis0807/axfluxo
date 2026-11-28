@@ -36,14 +36,27 @@ test("All Versions local jobs draw the cover, centered title band and version ti
               if(data[i]>240 && data[i+1]>240 && data[i+2]>240) count++;
             return count;
           };
+          const steady = {
+            pixels: [419,420,1499,1500].map(y => ctx.getImageData(0,y,1,1).data[1]),
+            title: ink(370,1080,340,60),
+            timer: ink(470,1310,140,44),
+          };
+          short.draw(ctx, document.createElement('video'), 0);
+          const first = {
+            cover: ctx.getImageData(0,420,1,1).data[1],
+            title: ink(370,1080,340,60),
+            timer: ink(470,1310,140,44),
+          };
+          short.draw(ctx, document.createElement('video'), 3);
           return {
+            ...steady,
+            first,
+            last: ctx.getImageData(0,420,1,1).data[1],
+            fadeOut: short.audioFadeOutSeconds,
             dims: [short.width,short.height],
             trim: [short.pieces[0].start,short.pieces[0].end],
             landscapeTrim: [landscape.pieces[0].start,landscape.pieces[0].end],
             indices: [landscape.recovery.index,short.recovery.index],
-            pixels: [419,420,1499,1500].map(y => ctx.getImageData(0,y,1,1).data[1]),
-            title: ink(370,1080,340,60),
-            timer: ink(470,1310,140,44),
           };
         };
         window.inspectLayout = async (layout, multiple = false, useCover = true) => {
@@ -127,6 +140,8 @@ test("All Versions local jobs draw the cover, centered title band and version ti
     inspectShort: () => Promise<{
       dims: number[]; trim: number[]; landscapeTrim: number[];
       indices: number[]; pixels: number[]; title: number; timer: number;
+      first: { cover: number; title: number; timer: number };
+      last: number; fadeOut: number;
     }>;
   }).inspectShort());
   expect(short.dims).toEqual([1080, 1920]);
@@ -135,10 +150,16 @@ test("All Versions local jobs draw the cover, centered title band and version ti
   expect(short.indices).toEqual([0, 1]);
   expect([short.pixels[0], short.pixels[3]]).toEqual([0, 0]);
   expect(short.pixels[1]).toBe(short.pixels[2]);
-  expect(short.pixels[1]).toBeGreaterThan(145);
-  expect(short.pixels[1]).toBeLessThan(155);
+  expect(short.pixels[1]).toBeGreaterThan(170);
+  expect(short.pixels[1]).toBeLessThan(180);
   expect(short.title).toBeGreaterThan(100);
   expect(short.timer).toBeGreaterThan(60);
+  expect(short.first.cover).toBeGreaterThan(40);
+  expect(short.first.cover).toBeLessThan(50);
+  expect(short.first.title).toBeGreaterThan(100);
+  expect(short.first.timer).toBe(0);
+  expect(short.last).toBe(0);
+  expect(short.fadeOut).toBe(2);
 
   type Sample = {
     cover: number;

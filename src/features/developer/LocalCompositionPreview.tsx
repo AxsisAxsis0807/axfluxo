@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import type { LocalEncodeJob } from "../../services/video/local-encode";
+import { audioFadeGain, type LocalEncodeJob } from "../../services/video/local-encode";
 export default function LocalCompositionPreview({
   job,
   audioOnly = false,
@@ -36,6 +36,8 @@ export default function LocalCompositionPreview({
     const media = audioOnly ? audio.current : video.current;
     if (!media) return;
     let frame = 0;
+    const total = job.pieces.reduce((sum, piece) => sum + piece.end - piece.start, 0) +
+      (job.pieces.length - 1) * (job.gapBetweenPiecesSeconds ?? 0);
     const draw = () => {
       if (document.hidden) return;
       const ctx = canvas.current?.getContext("2d");
@@ -48,11 +50,10 @@ export default function LocalCompositionPreview({
             .slice(0, selectedIndex)
             .reduce((sum, p) => sum + p.end - p.start, 0) +
           selectedIndex * (job.gapBetweenPiecesSeconds ?? 0);
-        job.draw(
-          ctx,
-          drawingMedia,
-          offset + Math.max(0, media.currentTime - piece.start),
-        );
+        const time = offset + Math.max(0, media.currentTime - piece.start);
+        if (job.audioFadeOutSeconds)
+          media.volume = audioFadeGain(total - time, job.audioFadeOutSeconds);
+        job.draw(ctx, drawingMedia, time);
         if (media.currentTime >= piece.end && !media.paused) {
           media.pause();
           setMessage("区間の再生が完了しました。次の素材を選択できます。");
