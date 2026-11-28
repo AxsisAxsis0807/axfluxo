@@ -36,9 +36,10 @@ import { PlaybackError } from "../../services/video/playback";
 import {
   ALL_VERSIONS_COVER_RADIUS_RATIO,
   ALL_VERSIONS_REFERENCE as REF,
+  REFERENCE_BACKGROUND,
   referenceTimerText,
 } from "../../domain/video/all-versions-reference";
-import { drawReferenceFrame, loadReferenceFonts, referenceArtwork, referenceBackgroundUrl, referenceCanvasTitle } from "../../services/video/all-versions-canvas";
+import { drawReferenceFrame, loadReferenceFonts, referenceArtwork, referenceCanvasTitle } from "../../services/video/all-versions-canvas";
 const steps = [
   "素材",
   "音声編集",
@@ -259,7 +260,7 @@ export function AllVersionsEditor({
     });
     return () => { live = false; };
   }, [names, showReference]);
-  const artworkUrl = project.cover ? coverUrl : referenceBackgroundUrl;
+  const artworkUrl = project.cover ? coverUrl : REFERENCE_BACKGROUND;
   const hasCover = !!project.cover;
   useEffect(() => {
     if (!showReference || !artworkUrl) {

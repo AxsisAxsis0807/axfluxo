@@ -11,8 +11,6 @@ import {
 import { drawCrtBackground } from "../../domain/video/crt-background";
 import { imageForEncode } from "./local-encode";
 
-export const referenceBackgroundUrl = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/${REFERENCE_BACKGROUND}`;
-
 export function drawAllVersionsCover(
   ctx: CanvasRenderingContext2D,
   cover: HTMLImageElement,
@@ -44,7 +42,6 @@ export async function referenceArtwork(
   width: number,
   height: number,
 ) {
-  const fallback = cover ? null : await imageForEncode(referenceBackgroundUrl);
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -53,7 +50,9 @@ export async function referenceArtwork(
 
   if (cover) {
     drawCrtBackground(ctx, width, height, cover, cover.naturalWidth, cover.naturalHeight);
-  } else if (fallback) {
+  } else {
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    const fallback = await imageForEncode(`${basePath}/${REFERENCE_BACKGROUND}`);
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(fallback, 0, 0, width, height);
   }
