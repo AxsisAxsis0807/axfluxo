@@ -42,8 +42,22 @@ test("All Versions local jobs draw the cover, centered title band and version ti
           }
           function draw(time) {
             job.draw(ctx, video, time);
+            const legacy = layout === 'provisional-v1';
+            const side = legacy ? 600 : 1080 * 506 / 512;
+            const left = (job.width - side) / 2;
+            const top = legacy ? 130 : 1080 * 3 / 512;
+            const radius = side * 32 / 722;
+            const corners = [false, true].flatMap((right) =>
+              [false, true].map((bottom) => [0.24, 0.36].map((fraction) => {
+                const inset = radius * fraction;
+                const x = left + (right ? side - inset : inset);
+                const y = top + (bottom ? side - inset : inset);
+                return ctx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data[1];
+              })),
+            );
             return {
               cover: ctx.getImageData(450, 25, 1, 1).data[1],
+              corners,
               title: sample(660, 500, 600, 80),
               clock: sample(905, 925, 110, 40),
               legacyTitle: sample(660, 872, 600, 98).white,
@@ -72,6 +86,7 @@ test("All Versions local jobs draw the cover, centered title band and version ti
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   type Sample = {
     cover: number;
+    corners: [number, number][];
     title: { white: number; dark: number };
     clock: { white: number };
     legacyTitle: number;
@@ -100,6 +115,13 @@ test("All Versions local jobs draw the cover, centered title band and version ti
   }
   expect(seek).toEqual(normal);
   const [, legacy] = await draw("provisional-v1");
+  for (const frame of [normal, legacy]) {
+    expect(frame.corners).toHaveLength(4);
+    for (const [outside, inside] of frame.corners) {
+      expect(outside).toBeLessThan(176);
+      expect(inside).toBe(176);
+    }
+  }
   expect(legacy.cover).toBeLessThan(normal.cover);
   expect(legacy.title.white).toBe(0);
   expect(legacy.legacyTitle).toBeGreaterThan(100);

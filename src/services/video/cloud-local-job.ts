@@ -6,7 +6,13 @@ import { createVideoApiClient, currentVideoSessionSource } from "./api-client";
 import { projectsClient } from "./projects-client";
 import { fnfClient } from "./fnf-client";
 import { imageForEncode, type LocalEncodeJob } from "./local-encode";
-import { drawReferenceFrame, loadReferenceFonts, referenceArtwork, referenceCanvasTitle } from "./all-versions-canvas";
+import {
+  drawAllVersionsCover,
+  drawReferenceFrame,
+  loadReferenceFonts,
+  referenceArtwork,
+  referenceCanvasTitle,
+} from "./all-versions-canvas";
 
 // Only immutable version references and rendering settings are persisted.
 // Never store access URLs, bearer tokens, decoded media or editor state.
@@ -123,19 +129,8 @@ export async function buildCloudLocalJobs(value: CloudLocalRecipe, injected?: Au
             cover.height * scale,
           );
           ctx.restore();
-          const size = 605,
-            crop = Math.min(cover.width, cover.height);
-          ctx.drawImage(
-            cover,
-            (cover.width - crop) / 2,
-            (cover.height - crop) / 2,
-            crop,
-            crop,
-            (1920 - size) / 2,
-            130,
-            size,
-            size,
-          );
+          const size = 605;
+          drawAllVersionsCover(ctx, cover, (1920 - size) / 2, 130, size);
           ctx.fillStyle = "rgba(0,0,0,.48)";
           ctx.fillRect(96, 842, 1728, 162);
           const frame = Math.floor(seconds * 60),

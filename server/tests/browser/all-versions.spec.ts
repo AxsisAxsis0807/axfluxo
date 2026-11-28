@@ -265,6 +265,10 @@ test("six-step editor keeps drafts in memory and submits a durable server snapsh
   await page.getByRole("button", { name: "4. デザイン" }).click();
   await page.getByLabel("表示テンプレート").selectOption("provisional-v1");
   await page.getByRole("button", { name: "5. 全長preview" }).click();
+  await expect(page.getByAltText("cover", { exact: true })).toHaveCSS(
+    "border-radius",
+    /^4\.432\d*%$/,
+  );
   await expect(page.getByAltText("server生成の文字")).toBeVisible();
   expect(texts).toBeGreaterThan(0);
   await expect(page.getByLabel("楽曲の経過時間")).toHaveCount(0);

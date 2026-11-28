@@ -1,10 +1,37 @@
 import {
+  ALL_VERSIONS_COVER_RADIUS_RATIO,
   ALL_VERSIONS_REFERENCE as REF,
   referenceOpacity,
   referenceTimerText,
   referenceTitleSize,
   type VersionWindow,
 } from "../../domain/video/all-versions-reference";
+
+export function drawAllVersionsCover(
+  ctx: CanvasRenderingContext2D,
+  cover: HTMLImageElement,
+  x: number,
+  y: number,
+  side: number,
+) {
+  const crop = Math.min(cover.width, cover.height);
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, side, side, side * ALL_VERSIONS_COVER_RADIUS_RATIO);
+  ctx.clip();
+  ctx.drawImage(
+    cover,
+    (cover.width - crop) / 2,
+    (cover.height - crop) / 2,
+    crop,
+    crop,
+    x,
+    y,
+    side,
+    side,
+  );
+  ctx.restore();
+}
 
 export function referenceArtwork(
   cover: HTMLImageElement,
@@ -46,16 +73,11 @@ export function referenceArtwork(
   ctx.fillStyle = `rgba(0,0,0,${REF.backgroundShade})`;
   ctx.fillRect(0, 0, width, height);
   const side = (height * REF.coverSize) / REF.height;
-  const crop = Math.min(cover.width, cover.height);
-  ctx.drawImage(
+  drawAllVersionsCover(
+    ctx,
     cover,
-    (cover.width - crop) / 2,
-    (cover.height - crop) / 2,
-    crop,
-    crop,
     (width - side) / 2,
     (height * REF.coverTop) / REF.height,
-    side,
     side,
   );
   return canvas;
