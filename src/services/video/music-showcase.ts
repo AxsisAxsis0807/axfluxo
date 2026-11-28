@@ -1,6 +1,7 @@
 import { ALL_VERSIONS_COVER_RADIUS_RATIO } from "../../domain/video/all-versions-reference";
 import {
   SHORT_AUDIO_FADE_SECONDS,
+  shortReferenceCoverReaction,
   shortReferenceOpacity,
 } from "../../domain/video/all-versions-short-reference";
 import {
@@ -148,7 +149,8 @@ export async function musicShowcase(
         const elapsed = Math.max(0, Math.min(seconds, duration));
         const opacity = shortReferenceOpacity(elapsed, duration, true);
         const response = features?.sample(elapsed);
-        const exposure = response?.exposure ?? 1;
+        const reaction = shortReferenceCoverReaction(elapsed, duration);
+        const exposure = 1 + ((response?.exposure ?? 1) - 1) * reaction;
         ctx.save();
         ctx.fillStyle = "#000";
         if (fixed) ctx.drawImage(fixed, 0, 0);
@@ -179,7 +181,7 @@ export async function musicShowcase(
           ctx.drawImage(art.canvas, 0, 0);
         }
         ctx.globalCompositeOperation = "screen";
-        const intensity = opacity.cover * (response?.glow ?? 0) * 0.22;
+        const intensity = opacity.cover * reaction * (response?.glow ?? 0) * 0.22;
         if (intensity > 0) {
           ctx.globalAlpha = intensity;
           ctx.drawImage(bloom, 0, 0, size, size);

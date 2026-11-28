@@ -67,3 +67,17 @@ export function shortReferenceOpacity(seconds: number, duration: number, respons
     clock: interpolate(intro, introTime, 2) * interpolate(outro, remaining, 3),
   };
 }
+
+export function shortReferenceCoverReaction(seconds: number, duration: number) {
+  if (duration <= 0) return 0;
+  const introScale = Math.min(1, duration / 9);
+  const outroScale = Math.min(1, duration / 4.2);
+  const introProgress = (seconds / introScale - 1.7) / 2.5;
+  const outroProgress = ((duration - seconds) / outroScale - 1.4) / 0.8;
+  const blend = (progress: number) => {
+    const t = Math.max(0, Math.min(1, progress));
+    return t * t * (3 - 2 * t);
+  };
+  // Give the measured cover fades priority while keeping the spectrum live.
+  return blend(introProgress) * blend(outroProgress);
+}

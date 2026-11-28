@@ -3,7 +3,10 @@ import {
   SHOWCASE_SPECTRUM,
   showcaseAnalyzer,
 } from "../../src/domain/video/music-showcase-analysis";
-import { shortReferenceOpacity } from "../../src/domain/video/all-versions-short-reference";
+import {
+  shortReferenceCoverReaction,
+  shortReferenceOpacity,
+} from "../../src/domain/video/all-versions-short-reference";
 
 const rate = 48_000;
 const tone = (hz: number, seconds = 0.6) =>
@@ -20,6 +23,17 @@ const center = (bar: number) =>
   20 * 500 ** ((bar + 0.5) / SHOWCASE_SPECTRUM.count);
 const highest = (bars: Uint8Array) =>
   bars.reduce((best, v, i) => (v > bars[best] ? i : best), 0);
+
+it("keeps audio-reactive exposure off the measured cover fades", () => {
+  const at = (time: number) => shortReferenceCoverReaction(time, 37);
+  expect([at(0), at(1.5), at(35.6), at(36.6), at(37)]).toEqual([0, 0, 0, 0, 0]);
+  expect(at(2)).toBeGreaterThan(0);
+  expect(at(2)).toBeLessThan(at(3));
+  expect(at(4.2)).toBe(1);
+  expect(at(35.2)).toBeCloseTo(0.5);
+  expect(shortReferenceCoverReaction(0.2, 0.4)).toBeGreaterThan(0);
+  expect(shortReferenceCoverReaction(0, 0)).toBe(0);
+});
 
 describe("music showcase", () => {
   it.each([50, 100, 250, 500, 1000, 3000, 8000])(
