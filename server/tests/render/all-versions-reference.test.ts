@@ -68,8 +68,8 @@ it("renders reference title and resettable mm:ss clock using real FFmpeg across 
       [0, 90], [90, 180],
     ]);
     expect(projectIssues(p)).toEqual([]);
-    const graphics = await prepareGraphics(p, undefined, dir);
-    const background = await loadImage(graphics.bg);
+    const fallback = await prepareGraphics(p, undefined, dir);
+    const background = await loadImage(fallback.bg);
     const expected = createCanvas(1920, 1080).getContext("2d");
     expected.imageSmoothingQuality = "high";
     expected.drawImage(await loadImage(join("public", REFERENCE_BACKGROUND)), 0, 0, 1920, 1080);
@@ -78,6 +78,13 @@ it("renders reference title and resettable mm:ss clock using real FFmpeg across 
     expect(Buffer.from(actual.getImageData(0, 0, 1920, 1080).data).equals(
       Buffer.from(expected.getImageData(0, 0, 1920, 1080).data),
     )).toBe(true);
+    const cover = createCanvas(48, 24);
+    const paint = cover.getContext("2d");
+    paint.fillStyle = "#eb351c";
+    paint.fillRect(0, 0, 48, 24);
+    const coverPath = join(dir, "cover.jpg");
+    await writeFile(coverPath, await cover.encode("jpeg", 95));
+    const graphics = await prepareGraphics(p, coverPath, dir);
     const plan = { width: 1920, height: 1080 } as RenderPlan;
     const segments = [
       { start: 0, length: 30 },
@@ -95,6 +102,14 @@ it("renders reference title and resettable mm:ss clock using real FFmpeg across 
       );
       expect(frames(path)).toBe(s.length);
       files.push(path);
+    }
+    for (const file of [files[0], files[2]]) {
+      const pixel = execFileSync("ffmpeg", [
+        "-v", "error", "-i", file, "-vf", "crop=12:12:1610:480",
+        "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "-",
+      ]);
+      expect(pixel.length).toBe(12 * 12 * 3);
+      expect(pixel[0] - pixel[2]).toBeGreaterThan(60);
     }
     // At relative frame 20 in either version, the same 00:01 should be shown.
     // Different title text changes H.264 macroblock decisions. Compare the
@@ -120,11 +135,15 @@ it("uses each selected cover for the CRT screen and its surrounding glow", async
     const cover = createCanvas(24, 48);
     const source = cover.getContext("2d");
     const output = createCanvas(1920, 1080).getContext("2d");
-    const path = join(dir, "cover.png");
-    for (const [color, channel] of [["#ee301c", 0], ["#2448ee", 2]] as const) {
+    for (const [color, channel, format] of [
+      ["#ee301c", 0, "png"], ["#2448ee", 2, "webp"],
+    ] as const) {
+      const path = join(dir, `cover.${format}`);
+      source.clearRect(0, 0, cover.width, cover.height);
       source.fillStyle = color;
-      source.fillRect(0, 0, cover.width, cover.height);
-      await writeFile(path, await cover.encode("png"));
+      source.fillRect(0, 12, cover.width, 24);
+      const buffer = format === "png" ? await cover.encode("png") : await cover.encode("webp");
+      await writeFile(path, buffer);
       output.drawImage(await loadImage(await backgroundImage(p, path)), 0, 0);
       for (const x of [960, 1610]) {
         const pixel = output.getImageData(x, 480, 1, 1).data;

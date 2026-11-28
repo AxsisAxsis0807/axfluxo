@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { build } from "esbuild";
 import { resolve } from "node:path";
+import { REFERENCE_BACKGROUND } from "../../../src/domain/video/all-versions-reference";
 
 test("All Versions local jobs draw the cover, centered title band and version timer", async ({
   page,
@@ -10,7 +11,7 @@ test("All Versions local jobs draw the cover, centered title band and version ti
       resolveDir: resolve("."),
       contents: `
         import { buildLocalJobs } from './src/services/video/local-project';
-        window.inspectLayout = async (layout, multiple = false) => {
+        window.inspectLayout = async (layout, multiple = false, useCover = true) => {
           const canvas = document.createElement('canvas');
           canvas.width = canvas.height = 32;
           const cover = canvas.getContext('2d');
@@ -18,7 +19,7 @@ test("All Versions local jobs draw the cover, centered title band and version ti
           cover.fillRect(0, 0, 32, 32);
           const file = new File([], 'sound.wav');
           const [job] = await buildLocalJobs({
-            mode: 'all-versions', layout, cover: canvas.toDataURL(),
+            mode: 'all-versions', layout, cover: useCover ? canvas.toDataURL() : '',
             names: 'PASA!(NORMAL)\\n日本語 Café',
             sources: multiple ? [
               { file, url: 'unused', start: 1, end: 3, duration: 6, markers: '' },
@@ -82,6 +83,9 @@ test("All Versions local jobs draw the cover, centered title band and version ti
       route.fulfill({ path: "public/fonts/" + font, contentType: "font/ttf" }),
     );
   }
+  await page.route(url + "/" + REFERENCE_BACKGROUND, (route) =>
+    route.fulfill({ path: "public/" + REFERENCE_BACKGROUND, contentType: "image/webp" }),
+  );
   await page.goto(url);
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   type Sample = {
@@ -91,18 +95,21 @@ test("All Versions local jobs draw the cover, centered title band and version ti
     clock: { white: number };
     legacyTitle: number;
   };
-  const draw = (layout?: string, multiple = false) =>
+  const draw = (layout?: string, multiple = false, useCover = true) =>
     page.evaluate(
-      ({ layout: value, multiple }) =>
+      ({ layout: value, multiple, useCover }) =>
         (
           window as unknown as {
-            inspectLayout: (layout?: string, multiple?: boolean) => Promise<Sample[]>;
+            inspectLayout: (layout?: string, multiple?: boolean, useCover?: boolean) => Promise<Sample[]>;
           }
-        ).inspectLayout(value, multiple),
-      { layout, multiple },
+        ).inspectLayout(value, multiple, useCover),
+      { layout, multiple, useCover },
     );
   const [start, normal, boundary, slowed, end, seek] = await draw();
   expect(normal.cover).toBeGreaterThan(120);
+  const [, fallback] = await draw(undefined, false, false);
+  expect(fallback.cover).toBeGreaterThan(0);
+  expect(fallback.cover).not.toBe(normal.cover);
   expect(normal.title.white).toBeGreaterThan(100);
   expect(normal.title.dark).toBeGreaterThan(100);
   expect(normal.clock.white).toBeGreaterThan(40);

@@ -91,7 +91,7 @@ export function drawCrtBackground<Image>(
     color
       .map((value, channel) =>
         Math.round(
-          (value / ((sample * sample) / 2)) * 0.63 + [15, 20, 29][channel],
+          (value / ((sample * sample) / 2)) * 0.76 + [15, 20, 29][channel],
         ),
       )
       .join(","),
@@ -130,13 +130,16 @@ export function drawCrtBackground<Image>(
   ctx.fillStyle = vignette;
   ctx.fillRect(313, 33, 654, 654);
 
-  const reflection = ctx.createRadialGradient(912, 253, 6, 912, 253, 290);
-  reflection.addColorStop(0, "rgba(216,236,255,0.21)");
+  const reflection = ctx.createRadialGradient(927, 272, 0, 912, 253, 280);
+  reflection.addColorStop(0, "rgba(216,236,255,0.38)");
+  reflection.addColorStop(0.32, "rgba(216,236,255,0.17)");
   reflection.addColorStop(1, "rgba(216,236,255,0)");
   ctx.fillStyle = reflection;
   ctx.fillRect(313, 33, 654, 654);
 
   ctx.fillStyle = "rgba(2,5,10,0.13)";
   for (let y = 34; y < 688; y += 3) ctx.fillRect(313, y, 654, 1);
+  ctx.fillStyle = "rgba(216,236,255,0.045)";
+  for (let x = 314; x < 966; x += 5) ctx.fillRect(x, 33, 1, 654);
   ctx.restore();
 }
