@@ -631,6 +631,8 @@ test("a blocked reservation never reports success before storage commits", async
 });
 
 test("one All Versions reservation keeps the full mix, short, and each version independent after reload", async ({ page }) => {
+  // Reload can wait for the previous document's 20-second IndexedDB lease.
+  test.setTimeout(75_000);
   await open(page);
   await page.goto("https://recovery.test/all");
   const pick = page.getByLabel("端末の素材", { exact: true });
@@ -683,6 +685,6 @@ test("one All Versions reservation keeps the full mix, short, and each version i
   // Disable real encoding in the reloading page until we verify the recipes.
   await page.addInitScript(() => Object.defineProperty(window, "VideoEncoder", { value: undefined, configurable: true }));
   await page.reload();
-  await expect.poll(async () => (await inspect()).length, { timeout: 20_000 }).toBe(5);
+  await expect.poll(async () => (await inspect()).length, { timeout: 30_000 }).toBe(5);
   expect(await inspect()).toEqual(reserved);
 });
