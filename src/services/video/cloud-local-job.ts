@@ -80,11 +80,12 @@ export async function buildCloudLocalJobs(value: CloudLocalRecipe, injected?: Au
   };
   if (recipe.kind === "all-versions") {
     const project = recipe.project;
-    if (!project.document || !project.cover) throw Error("素材と名前を確認してください。");
+    if (!project.document) throw Error("素材と名前を確認してください。");
     const remote = projectsClient(auth, recipe.ownerId);
     const reference = project.design.layout === "reference-pasa-v1";
     const names = projectNames(project), versions = versionIntervals(project);
-    const cover = await imageForEncode(await access(project.cover.versionId));
+    const cover = project.cover ? await imageForEncode(await access(project.cover.versionId)) : null;
+    if (!reference && !cover) throw Error("カバー画像を選択してください。");
     const overlays: HTMLImageElement[] = [];
     if (reference) await loadReferenceFonts(names);
     else for (let i = 0; i < versions.length; i++) {
@@ -94,7 +95,7 @@ export async function buildCloudLocalJobs(value: CloudLocalRecipe, injected?: Au
     const drawTitle = reference ? referenceCanvasTitle(names) : null;
     const height = project.design.height,
       width = (height * 16) / 9;
-    const artwork = reference ? referenceArtwork(cover, width, height) : null;
+    const artwork = reference ? await referenceArtwork(cover, width, height) : null;
     return [
       {
         cloudRecovery: recipe,
@@ -113,6 +114,7 @@ export async function buildCloudLocalJobs(value: CloudLocalRecipe, injected?: Au
               project.design, drawTitle);
             return;
           }
+          if (!cover) return;
           ctx.save();
           ctx.scale(width / 1920, height / 1080);
           ctx.fillStyle = "black";

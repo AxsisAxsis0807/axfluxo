@@ -12,8 +12,10 @@ import { ApiError } from "../../../api/errors";
 import {
   ALL_VERSIONS_COVER_RADIUS_RATIO,
   ALL_VERSIONS_REFERENCE as REF,
+  REFERENCE_BACKGROUND,
   referenceTitleSize,
 } from "../../../../src/domain/video/all-versions-reference";
+import { drawCrtBackground } from "../../../../src/domain/video/crt-background";
 export const fontPath = () =>
   resolve(
     process.env.VIDEO_ALEO_FONT ??
@@ -179,29 +181,36 @@ export async function textImage(p: AllVersionsProject, index: number) {
 }
 export async function backgroundImage(
   p: AllVersionsProject,
-  coverPath: string,
+  coverPath: string | undefined,
 ) {
   await font();
   const { width, height } = dimensions(p),
     canvas = createCanvas(width, height),
-    ctx = canvas.getContext("2d"),
-    cover = await loadImage(coverPath);
-  const reference = p.design.layout === "reference-pasa-v1";
-  const scale = Math.max(width / cover.width, height / cover.height) * (reference ? REF.backgroundZoom : 1.12),
+    ctx = canvas.getContext("2d");
+  if (p.design.layout === "reference-pasa-v1") {
+    if (coverPath) {
+      const cover = await loadImage(coverPath);
+      drawCrtBackground(ctx, width, height, cover, cover.width, cover.height);
+      return canvas.encode("png");
+    }
+    const background = await loadImage(resolve("public", REFERENCE_BACKGROUND));
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(background, 0, 0, width, height);
+    return canvas.encode("png");
+  }
+  if (!coverPath) throw new ApiError(422, "COVER_REQUIRED");
+  const cover = await loadImage(coverPath);
+  const scale = Math.max(width / cover.width, height / cover.height) * 1.12,
     w = cover.width * scale,
     h = cover.height * scale;
-  if (reference) {
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, width, height);
-  }
-  ctx.filter = `blur(${height * (reference ? REF.backgroundBlurRatio : 0.035)}px)`;
+  ctx.filter = `blur(${height * 0.035}px)`;
   ctx.drawImage(cover, (width - w) / 2, (height - h) / 2, w, h);
   ctx.filter = "none";
-  ctx.fillStyle = reference ? `rgba(0,0,0,${REF.backgroundShade})` : "rgba(0,0,0,.3)";
+  ctx.fillStyle = "rgba(0,0,0,.3)";
   ctx.fillRect(0, 0, width, height);
-  const side = height * (reference ? REF.coverSize / REF.height : 0.56),
+  const side = height * 0.56,
     x = (width - side) / 2,
-    y = reference ? height * REF.coverTop / REF.height : height * 0.12,
+    y = height * 0.12,
     s = Math.max(side / cover.width, side / cover.height);
   ctx.save();
   ctx.beginPath();
@@ -215,9 +224,7 @@ export async function backgroundImage(
     cover.height * s,
   );
   ctx.restore();
-  if (!reference) {
-    ctx.fillStyle = "rgba(0,0,0,.48)";
-    ctx.fillRect(width * 0.05, height * 0.78, width * 0.9, height * 0.15);
-  }
+  ctx.fillStyle = "rgba(0,0,0,.48)";
+  ctx.fillRect(width * 0.05, height * 0.78, width * 0.9, height * 0.15);
   return canvas.encode("png");
 }

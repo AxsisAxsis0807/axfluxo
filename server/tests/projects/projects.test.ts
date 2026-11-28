@@ -422,6 +422,19 @@ it("project render uses V4 fencing/publication, audio extraction and immutable c
   expect(await fileHash(source)).toBe(p.document!.clips[0].source.hash);
   expect(await fileHash(cover)).toBe(p.cover!.hash);
 }, 120000);
+it("admits a coverless reference render and pins only its audio", async () => {
+  p.cover = null;
+  p.design.layout = "reference-pasa-v1";
+  expect((await request(`/projects/${p.id}`, p)).status).toBe(200);
+  const response = await request(`/projects/${p.id}/render`, {}, 1);
+  expect(response.status).toBe(202);
+  const batch = await response.json();
+  const { rows } = await engine.query(
+    "SELECT kind FROM axfluxo_video.resource_pins WHERE job_id=$1",
+    [batch.jobs[0].id],
+  );
+  expect(rows).toEqual([{ kind: "audio" }]);
+});
 it("1440p output validates dimensions, CFR, audio sync, and title fade across a checkpoint boundary", async () => {
   p.design.height = 1440;
   p.namesText = "One";

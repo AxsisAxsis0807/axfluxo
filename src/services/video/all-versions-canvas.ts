@@ -1,11 +1,15 @@
 import {
   ALL_VERSIONS_COVER_RADIUS_RATIO,
   ALL_VERSIONS_REFERENCE as REF,
+  REFERENCE_BACKGROUND,
   referenceOpacity,
   referenceTimerText,
   referenceTitleSize,
   type VersionWindow,
 } from "../../domain/video/all-versions-reference";
+
+import { drawCrtBackground } from "../../domain/video/crt-background";
+import { imageForEncode } from "./local-encode";
 
 export function drawAllVersionsCover(
   ctx: CanvasRenderingContext2D,
@@ -33,8 +37,8 @@ export function drawAllVersionsCover(
   ctx.restore();
 }
 
-export function referenceArtwork(
-  cover: HTMLImageElement,
+export async function referenceArtwork(
+  cover: HTMLImageElement | null,
   width: number,
   height: number,
 ) {
@@ -44,42 +48,14 @@ export function referenceArtwork(
   const ctx = canvas.getContext("2d", { alpha: false });
   if (!ctx) throw Error("Canvasを使用できません。");
 
-  const zoom =
-    Math.max(width / cover.width, height / cover.height) * REF.backgroundZoom;
-  const w = cover.width * zoom;
-  const h = cover.height * zoom;
-  ctx.fillStyle = "black";
-  ctx.fillRect(0, 0, width, height);
-  if (typeof ctx.filter === "string") {
-    ctx.filter = `blur(${height * REF.backgroundBlurRatio}px)`;
-    ctx.drawImage(cover, (width - w) / 2, (height - h) / 2, w, h);
-    ctx.filter = "none";
+  if (cover) {
+    drawCrtBackground(ctx, width, height, cover, cover.naturalWidth, cover.naturalHeight);
   } else {
-    // Older WebKit builds lack Canvas filters. Downsample the backdrop before enlarging it.
-    const reduced = document.createElement("canvas");
-    reduced.width = 12;
-    reduced.height = Math.round((12 * height) / width);
-    const small = reduced.getContext("2d");
-    if (!small) throw Error("Canvasを使用できません。");
-    small.drawImage(
-      cover,
-      ((width - w) * reduced.width) / width / 2,
-      ((height - h) * reduced.height) / height / 2,
-      (w * reduced.width) / width,
-      (h * reduced.height) / height,
-    );
-    ctx.drawImage(reduced, 0, 0, width, height);
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    const fallback = await imageForEncode(`${basePath}/${REFERENCE_BACKGROUND}`);
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(fallback, 0, 0, width, height);
   }
-  ctx.fillStyle = `rgba(0,0,0,${REF.backgroundShade})`;
-  ctx.fillRect(0, 0, width, height);
-  const side = (height * REF.coverSize) / REF.height;
-  drawAllVersionsCover(
-    ctx,
-    cover,
-    (width - side) / 2,
-    (height * REF.coverTop) / REF.height,
-    side,
-  );
   return canvas;
 }
 

@@ -5,6 +5,8 @@ import {
   projectIssues,
   type AllVersionsProject,
 } from "../../../../src/domain/video/all-versions";
+import { CRT_BACKGROUND_VERSION } from "../../../../src/domain/video/crt-background";
+import { REFERENCE_BACKGROUND } from "../../../../src/domain/video/all-versions-reference";
 import { renderPlan, type RenderPlan, type Segment } from "../../render/plan";
 import type { FnfSnapshot } from "../../../../src/domain/video/schema";
 import { digest } from "../../../api/jobs";
@@ -38,12 +40,16 @@ export function projectPlan(
     ...plan,
     ...dimensions(project),
     segments,
-    hash: digest({ plan: plan.hash, project }),
+    hash: digest({
+      plan: plan.hash,
+      project,
+      ...(project.design.layout === "reference-pasa-v1" ? { background: project.cover ? CRT_BACKGROUND_VERSION : REFERENCE_BACKGROUND } : {}),
+    }),
   };
 }
 export async function prepareGraphics(
   project: AllVersionsProject,
-  cover: string,
+  cover: string | undefined,
   dir: string,
 ) {
   const bg = join(dir, "background.png");

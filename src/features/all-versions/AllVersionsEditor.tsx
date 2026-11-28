@@ -36,6 +36,7 @@ import { PlaybackError } from "../../services/video/playback";
 import {
   ALL_VERSIONS_COVER_RADIUS_RATIO,
   ALL_VERSIONS_REFERENCE as REF,
+  REFERENCE_BACKGROUND,
   referenceTimerText,
 } from "../../domain/video/all-versions-reference";
 import { drawReferenceFrame, loadReferenceFonts, referenceArtwork, referenceCanvasTitle } from "../../services/video/all-versions-canvas";
@@ -90,7 +91,7 @@ export function AllVersionsEditor({
     [step, setStep] = useState(0),
     [error, setError] = useState(""),
     [clock, setClock] = useState(0),
-    [coverUrl, setCoverUrl] = useState(""),
+    [coverAccess, setCoverAccess] = useState<{ id: string; url: string }>(),
     [text, setText] = useState<{ key: string; url: string } | null>(null),
     [batch, setBatch] = useState(""),
     [status, setStatus] = useState(""),
@@ -232,17 +233,20 @@ export function AllVersionsEditor({
       live = false;
     };
   }, [remote, textKey, index, reference]);
+  const coverId = project.cover?.versionId;
+  const coverUrl = coverAccess?.id === coverId ? coverAccess?.url ?? "" : "";
   useEffect(() => {
+    if (!coverId || !cloud) return;
     let live = true;
-    setCoverUrl("");
-    if (project.cover && cloud)
-      void cloud.access(project.cover.versionId).then((r) => {
-        if (live && r.ok) setCoverUrl(r.data.url);
-      });
-    return () => {
-      live = false;
-    };
-  }, [cloud, project.cover]);
+    void cloud.access(coverId).then((r) => {
+      if (!live) return;
+      if (r.ok) setCoverAccess({ id: coverId, url: r.data.url });
+      else setError(r.code);
+    }).catch(() => {
+      if (live) setError("PREVIEW_FAILED");
+    });
+    return () => { live = false; };
+  }, [cloud, coverId]);
   const showReference = reference && !!project.document && (step === 1 || step === 4);
   const previewHeight = project.design.height;
   const previewFontReady = fontReadyFor === names;
@@ -256,22 +260,23 @@ export function AllVersionsEditor({
     });
     return () => { live = false; };
   }, [names, showReference]);
+  const artworkUrl = project.cover ? coverUrl : REFERENCE_BACKGROUND;
+  const hasCover = !!project.cover;
   useEffect(() => {
-    if (!showReference || !coverUrl) {
+    if (!showReference || !artworkUrl) {
       setPreviewArtwork(null);
       return;
     }
     let live = true;
-    void imageForEncode(coverUrl).then((cover) => {
-      if (live) setPreviewArtwork({
-        url: coverUrl,
-        canvas: referenceArtwork(cover, previewHeight * 16 / 9, previewHeight),
+    const cover = hasCover ? imageForEncode(artworkUrl) : Promise.resolve(null);
+    void cover.then((image) => referenceArtwork(image, previewHeight * 16 / 9, previewHeight))
+      .then((canvas) => {
+        if (live) setPreviewArtwork({ url: artworkUrl, canvas });
+      }).catch((e: unknown) => {
+        if (live) setError(e instanceof Error ? e.message : "PREVIEW_FAILED");
       });
-    }).catch((e: unknown) => {
-      if (live) setError(e instanceof Error ? e.message : "PREVIEW_FAILED");
-    });
     return () => { live = false; };
-  }, [coverUrl, previewHeight, showReference]);
+  }, [artworkUrl, hasCover, previewHeight, showReference]);
   useEffect(() => {
     drawPreviewTitle.current = showReference && previewFontReady
       ? referenceCanvasTitle(names) : null;
@@ -280,14 +285,14 @@ export function AllVersionsEditor({
     const canvas = referencePreview.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx || !showReference) return;
-    if (previewArtwork?.url !== coverUrl || previewArtwork.canvas.height !== previewHeight) {
+    if (previewArtwork?.url !== artworkUrl || previewArtwork.canvas.height !== previewHeight) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       return;
     }
     if (drawPreviewTitle.current) {
       drawReferenceFrame(ctx, previewArtwork.canvas, frame, versions, project.design, drawPreviewTitle.current);
     } else ctx.drawImage(previewArtwork.canvas, 0, 0);
-  }, [coverUrl, frame, previewArtwork, previewFontReady, previewHeight, project.design, showReference, versions]);
+  }, [artworkUrl, frame, previewArtwork, previewFontReady, previewHeight, project.design, showReference, versions]);
   async function prepareLocal(): Promise<RecoverableLocalJob[]> {
     if (!api || !owner) throw Error("素材と名前を確認してください。");
     return buildCloudLocalJobs({ version: 1, kind: "all-versions", ownerId: owner, index: 0, project }, api);
@@ -392,8 +397,13 @@ export function AllVersionsEditor({
         <>
           <p>
             MP3 / WAV / M4A / MP4 /
-            MOV。動画は音声を抽出して使います。proxy準備後に「使用」を選択してください。画像はcoverになります。
+            MOV。動画は音声を抽出して使います。proxy準備後に「使用」を選択してください。参考動画再現では、画像に合わせてCRT画面と周囲の光が変わります。画像を選ばない場合は、お手本の青い背景を使います。
           </p>
+          {reference && project.cover && (
+            <button type="button" onClick={() => change({ ...docRef.current, cover: null })}>
+              お手本の背景に戻す
+            </button>
+          )}
           <CloudLibrary client={cloud} onSelect={(a) => void selected(a)} />
         </>
       )}

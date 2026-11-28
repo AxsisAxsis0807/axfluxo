@@ -90,7 +90,7 @@ export function versionIntervals(p: AllVersionsProject) {
 export function projectIssues(p: AllVersionsProject) {
   const issues: string[] = [];
   if (!p.document) issues.push("MEDIA_REQUIRED");
-  if (!p.cover) issues.push("COVER_REQUIRED");
+  if (p.design.layout !== "reference-pasa-v1" && !p.cover) issues.push("COVER_REQUIRED");
   const versions = versionIntervals(p),
     names = projectNames(p);
   if (names.length !== versions.length) issues.push("NAME_COUNT");

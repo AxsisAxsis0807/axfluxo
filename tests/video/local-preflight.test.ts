@@ -38,6 +38,8 @@ it("explains that multiple Version names require boundaries without throwing dur
   project.sources[0].markers = "5";
   expect(localProjectIssue(project)).toBe("");
   project.cover = "";
+  expect(localProjectIssue(project)).toBe("");
+  project.layout = "provisional-v1";
   expect(localProjectIssue(project)).toContain("カバー画像");
   project.sources[0].markers = "5,5";
   expect(() => localProjectIssue(project)).not.toThrow();

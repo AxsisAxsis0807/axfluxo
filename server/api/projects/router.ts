@@ -121,6 +121,7 @@ export function projectsRouter(config: {
             const project = allVersionsProjectSchema.parse(old.project);
             if (projectIssues(project).length)
               throw new ApiError(422, "PROJECT_INVALID");
+            const cover = project.cover;
             await resources(sql, owner, project);
             const duration = project.document!.clips.reduce(
                 (n, c) => n + c.interval.endUs - c.interval.startUs,
@@ -143,21 +144,22 @@ export function projectsRouter(config: {
               "INSERT INTO axfluxo_video.render_batch_options(owner_id,batch_id,mode,project) VALUES($1,$2,'all-versions',$3::jsonb)",
               [owner, batch.id, JSON.stringify(project)],
             );
-            const r = project.cover!;
-            for (const job of batch.jobs)
-              await sql.query(
-                "INSERT INTO axfluxo_video.resource_pins(id,owner_id,job_id,library_id,file_id,version_id,hash,kind) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
-                [
-                  randomUUID(),
-                  owner,
-                  job.id,
-                  r.libraryId,
-                  r.fileId,
-                  r.versionId,
-                  r.hash,
-                  r.kind,
-                ],
-              );
+            if (cover) {
+              for (const job of batch.jobs)
+                await sql.query(
+                  "INSERT INTO axfluxo_video.resource_pins(id,owner_id,job_id,library_id,file_id,version_id,hash,kind) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+                  [
+                    randomUUID(),
+                    owner,
+                    job.id,
+                    cover.libraryId,
+                    cover.fileId,
+                    cover.versionId,
+                    cover.hash,
+                    cover.kind,
+                  ],
+                );
+            }
             return { status: 202, body: batch };
           }
           const project = allVersionsProjectSchema.parse(body);
