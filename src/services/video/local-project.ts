@@ -8,6 +8,8 @@ import {
 } from "./all-versions-canvas";
 import { imageForEncode, type LocalEncodeJob } from "./local-encode";
 import { fnfFilenames, FNF_HEADING } from "../../domain/video/fnf-showcase";
+import { allVersionsShortJob, validShortRange, type AllVersionsShort } from "./all-versions-short";
+
 export type TimelineState = {
   boundarySettings?: import("./track-boundaries").BoundarySettings;
   boundaryPlacement?: import("./track-boundaries").BoundaryPlacement;
@@ -82,6 +84,7 @@ export type LocalProjectData = {
   cover: string;
   coverFile?: File;
   coverId: string;
+  short?: AllVersionsShort;
   names: string;
   ranges: Range[];
   username: string;
@@ -202,7 +205,7 @@ async function createLocalJobs(
     startFrame: Math.round(start * 60),
     endFrame: Math.round(end * 60),
   }));
-  return [
+  const jobs: LocalEncodeJob[] = [
     {
       filename: "All Versions.mp4",
       gapBetweenPiecesSeconds: ALL_VERSIONS_FILE_GAP_SECONDS,
@@ -256,6 +259,12 @@ async function createLocalJobs(
       },
     },
   ];
+  // Preserve the order used by saved export recipes. Add future outputs after these two.
+  if (project.short && image) {
+    const source = sources.find((item) => item.id === project.short?.sourceId);
+    if (source) jobs.push(allVersionsShortJob(project.short, source, image));
+  }
+  return jobs;
 }
 
 export async function buildLocalJobs(
@@ -265,6 +274,7 @@ export async function buildLocalJobs(
   if (issue) throw Error(issue);
   const project = {
     ...value,
+    ...(value.short ? { short: { ...value.short } } : {}),
     sources: value.sources.map((s) => ({ ...s })),
     ranges: value.ranges.map((r) => ({ ...r })),
   };
@@ -282,6 +292,13 @@ export function localProjectIssue(project: LocalProjectData): string {
       if (labels.length !== count || labels.some((label) => !label.trim()))
         return `Version名は${count}行必要です。1つの素材に複数の名前を付ける場合は、Version境界を設定してください。`;
       if (project.layout === "provisional-v1" && !project.cover) return "カバー画像を選択してください。";
+      if (project.short) {
+        const source = project.sources.find((item) => item.id === project.short?.sourceId);
+        if (!project.cover || !project.short.title.trim())
+          return "ショート動画の曲名とカバー画像を指定してください。";
+        if (!source || !validShortRange(project.short, source.duration))
+          return "ショート動画の開始・終了を音源の範囲内で指定してください。";
+      }
     } else {
       const source = project.sources[0];
       if (!/^@\S+$/.test(project.username))

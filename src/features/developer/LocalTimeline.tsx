@@ -32,6 +32,7 @@ export default function LocalTimeline({
   items,
   markers,
   fnf,
+  short = false,
   onEdit,
   onMarkerAdd,
   onMarkerDelete,
@@ -51,6 +52,7 @@ export default function LocalTimeline({
   onMarkerDelete?: (index: number) => void;
   onMarkerEdit?: (index: number, us: number) => void;
   fnf: boolean;
+  short?: boolean;
   onEdit: (id: string, start: number, end: number) => void;
 }) {
   const [navigation, setNavigation] = useState<{
@@ -415,6 +417,18 @@ export default function LocalTimeline({
       <output aria-label="中央プレイヘッド時刻">
         {(current / 1e6).toFixed(6)} 秒
       </output>
+      {short && items[0] && (
+        <div className="av-short-playhead-actions">
+          <button type="button"
+            disabled={current >= items[0].endUs - 16667}
+            onClick={() => onEdit(items[0].id, current / 1e6, items[0].endUs / 1e6)}
+          >再生位置を開始に</button>
+          <button type="button"
+            disabled={current <= items[0].startUs + 16667}
+            onClick={() => onEdit(items[0].id, items[0].startUs / 1e6, current / 1e6)}
+          >再生位置を終了に</button>
+        </div>
+      )}
       {!fnf && onMarkerAdd && (
         <button
           onClick={() => {
@@ -425,7 +439,7 @@ export default function LocalTimeline({
               return;
             }
             if (
-              !isInteriorBoundary(current, bounds.startUs, bounds.endUs) ||
+              !isInteriorBoundary(current, short ? 0 : bounds.startUs, short ? duration * 1e6 : bounds.endUs) ||
               markers.includes(current)
             ) {
               setBoundaryError(
@@ -478,6 +492,7 @@ export default function LocalTimeline({
             timeUs: recommendedBoundary(c, boundaryPlacement),
           }))}
         onMarkerEdit={onMarkerEdit}
+        independentMarkers={short}
         initialZoom={timeline?.zoom}
         initialGain={timeline?.gain}
         onDisplayChange={updateDisplay}

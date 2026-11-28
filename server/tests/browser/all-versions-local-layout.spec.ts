@@ -11,6 +11,41 @@ test("All Versions local jobs draw the cover, centered title band and version ti
       resolveDir: resolve("."),
       contents: `
         import { buildLocalJobs } from './src/services/video/local-project';
+        window.inspectShort = async () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 24;
+          const cover = canvas.getContext('2d');
+          cover.fillStyle = '#40b080';
+          cover.fillRect(0, 0, 24, 24);
+          const file = new File([], 'sound.wav');
+          const [landscape, short] = await buildLocalJobs({
+            mode: 'all-versions', cover: canvas.toDataURL(),
+            names: 'KEPT (NORMAL)',
+            sources: [{ id: 'audio', file, url: 'unused', start: 0, end: 8, duration: 8, markers: '' }],
+            short: { sourceId: 'audio', start: 2, end: 5, title: 'Kept' },
+            ranges: [],
+          });
+          canvas.width = short.width;
+          canvas.height = short.height;
+          const ctx = canvas.getContext('2d');
+          short.draw(ctx, document.createElement('video'), 1);
+          const ink = (x,y,w,h) => {
+            const data = ctx.getImageData(x,y,w,h).data;
+            let count = 0;
+            for(let i=0; i < data.length; i+=4)
+              if(data[i]>240 && data[i+1]>240 && data[i+2]>240) count++;
+            return count;
+          };
+          return {
+            dims: [short.width,short.height],
+            trim: [short.pieces[0].start,short.pieces[0].end],
+            landscapeTrim: [landscape.pieces[0].start,landscape.pieces[0].end],
+            indices: [landscape.recovery.index,short.recovery.index],
+            pixels: [419,420,1499,1500].map(y => ctx.getImageData(0,y,1,1).data[1]),
+            title: ink(370,1080,340,60),
+            timer: ink(470,1310,140,44),
+          };
+        };
         window.inspectLayout = async (layout, multiple = false, useCover = true) => {
           const canvas = document.createElement('canvas');
           canvas.width = canvas.height = 32;
@@ -88,6 +123,23 @@ test("All Versions local jobs draw the cover, centered title band and version ti
   );
   await page.goto(url);
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  const short = await page.evaluate(() => (window as unknown as {
+    inspectShort: () => Promise<{
+      dims: number[]; trim: number[]; landscapeTrim: number[];
+      indices: number[]; pixels: number[]; title: number; timer: number;
+    }>;
+  }).inspectShort());
+  expect(short.dims).toEqual([1080, 1920]);
+  expect(short.trim).toEqual([2, 5]);
+  expect(short.landscapeTrim).toEqual([0, 8]);
+  expect(short.indices).toEqual([0, 1]);
+  expect([short.pixels[0], short.pixels[3]]).toEqual([0, 0]);
+  expect(short.pixels[1]).toBe(short.pixels[2]);
+  expect(short.pixels[1]).toBeGreaterThan(145);
+  expect(short.pixels[1]).toBeLessThan(155);
+  expect(short.title).toBeGreaterThan(100);
+  expect(short.timer).toBeGreaterThan(60);
+
   type Sample = {
     cover: number;
     corners: [number, number][];

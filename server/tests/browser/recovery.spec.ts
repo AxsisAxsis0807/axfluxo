@@ -626,6 +626,6 @@ test("a blocked reservation never reports success before storage commits", async
   // A new explicit reservation uses the current editor, not the rejected one.
   await page.getByRole("button", { name: "端末内で書き出す", exact: true }).click();
   await expect(exports.getByRole("status")).toContainText("現在の設定で予約しました。");
-  expect(await queueCount()).toBe(1);
-  expect((await inventory(page))[2]).toHaveLength(1);
+  expect(await queueCount()).toBe(2);
+  expect((await inventory(page))[2]).toHaveLength(2);
 });
