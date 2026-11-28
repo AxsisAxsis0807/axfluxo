@@ -8,7 +8,11 @@ import {
   type VersionWindow,
 } from "../../domain/video/all-versions-reference";
 
-import { drawCrtBackground } from "../../domain/video/crt-background";
+import {
+  COVER_BLUR_HEIGHT,
+  COVER_BLUR_WIDTH,
+  drawCoverBackground,
+} from "../../domain/video/cover-background";
 import { imageForEncode } from "./local-encode";
 
 export function drawAllVersionsCover(
@@ -49,7 +53,21 @@ export async function referenceArtwork(
   if (!ctx) throw Error("Canvasを使用できません。");
 
   if (cover) {
-    drawCrtBackground(ctx, width, height, cover, cover.naturalWidth, cover.naturalHeight);
+    const backdrop = document.createElement("canvas");
+    backdrop.width = COVER_BLUR_WIDTH;
+    backdrop.height = COVER_BLUR_HEIGHT;
+    const backdropContext = backdrop.getContext("2d", { alpha: false });
+    if (!backdropContext) throw Error("Canvasを使用できません。");
+    drawCoverBackground<CanvasImageSource, ImageData>(
+      ctx,
+      backdropContext,
+      backdrop,
+      width,
+      height,
+      cover,
+      cover.naturalWidth,
+      cover.naturalHeight,
+    );
   } else {
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
     const fallback = await imageForEncode(`${basePath}/${REFERENCE_BACKGROUND}`);
