@@ -44,9 +44,9 @@ test("All Versions local jobs draw the cover, centered title band and version ti
           function draw(time) {
             job.draw(ctx, video, time);
             const legacy = layout === 'provisional-v1';
-            const side = legacy ? 600 : 1080 * 506 / 512;
+            const side = legacy ? 600 : 1080;
             const left = (job.width - side) / 2;
-            const top = legacy ? 130 : 1080 * 3 / 512;
+            const top = legacy ? 130 : 0;
             const radius = side * 32 / 722;
             const corners = [false, true].flatMap((right) =>
               [false, true].map((bottom) => [0.24, 0.36].map((fraction) => {
@@ -122,7 +122,7 @@ test("All Versions local jobs draw the cover, centered title band and version ti
   }
   expect(seek).toEqual(normal);
   const [, legacy] = await draw("provisional-v1");
-  for (const frame of [legacy]) {
+  for (const frame of [normal, legacy]) {
     expect(frame.corners).toHaveLength(4);
     for (const [outside, inside] of frame.corners) {
       expect(outside).toBeLessThan(176);

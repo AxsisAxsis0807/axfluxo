@@ -81,7 +81,9 @@ it("renders reference title and resettable mm:ss clock using real FFmpeg across 
     const cover = createCanvas(48, 24);
     const paint = cover.getContext("2d");
     paint.fillStyle = "#eb351c";
-    paint.fillRect(0, 0, 48, 24);
+    paint.fillRect(0, 0, 48, 12);
+    paint.fillStyle = "#1829ed";
+    paint.fillRect(0, 12, 48, 12);
     const coverPath = join(dir, "cover.jpg");
     await writeFile(coverPath, await cover.encode("jpeg", 95));
     const graphics = await prepareGraphics(p, coverPath, dir);
@@ -104,12 +106,16 @@ it("renders reference title and resettable mm:ss clock using real FFmpeg across 
       files.push(path);
     }
     for (const file of [files[0], files[2]]) {
-      const pixel = execFileSync("ffmpeg", [
-        "-v", "error", "-i", file, "-vf", "crop=12:12:1610:480",
-        "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "-",
-      ]);
-      expect(pixel.length).toBe(12 * 12 * 3);
-      expect(pixel[0] - pixel[2]).toBeGreaterThan(60);
+      const pixels = execFileSync("ffmpeg", [
+        "-v", "error", "-i", file, "-frames:v", "1",
+        "-pix_fmt", "rgb24", "-f", "rawvideo", "-",
+      ], { maxBuffer: 7 * 1024 ** 2 });
+      expect(pixels.length).toBe(1920 * 1080 * 3);
+      const sample = (x: number, y: number) => pixels.subarray((y * 1920 + x) * 3);
+      const coverPixel = sample(960, 480);
+      expect(coverPixel[0] - coverPixel[2]).toBeGreaterThan(120);
+      const blurredPixel = sample(1610, 540);
+      expect(Math.min(blurredPixel[0], blurredPixel[2])).toBeGreaterThan(70);
     }
     // At relative frame 20 in either version, the same 00:01 should be shown.
     // Different title text changes H.264 macroblock decisions. Compare the
@@ -127,8 +133,8 @@ it("renders reference title and resettable mm:ss clock using real FFmpeg across 
   }
 }, 120000);
 
-it("uses each selected cover for the CRT screen and its surrounding glow", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "axfluxo-av-crt-"));
+it("keeps the selected cover sharp and blurs a full-frame copy into the sides", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "axfluxo-av-cover-"));
   try {
     const p = newProject();
     p.design.layout = "reference-pasa-v1";
@@ -149,9 +155,27 @@ it("uses each selected cover for the CRT screen and its surrounding glow", async
         const pixel = output.getImageData(x, 480, 1, 1).data;
         expect(pixel[channel] - pixel[2 - channel]).toBeGreaterThan(60);
       }
-      const bezel = output.getImageData(435, 540, 1, 1).data;
-      expect(Math.max(bezel[0], bezel[1], bezel[2])).toBeLessThan(10);
+      const center = output.getImageData(960, 480, 1, 1).data;
+      const backdrop = output.getImageData(400, 540, 1, 1).data;
+      expect(center[channel]).toBeGreaterThan(backdrop[channel] + 10);
     }
+    const split = createCanvas(128, 128);
+    const paint = split.getContext("2d");
+    paint.fillStyle = "#ff0000";
+    paint.fillRect(0, 0, 128, 64);
+    paint.fillStyle = "#0000ff";
+    paint.fillRect(0, 64, 128, 64);
+    const splitPath = join(dir, "split.png");
+    await writeFile(splitPath, await split.encode("png"));
+    output.drawImage(await loadImage(await backgroundImage(p, splitPath)), 0, 0);
+    const rgb = (x: number, y: number) => Array.from(output.getImageData(x, y, 1, 1).data);
+    const transition = rgb(140, 540);
+    expect(transition[0]).toBeGreaterThan(70);
+    expect(transition[2]).toBeGreaterThan(70);
+    expect(rgb(960, 520)).toEqual([255, 0, 0, 255]);
+    expect(rgb(960, 560)).toEqual([0, 0, 255, 255]);
+    expect(rgb(421, 1)[0]).toBeLessThan(240);
+    expect(rgb(475, 1)).toEqual([255, 0, 0, 255]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

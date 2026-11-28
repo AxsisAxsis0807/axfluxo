@@ -5,7 +5,7 @@ import {
   projectIssues,
   type AllVersionsProject,
 } from "../../../../src/domain/video/all-versions";
-import { CRT_BACKGROUND_VERSION } from "../../../../src/domain/video/crt-background";
+import { COVER_BACKGROUND_VERSION } from "../../../../src/domain/video/cover-background";
 import { REFERENCE_BACKGROUND } from "../../../../src/domain/video/all-versions-reference";
 import { renderPlan, type RenderPlan, type Segment } from "../../render/plan";
 import type { FnfSnapshot } from "../../../../src/domain/video/schema";
@@ -43,7 +43,7 @@ export function projectPlan(
     hash: digest({
       plan: plan.hash,
       project,
-      ...(project.design.layout === "reference-pasa-v1" ? { background: project.cover ? CRT_BACKGROUND_VERSION : REFERENCE_BACKGROUND } : {}),
+      ...(project.design.layout === "reference-pasa-v1" ? { background: project.cover ? COVER_BACKGROUND_VERSION : REFERENCE_BACKGROUND } : {}),
     }),
   };
 }

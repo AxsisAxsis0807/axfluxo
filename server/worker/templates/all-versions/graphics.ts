@@ -1,4 +1,11 @@
-import { createCanvas, GlobalFonts, loadImage } from "@napi-rs/canvas";
+import {
+  createCanvas,
+  GlobalFonts,
+  loadImage,
+  type Canvas,
+  type Image,
+  type ImageData,
+} from "@napi-rs/canvas";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
@@ -15,7 +22,11 @@ import {
   REFERENCE_BACKGROUND,
   referenceTitleSize,
 } from "../../../../src/domain/video/all-versions-reference";
-import { drawCrtBackground } from "../../../../src/domain/video/crt-background";
+import {
+  COVER_BLUR_HEIGHT,
+  COVER_BLUR_WIDTH,
+  drawCoverBackground,
+} from "../../../../src/domain/video/cover-background";
 export const fontPath = () =>
   resolve(
     process.env.VIDEO_ALEO_FONT ??
@@ -190,7 +201,17 @@ export async function backgroundImage(
   if (p.design.layout === "reference-pasa-v1") {
     if (coverPath) {
       const cover = await loadImage(coverPath);
-      drawCrtBackground(ctx, width, height, cover, cover.width, cover.height);
+      const backdrop = createCanvas(COVER_BLUR_WIDTH, COVER_BLUR_HEIGHT);
+      drawCoverBackground<Canvas | Image, ImageData>(
+        ctx,
+        backdrop.getContext("2d"),
+        backdrop,
+        width,
+        height,
+        cover,
+        cover.width,
+        cover.height,
+      );
       return canvas.encode("png");
     }
     const background = await loadImage(resolve("public", REFERENCE_BACKGROUND));

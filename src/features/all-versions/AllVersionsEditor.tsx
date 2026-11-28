@@ -397,7 +397,7 @@ export function AllVersionsEditor({
         <>
           <p>
             MP3 / WAV / M4A / MP4 /
-            MOV。動画は音声を抽出して使います。proxy準備後に「使用」を選択してください。参考動画再現では、画像に合わせてCRT画面と周囲の光が変わります。画像を選ばない場合は、お手本の青い背景を使います。
+            MOV。動画は音声を抽出して使います。proxy準備後に「使用」を選択してください。参考動画再現では、中央にカバーを表示し、同じ画像をぼかして背景に使います。画像を選ばない場合は、お手本の青い背景を使います。
           </p>
           {reference && project.cover && (
             <button type="button" onClick={() => change({ ...docRef.current, cover: null })}>

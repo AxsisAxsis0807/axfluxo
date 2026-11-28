@@ -12,11 +12,10 @@ New projects use `reference-pasa-v1`. Saved projects with an explicit `provision
 
 ## Reference composition (coordinates in 910×512 space)
 
-- The center CRT has a rounded black bezel and curved glass. The selected cover is center-cropped inside the screen. Fine scanlines and reflections give it the reference look.
-- The light around the CRT follows the colors and brightness of the cover. With no cover, the editor uses the blue reference artwork.
+- The sharp cover is center-cropped into a rounded square that fills the frame vertically. A softly blurred, full-bleed copy of the cover fills the surrounding space. With no cover, the editor uses the included blue reference artwork.
 - Version title: dynamic text (for example `PASA!(NORMAL)`), horizontally centered, vertical center ~y=255.5; dark translucent black band (height ~35) fits text width.
 - Clock: white sans-serif `mm:ss`, horizontally centered, near y=448. No background band.
-- The CRT background stays visible across version changes and while the title and timer fade.
+- The background stays visible across version changes and while the title and timer fade.
 - Title and clock are separate layers with **identical fade start/end timestamps** and different opacity curves. Title uses cubic ease-out on entry and cubic ease-in on exit; timer uses a symmetric cosine curve. These are approximations to the observed opacity profiles.
 - Source reference fade 50%-opacity measurements: NORMAL title in ~0.166s, out ~96.771s; SLOWED title in ~97.078s, out ~205.471s. Time resolution is limited to 33.33ms by the source MP4.
 
